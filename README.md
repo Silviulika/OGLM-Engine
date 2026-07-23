@@ -16,14 +16,3 @@ gizmos, asset browsers, material tools, mesh and primitive creation tools,
 particle editing, render-texture capture, and scene save/load workflows. The
 goal is to keep the editor close to the runtime so engine behavior can be built,
 inspected, and adjusted visually while still remaining approachable in source.
-
-## Release Status
-
-This repository is being prepared for a source-first public GitHub release. The
-original engine/editor code is licensed under the MIT license in `LICENSE`.
-Third-party libraries, bindings, tools, and assets keep their own licenses and
-are listed in `THIRD_PARTY_NOTICES.md`.
-
-The MIT license does not relicense files owned by third parties. Keep each
-upstream license notice with its source, and treat bundled binaries and assets as
-separate release items.
