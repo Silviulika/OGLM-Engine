@@ -1,0 +1,849 @@
+OpenGL Micro Engine Script Functions
+Generated from Engine.Scripting.pas and DWS.FastMath.pas
+
+[DWS.FastMath]
+- function Clamp(Value: Float; MinValue: Float; MaxValue: Float): Float
+- function Lerp(A: Float; B: Float; Alpha: Float): Float
+- function SmoothStep(Edge0: Float; Edge1: Float; X: Float): Float
+- function Radians(Degrees: Float): Float
+- function Degrees(Radians: Float): Float
+- function Vector2(): TVector2
+- function Vector2(AValue: Float): TVector2
+- function Vector2(X: Float; Y: Float): TVector2
+- function Vector2Add(A: TVector2; B: TVector2): TVector2
+- function Vector2AddFloatVector2(AValue: Float; B: TVector2): TVector2
+- function Vector2AddVector2Float(A: TVector2; BValue: Float): TVector2
+- function Vector2Subtract(A: TVector2; B: TVector2): TVector2
+- function Vector2SubtractFloatVector2(AValue: Float; B: TVector2): TVector2
+- function Vector2SubtractVector2Float(A: TVector2; BValue: Float): TVector2
+- function Vector2Multiply(A: TVector2; B: TVector2): TVector2
+- function Vector2Multiply(A: TVector2; BValue: Float): TVector2
+- function Vector2MultiplyFloatVector2(AValue: Float; B: TVector2): TVector2
+- function Vector2MultiplyVector2Float(A: TVector2; BValue: Float): TVector2
+- function Vector2Divide(A: TVector2; B: TVector2): TVector2
+- function Vector2Divide(A: TVector2; BValue: Float): TVector2
+- function Vector2DivideFloatVector2(AValue: Float; B: TVector2): TVector2
+- function Vector2DivideVector2Float(A: TVector2; BValue: Float): TVector2
+- function Vector2Dot(A: TVector2; B: TVector2): Float
+- function Vector2Cross(A: TVector2; B: TVector2): Float
+- function Vector2Normalize(A: TVector2): TVector2
+- function Vector2NormalizeFast(A: TVector2): TVector2
+- function Vector2Length(A: TVector2): Float
+- function Vector2LengthSquared(A: TVector2): Float
+- function Vector2Distance(A: TVector2; B: TVector2): Float
+- function Vector2DistanceSquared(A: TVector2; B: TVector2): Float
+- function Vector2Lerp(A: TVector2; B: TVector2; Alpha: Float): TVector2
+- function Vector2Min(A: TVector2; B: TVector2): TVector2
+- function Vector2Max(A: TVector2; B: TVector2): TVector2
+- function Vector2Clamp(Value: TVector2; MinValue: TVector2; MaxValue: TVector2): TVector2
+- function Vector2Equals(A: TVector2; B: TVector2): Boolean
+- function Vector2Equals(A: TVector2; B: TVector2; Tolerance: Float): Boolean
+- function Vector2ToString(A: TVector2): String
+- function Vector3(): TVector3
+- function Vector3(AValue: Float): TVector3
+- function Vector3(X: Float; Y: Float; Z: Float): TVector3
+- function Vector3(XY: TVector2; Z: Float): TVector3
+- function Vector3(X: Float; YZ: TVector2): TVector3
+- function Vector3Add(A: TVector3; B: TVector3): TVector3
+- function Vector3AddFloatVector3(AValue: Float; B: TVector3): TVector3
+- function Vector3AddVector3Float(A: TVector3; BValue: Float): TVector3
+- function Vector3Subtract(A: TVector3; B: TVector3): TVector3
+- function Vector3SubtractFloatVector3(AValue: Float; B: TVector3): TVector3
+- function Vector3SubtractVector3Float(A: TVector3; BValue: Float): TVector3
+- function Vector3Multiply(A: TVector3; B: TVector3): TVector3
+- function Vector3Multiply(A: TVector3; BValue: Float): TVector3
+- function Vector3MultiplyFloatVector3(AValue: Float; B: TVector3): TVector3
+- function Vector3MultiplyVector3Float(A: TVector3; BValue: Float): TVector3
+- function Vector3Divide(A: TVector3; B: TVector3): TVector3
+- function Vector3Divide(A: TVector3; BValue: Float): TVector3
+- function Vector3DivideFloatVector3(AValue: Float; B: TVector3): TVector3
+- function Vector3DivideVector3Float(A: TVector3; BValue: Float): TVector3
+- function Vector3Dot(A: TVector3; B: TVector3): Float
+- function Vector3Cross(A: TVector3; B: TVector3): TVector3
+- function Vector3Normalize(A: TVector3): TVector3
+- function Vector3NormalizeFast(A: TVector3): TVector3
+- function Vector3Length(A: TVector3): Float
+- function Vector3LengthSquared(A: TVector3): Float
+- function Vector3Distance(A: TVector3; B: TVector3): Float
+- function Vector3DistanceSquared(A: TVector3; B: TVector3): Float
+- function Vector3Lerp(A: TVector3; B: TVector3; Alpha: Float): TVector3
+- function Vector3Min(A: TVector3; B: TVector3): TVector3
+- function Vector3Max(A: TVector3; B: TVector3): TVector3
+- function Vector3Clamp(Value: TVector3; MinValue: TVector3; MaxValue: TVector3): TVector3
+- function Vector3Reflect(Vector: TVector3; Normal: TVector3): TVector3
+- function Vector3Project(Vector: TVector3; Onto: TVector3): TVector3
+- function Vector3Equals(A: TVector3; B: TVector3): Boolean
+- function Vector3Equals(A: TVector3; B: TVector3; Tolerance: Float): Boolean
+- function Vector3ToString(A: TVector3): String
+- function Vector4(): TVector4
+- function Vector4(AValue: Float): TVector4
+- function Vector4(X: Float; Y: Float; Z: Float; W: Float): TVector4
+- function Vector4(XYZ: TVector3; W: Float): TVector4
+- function Vector4(X: Float; YZW: TVector3): TVector4
+- function Vector4Add(A: TVector4; B: TVector4): TVector4
+- function Vector4AddFloatVector4(AValue: Float; B: TVector4): TVector4
+- function Vector4AddVector4Float(A: TVector4; BValue: Float): TVector4
+- function Vector4Subtract(A: TVector4; B: TVector4): TVector4
+- function Vector4SubtractFloatVector4(AValue: Float; B: TVector4): TVector4
+- function Vector4SubtractVector4Float(A: TVector4; BValue: Float): TVector4
+- function Vector4Multiply(A: TVector4; B: TVector4): TVector4
+- function Vector4Multiply(A: TVector4; BValue: Float): TVector4
+- function Vector4MultiplyFloatVector4(AValue: Float; B: TVector4): TVector4
+- function Vector4MultiplyVector4Float(A: TVector4; BValue: Float): TVector4
+- function Vector4Divide(A: TVector4; B: TVector4): TVector4
+- function Vector4Divide(A: TVector4; BValue: Float): TVector4
+- function Vector4DivideFloatVector4(AValue: Float; B: TVector4): TVector4
+- function Vector4DivideVector4Float(A: TVector4; BValue: Float): TVector4
+- function Vector4Dot(A: TVector4; B: TVector4): Float
+- function Vector4Normalize(A: TVector4): TVector4
+- function Vector4NormalizeFast(A: TVector4): TVector4
+- function Vector4Length(A: TVector4): Float
+- function Vector4LengthSquared(A: TVector4): Float
+- function Vector4Distance(A: TVector4; B: TVector4): Float
+- function Vector4DistanceSquared(A: TVector4; B: TVector4): Float
+- function Vector4Lerp(A: TVector4; B: TVector4; Alpha: Float): TVector4
+- function Vector4Min(A: TVector4; B: TVector4): TVector4
+- function Vector4Max(A: TVector4; B: TVector4): TVector4
+- function Vector4Clamp(Value: TVector4; MinValue: TVector4; MaxValue: TVector4): TVector4
+- function Vector4Equals(A: TVector4; B: TVector4): Boolean
+- function Vector4Equals(A: TVector4; B: TVector4; Tolerance: Float): Boolean
+- function Vector4ToString(A: TVector4): String
+- function Matrix2(): TMatrix2
+- function Matrix2(Diagonal: Float): TMatrix2
+- function Matrix2(Row0: TVector2; Row1: TVector2): TMatrix2
+- function Matrix2(M11: Float; M12: Float; M21: Float; M22: Float): TMatrix2
+- function Matrix2Add(A: TMatrix2; B: TMatrix2): TMatrix2
+- function Matrix2Subtract(A: TMatrix2; B: TMatrix2): TMatrix2
+- function Matrix2Multiply(A: TMatrix2; B: TMatrix2): TMatrix2
+- function Matrix2Multiply(A: TMatrix2; BValue: Float): TMatrix2
+- function Matrix2MultiplyMatrixFloat(A: TMatrix2; BValue: Float): TMatrix2
+- function Matrix2MultiplyFloatMatrix(AValue: Float; B: TMatrix2): TMatrix2
+- function Matrix2MultiplyMatrixVector(A: TMatrix2; B: TVector2): TVector2
+- function Matrix2MultiplyVectorMatrix(A: TVector2; B: TMatrix2): TVector2
+- function Matrix2Divide(A: TMatrix2; B: TMatrix2): TMatrix2
+- function Matrix2Divide(A: TMatrix2; BValue: Float): TMatrix2
+- function Matrix2DivideMatrixFloat(A: TMatrix2; BValue: Float): TMatrix2
+- function Matrix2Transpose(A: TMatrix2): TMatrix2
+- function Matrix2Inverse(A: TMatrix2): TMatrix2
+- function Matrix2Determinant(A: TMatrix2): Float
+- function Matrix2CompMult(A: TMatrix2; B: TMatrix2): TMatrix2
+- function Matrix2Equals(A: TMatrix2; B: TMatrix2): Boolean
+- function Matrix2ToString(A: TMatrix2): String
+- function Matrix3(): TMatrix3
+- function Matrix3(Diagonal: Float): TMatrix3
+- function Matrix3(Row0: TVector3; Row1: TVector3; Row2: TVector3): TMatrix3
+- function Matrix3(M11: Float; M12: Float; M13: Float; M21: Float; M22: Float; M23: Float; M31: Float; M32: Float; M33: Float): TMatrix3
+- function Matrix3Scaling(ScaleX: Float; ScaleY: Float): TMatrix3
+- function Matrix3Scaling(Scale: TVector2): TMatrix3
+- function Matrix3Translation(DeltaX: Float; DeltaY: Float): TMatrix3
+- function Matrix3Translation(Delta: TVector2): TMatrix3
+- function Matrix3Rotation(Angle: Float): TMatrix3
+- function Matrix3Add(A: TMatrix3; B: TMatrix3): TMatrix3
+- function Matrix3Subtract(A: TMatrix3; B: TMatrix3): TMatrix3
+- function Matrix3Multiply(A: TMatrix3; B: TMatrix3): TMatrix3
+- function Matrix3Multiply(A: TMatrix3; BValue: Float): TMatrix3
+- function Matrix3MultiplyMatrixFloat(A: TMatrix3; BValue: Float): TMatrix3
+- function Matrix3MultiplyFloatMatrix(AValue: Float; B: TMatrix3): TMatrix3
+- function Matrix3MultiplyMatrixVector(A: TMatrix3; B: TVector3): TVector3
+- function Matrix3MultiplyVectorMatrix(A: TVector3; B: TMatrix3): TVector3
+- function Matrix3Divide(A: TMatrix3; B: TMatrix3): TMatrix3
+- function Matrix3Divide(A: TMatrix3; BValue: Float): TMatrix3
+- function Matrix3DivideMatrixFloat(A: TMatrix3; BValue: Float): TMatrix3
+- function Matrix3Transpose(A: TMatrix3): TMatrix3
+- function Matrix3Inverse(A: TMatrix3): TMatrix3
+- function Matrix3Determinant(A: TMatrix3): Float
+- function Matrix3CompMult(A: TMatrix3; B: TMatrix3): TMatrix3
+- function Matrix3Equals(A: TMatrix3; B: TMatrix3): Boolean
+- function Matrix3ToString(A: TMatrix3): String
+- function Matrix4(): TMatrix4
+- function Matrix4(Diagonal: Float): TMatrix4
+- function Matrix4(Row0: TVector4; Row1: TVector4; Row2: TVector4; Row3: TVector4): TMatrix4
+- function Matrix4(M11: Float; M12: Float; M13: Float; M14: Float; M21: Float; M22: Float; M23: Float; M24: Float; M31: Float; M32: Float; M33: Float; M34: Float; M41: Float; M42: Float; M43: Float; M44: Float): TMatrix4
+- function Matrix4Scaling(ScaleX: Float; ScaleY: Float; ScaleZ: Float): TMatrix4
+- function Matrix4Scaling(Scale: TVector3): TMatrix4
+- function Matrix4Translation(DeltaX: Float; DeltaY: Float; DeltaZ: Float): TMatrix4
+- function Matrix4Translation(Delta: TVector3): TMatrix4
+- function Matrix4RotationX(Angle: Float): TMatrix4
+- function Matrix4RotationY(Angle: Float): TMatrix4
+- function Matrix4RotationZ(Angle: Float): TMatrix4
+- function Matrix4RotationAxis(Axis: TVector3; Angle: Float): TMatrix4
+- function Matrix4RotationYawPitchRoll(Yaw: Float; Pitch: Float; Roll: Float): TMatrix4
+- function Matrix4LookAtLH(CameraPosition: TVector3; CameraTarget: TVector3; CameraUp: TVector3): TMatrix4
+- function Matrix4LookAtRH(CameraPosition: TVector3; CameraTarget: TVector3; CameraUp: TVector3): TMatrix4
+- function Matrix4PerspectiveFovLH(FieldOfView: Float; AspectRatio: Float; NearPlaneDistance: Float; FarPlaneDistance: Float): TMatrix4
+- function Matrix4PerspectiveFovLH(FieldOfView: Float; AspectRatio: Float; NearPlaneDistance: Float; FarPlaneDistance: Float; HorizontalFOV: Boolean): TMatrix4
+- function Matrix4PerspectiveFovRH(FieldOfView: Float; AspectRatio: Float; NearPlaneDistance: Float; FarPlaneDistance: Float): TMatrix4
+- function Matrix4PerspectiveFovRH(FieldOfView: Float; AspectRatio: Float; NearPlaneDistance: Float; FarPlaneDistance: Float; HorizontalFOV: Boolean): TMatrix4
+- function Matrix4Add(A: TMatrix4; B: TMatrix4): TMatrix4
+- function Matrix4Subtract(A: TMatrix4; B: TMatrix4): TMatrix4
+- function Matrix4Multiply(A: TMatrix4; B: TMatrix4): TMatrix4
+- function Matrix4Multiply(A: TMatrix4; BValue: Float): TMatrix4
+- function Matrix4MultiplyMatrixFloat(A: TMatrix4; BValue: Float): TMatrix4
+- function Matrix4MultiplyFloatMatrix(AValue: Float; B: TMatrix4): TMatrix4
+- function Matrix4MultiplyMatrixVector(A: TMatrix4; B: TVector4): TVector4
+- function Matrix4MultiplyVectorMatrix(A: TVector4; B: TMatrix4): TVector4
+- function Matrix4Divide(A: TMatrix4; B: TMatrix4): TMatrix4
+- function Matrix4Divide(A: TMatrix4; BValue: Float): TMatrix4
+- function Matrix4DivideMatrixFloat(A: TMatrix4; BValue: Float): TMatrix4
+- function Matrix4Transpose(A: TMatrix4): TMatrix4
+- function Matrix4Inverse(A: TMatrix4): TMatrix4
+- function Matrix4Determinant(A: TMatrix4): Float
+- function Matrix4CompMult(A: TMatrix4; B: TMatrix4): TMatrix4
+- function Matrix4Equals(A: TMatrix4; B: TMatrix4): Boolean
+- function Matrix4ToString(A: TMatrix4): String
+- function Quaternion(): TQuaternion
+- function Quaternion(X: Float; Y: Float; Z: Float; W: Float): TQuaternion
+- function Quaternion(Axis: TVector3; Angle: Float): TQuaternion
+- function QuaternionYawPitchRoll(Yaw: Float; Pitch: Float; Roll: Float): TQuaternion
+- function QuaternionFromMatrix4(Matrix: TMatrix4): TQuaternion
+- function QuaternionAdd(A: TQuaternion; B: TQuaternion): TQuaternion
+- function QuaternionMultiply(A: TQuaternion; B: TQuaternion): TQuaternion
+- function QuaternionMultiply(A: TQuaternion; BValue: Float): TQuaternion
+- function QuaternionMultiplyQuaternionFloat(A: TQuaternion; BValue: Float): TQuaternion
+- function QuaternionMultiplyFloatQuaternion(AValue: Float; B: TQuaternion): TQuaternion
+- function QuaternionNormalize(A: TQuaternion): TQuaternion
+- function QuaternionNormalizeFast(A: TQuaternion): TQuaternion
+- function QuaternionConjugate(A: TQuaternion): TQuaternion
+- function QuaternionToMatrix4(A: TQuaternion): TMatrix4
+- function QuaternionLength(A: TQuaternion): Float
+- function QuaternionLengthSquared(A: TQuaternion): Float
+- function QuaternionIsIdentity(A: TQuaternion): Boolean
+- function QuaternionIsIdentity(A: TQuaternion; ErrorMargin: Float): Boolean
+- function QuaternionToString(A: TQuaternion): String
+- function IVector2(): TIVector2
+- function IVector2(AValue: Integer): TIVector2
+- function IVector2(X: Integer; Y: Integer): TIVector2
+- function IVector3(): TIVector3
+- function IVector3(AValue: Integer): TIVector3
+- function IVector3(X: Integer; Y: Integer; Z: Integer): TIVector3
+- function IVector4(): TIVector4
+- function IVector4(AValue: Integer): TIVector4
+- function IVector4(X: Integer; Y: Integer; Z: Integer; W: Integer): TIVector4
+- function IVector2IsZero(A: TIVector2): Boolean
+- function IVector3IsZero(A: TIVector3): Boolean
+- function IVector4IsZero(A: TIVector4): Boolean
+- function IVector2ToVector2(A: TIVector2): TVector2
+- function IVector3ToVector3(A: TIVector3): TVector3
+- function IVector4ToVector4(A: TIVector4): TVector4
+- function IVector2ToString(A: TIVector2): String
+- function IVector3ToString(A: TIVector3): String
+- function IVector4ToString(A: TIVector4): String
+- procedure ShowMessage(Msg: String)
+
+[Engine.Scripting]
+- class TSceneObject
+  - Native scene object wrapper. Scene owns object lifetime; Delete() removes it from the scene.
+  - Object-style scripts may use properties directly, for example Obj.Position := Vector3(0.0, 10.0, 0.0).
+  
+  - constructor Create()                                   - Creates a new scene object at the default world-space spawn point, 5 units in front of the active camera, under the scene root.
+  - constructor Create(Position: TVector3)                 - Creates a new root-level scene object at Position.
+  - constructor Create(Name: String)                       - Creates a new root-level scene object at the default world-space spawn point, 5 units in front of the active camera, and assigns its name.
+  - constructor Create(Name: String; Position: TVector3)   - Creates a new root-level scene object at Position and assigns its name.
+  - constructor Create(Parent: TSceneObject; Name: String) - Creates a child object at the default world-space spawn point, 5 units in front of the active camera, under Parent, or under the root if Parent is nil.
+  - constructor Create(Parent: TSceneObject; Name: String; Position: TVector3) - Creates a child object at local Position under Parent, or under the root if Parent is nil.
+  - property Handle: Integer              read             - Script handle for this object for use with handle-based APIs.
+  - property Name: String                 read/write       - Object name, kept unique among sibling objects when renamed.
+  - property Position: TVector3           read/write       - Local position relative to the parent object.
+  - property Rotation: TVector3           read/write       - Local Euler rotation in radians.
+  - property Scale: TVector3              read/write       - Local scale on the X, Y, and Z axes.
+  - property Matrix: TMatrix4             read             - Local object transform matrix.
+  - property ModelMatrix: TMatrix4        read             - Alias for the local object transform matrix.
+  - property LocalMatrix: TMatrix4        read             - Alias for the local object transform matrix.
+  - property WorldMatrix: TMatrix4        read             - World transform matrix after parent transforms are applied.
+  - property WorldPosition: TVector3      read             - Current world-space position after parent transforms are applied.
+  - property Parent: TSceneObject         read             - Direct parent object, or nil for the scene root.
+  - property ChildCount: Integer          read             - Number of direct child objects.
+  - property Wireframe: Boolean           read/write       - Enables wireframe rendering for this object and its children.
+  - property HasGeometry: Boolean         read             - True when the object has renderable mesh geometry.
+  - property HasCamera: Boolean           read             - True when a camera component is attached.
+  - property HasParticles: Boolean        read             - True when one or more particle systems are attached.
+  - property HasBillboards: Boolean       read             - True when one or more billboards are attached.
+  - property HasAudio: Boolean            read             - True when the object has an audio listener or audio emitters.
+  - property HasSkeletonAnimation: Boolean read            - True when the object has a skeletal animation controller.
+  - property AnimationCount: Integer      read             - Number of skeletal animation clips on this object.
+  - property CurrentAnimationName: String read             - Name of the currently selected animation clip, or empty when none is selected.
+  - property CurrentAnimationIndex: Integer read           - Index of the current animation clip, or -1 when none is selected.
+  - property AnimationState: Integer      read             - Playback state: 0 stopped, 1 playing, 2 paused.
+  - property AnimationTime: Float         read/write       - Current animation time in seconds.
+  - property AnimationNormalizedTime: Float read/write     - Current animation time normalized to 0..1.
+  - property AnimationDuration: Float     read             - Duration in seconds of the current animation clip.
+  - property AnimationSpeed: Float        read/write       - Playback speed multiplier; negative values play backward.
+  - property AnimationLooping: Boolean    read/write       - Looping flag used by animation playback.
+  - property AnimationBlending: Boolean   read             - True while an animation blend is active.
+  - property MeshCount: Integer           read             - Number of meshes attached directly to this object.
+  - property ParticleSystemCount: Integer read             - Number of particle systems attached to this object.
+  - property LightCount: Integer          read             - Number of lights attached to this object.
+  - function GetHandle(): Integer                          - Returns the integer handle for this object.
+  - function GetName(): String                             - Returns the current object name.
+  - procedure SetName(Value: String)                       - Renames the object, making the name unique among siblings if needed.
+  - function GetPosition(): TVector3                       - Returns the local position.
+  - procedure SetPosition(Value: TVector3)                 - Sets the local position.
+  - function GetRotation(): TVector3                       - Returns the local Euler rotation in radians.
+  - procedure SetRotation(Value: TVector3)                 - Sets the local Euler rotation in radians.
+  - function GetScale(): TVector3                          - Returns the local scale.
+  - procedure SetScale(Value: TVector3)                    - Sets the local scale.
+  - function GetMatrix(): TMatrix4                         - Returns the local object transform matrix.
+  - function GetModelMatrix(): TMatrix4                    - Returns the local object transform matrix.
+  - function GetLocalMatrix(): TMatrix4                    - Returns the local object transform matrix.
+  - function GetWorldMatrix(): TMatrix4                    - Returns the world transform matrix.
+  - function GetWorldPosition(): TVector3                  - Returns the current world-space position.
+  - function GetParent(): TSceneObject                     - Returns the parent object, or nil for the scene root.
+  - function GetChildCount(): Integer                      - Returns the number of direct children.
+  - function GetWireframe(): Boolean                       - Returns whether wireframe rendering is enabled.
+  - procedure SetWireframe(Value: Boolean)                 - Enables or disables wireframe rendering on this object and its children.
+  - function GetHasGeometry(): Boolean                     - Returns true if the object has renderable geometry.
+  - function GetHasCamera(): Boolean                       - Returns true if a camera component is attached.
+  - function GetHasParticles(): Boolean                    - Returns true if the object has attached particle systems.
+  - function GetHasBillboards(): Boolean                   - Returns true if the object has attached billboards.
+  - function GetHasAudio(): Boolean                        - Returns true if the object has audio listener or emitter data.
+  - function GetHasSkeletonAnimation(): Boolean            - Returns true if the object has a skeletal animation controller.
+  - function GetAnimationCount(): Integer                  - Returns the number of skeletal animation clips.
+  - function AnimationName(Index: Integer): String         - Returns the animation clip name at Index, or empty if Index is invalid.
+  - function SetAnimationName(Index: Integer; Name: String): Boolean - Renames the clip at Index. Returns false for invalid index, empty name, or duplicate name.
+  - function AnimationIndex(Name: String): Integer         - Returns the clip index by name, or -1 if it does not exist.
+  - function GetCurrentAnimationName(): String             - Returns the currently selected animation clip name.
+  - function GetCurrentAnimationIndex(): Integer           - Returns the current animation clip index, or -1 when none is selected.
+  - function PlayAnimation(Name: String; Loop: Boolean; BlendDuration: Float): Boolean - Plays an animation clip by name.
+  - function PlayAnimationIndex(Index: Integer; Loop: Boolean; BlendDuration: Float): Boolean - Plays an animation clip by index.
+  - function BlendToAnimation(Name: String; BlendDuration: Float; Loop: Boolean): Boolean - Blends from the current clip to the named clip.
+  - function IsAnimationPlaying(Name: String): Boolean     - Returns true when Name is the current clip and playback is active.
+  - procedure PauseAnimation()                             - Pauses animation playback.
+  - procedure ResumeAnimation()                            - Resumes paused animation playback.
+  - procedure StopAnimation(ResetToBindPose: Boolean)      - Stops playback and optionally resets the skeleton to bind pose.
+  - function GetAnimationState(): Integer                  - Returns playback state: 0 stopped, 1 playing, 2 paused.
+  - function GetAnimationTime(): Float                     - Returns current animation time in seconds.
+  - procedure SetAnimationTime(Value: Float)               - Seeks the current animation to Value seconds.
+  - function GetAnimationNormalizedTime(): Float           - Returns current animation time normalized to 0..1.
+  - procedure SetAnimationNormalizedTime(Value: Float)     - Seeks the current animation using normalized time clamped to 0..1.
+  - function GetAnimationDuration(): Float                 - Returns duration in seconds for the current animation clip.
+  - function AnimationClipDuration(Index: Integer): Float  - Returns duration in seconds for the clip at Index.
+  - function AnimationClipDurationByName(Name: String): Float - Returns duration in seconds for the named clip.
+  - function GetAnimationSpeed(): Float                    - Returns animation playback speed.
+  - procedure SetAnimationSpeed(Value: Float)              - Sets animation playback speed.
+  - function GetAnimationLooping(): Boolean                - Returns whether current animation playback loops.
+  - procedure SetAnimationLooping(Value: Boolean)          - Sets whether current animation playback loops.
+  - function GetAnimationBlending(): Boolean               - Returns true while an animation blend is active.
+  - function GetMeshCount(): Integer                       - Returns the number of meshes attached directly to this object.
+  - function GetParticleSystemCount(): Integer             - Returns the number of particle systems attached to this object.
+  - function GetLightCount(): Integer                      - Returns the number of lights attached to this object.
+  - procedure Delete()                                     - Removes this object from the scene and frees its children and components.
+  - function Child(Index: Integer): TSceneObject           - Returns the direct child object at Index.
+  - function Mesh(Index: Integer): Integer                 - Returns the handle of the mesh at Index.
+  - function MeshObject(Index: Integer): TMesh             - Returns the mesh at Index as an object-style wrapper.
+  - function AddMeshFile(FileName: String): Integer        - Loads a mesh from FileName, attaches it to this object, and returns its handle.
+  - function AddMeshFileObject(FileName: String): TMesh    - Loads a mesh from FileName, attaches it to this object, and returns it as an object-style wrapper.
+  - procedure SetMaterial(MaterialName: String)            - Applies the named material to all meshes attached directly to this object.
+  - function ParticleSystem(Index: Integer): Integer       - Returns the handle of the particle system at Index.
+  - function CreateParticleSystem(): Integer               - Creates and attaches a new particle system, then returns its handle.
+  - procedure RemoveParticleSystem(Index: Integer)         - Removes the particle system at Index.
+  - function Light(Index: Integer): Integer                - Returns the handle of the light at Index.
+  - function CreateLight(): Integer                        - Creates a new light component and returns its handle.
+  - function LightObject(Index: Integer): TLight           - Returns the light at Index as an object-style wrapper.
+  - function CreateLightObject(): TLight                   - Creates a new light component and returns it as an object-style wrapper.
+  - function Camera(): Integer                             - Returns the camera handle, or 0 if no camera is attached.
+  - function CreateCamera(): Integer                       - Creates a camera component, replacing any existing one, and returns its handle.
+  
+- class TMesh
+  - Native mesh wrapper. The owning scene object manages lifetime.
+  - property Handle: Integer              read             - Script handle for handle-based mesh APIs.
+  - property Name: String                 read/write       - Mesh name.
+  - property Position: TVector3           read/write       - Mesh-local position relative to the owning scene object.
+  - property Rotation: TVector3           read/write       - Mesh-local Euler rotation in radians.
+  - property Scale: TVector3              read/write       - Mesh-local scale.
+  - property Visible: Boolean             read/write       - Enables or disables rendering for this mesh.
+  - property Wireframe: Boolean           read/write       - Enables wireframe rendering for this mesh.
+  - property AlwaysOnTop: Boolean         read/write       - Renders the mesh above normal depth ordering when supported.
+  - property Tag: Integer                 read/write       - User script/editor tag value.
+  - property MeshType: Integer            read             - Native TMeshType ordinal.
+  - property VertexCount: Integer         read             - Number of vertices.
+  - property IndexCount: Integer          read             - Number of indices.
+  - property BoundingBoxMin: TVector3     read             - Local-space bounding box minimum.
+  - property BoundingBoxMax: TVector3     read             - Local-space bounding box maximum.
+  - property LocalMatrix: TMatrix4        read             - Mesh-local transform matrix.
+  - property ModelMatrix: TMatrix4        read             - Owner world matrix multiplied by the mesh local transform.
+  - property ParentModelMatrix: TMatrix4  read             - Owning scene object's model/world matrix used by this mesh.
+  - property MaterialName: String         read/write       - Name of the material assigned through the active material library.
+  - function GetHandle(): Integer
+  - function GetName(): String
+  - procedure SetName(Value: String)
+  - function GetPosition(): TVector3
+  - procedure SetPosition(Value: TVector3)
+  - function GetRotation(): TVector3
+  - procedure SetRotation(Value: TVector3)
+  - function GetScale(): TVector3
+  - procedure SetScale(Value: TVector3)
+  - procedure SetTransform(Position: TVector3; Rotation: TVector3; Scale: TVector3)
+  - function GetVisible(): Boolean
+  - procedure SetVisible(Value: Boolean)
+  - function GetWireframe(): Boolean
+  - procedure SetWireframe(Value: Boolean)
+  - function GetAlwaysOnTop(): Boolean
+  - procedure SetAlwaysOnTop(Value: Boolean)
+  - function GetTag(): Integer
+  - procedure SetTag(Value: Integer)
+  - function GetMeshType(): Integer
+  - function GetVertexCount(): Integer
+  - function GetIndexCount(): Integer
+  - function GetBoundingBoxMin(): TVector3
+  - function GetBoundingBoxMax(): TVector3
+  - function GetLocalMatrix(): TMatrix4
+  - function GetModelMatrix(): TMatrix4
+  - function GetParentModelMatrix(): TMatrix4
+  - function GetMaterialName(): String
+  - procedure SetMaterialName(Value: String)
+  - procedure SetMaterial(MaterialName: String)
+  - function ApplyTransform(Translation: TVector3; Rotation: TVector3; Scale: TVector3): Boolean - Bakes a transform into the mesh vertices and refreshes bounds.
+  - procedure ScaleUVs(ScaleU: Float; ScaleV: Float)
+  - procedure RecomputeBoundingBox()
+
+- class TLight
+  - Native light wrapper. The owning scene object manages lifetime.
+  - property Handle: Integer                 read          - Script handle for handle-based light APIs.
+  - property Name: String                    read/write    - Light name.
+  - property LightType: Integer              read/write    - 0 directional, 1 point, 2 spot.
+  - property Enabled: Boolean                read/write    - Enables or disables the light.
+  - property Ambient: TVector3               read/write    - Ambient light color.
+  - property Diffuse: TVector3               read/write    - Diffuse/radiance light color.
+  - property Specular: TVector3              read/write    - Specular light color.
+  - property Position: TVector3              read/write    - World-space position for point and spot lights.
+  - property Direction: TVector3             read/write    - Direction for directional and spot lights.
+  - property UseTarget: Boolean              read/write    - Uses TargetPosition to derive light direction.
+  - property TargetPosition: TVector3        read/write    - Target position when UseTarget is enabled.
+  - property ConstantAttenuation: Float      read/write    - Constant attenuation term.
+  - property LinearAttenuation: Float        read/write    - Linear attenuation term.
+  - property QuadraticAttenuation: Float     read/write    - Quadratic attenuation term.
+  - property SpotCutoff: Float               read/write    - Spot cutoff angle in radians.
+  - property SpotExponent: Float             read/write    - Spot falloff exponent.
+  - property CastShadows: Boolean            read/write    - Enables shadow casting.
+  - property ShadowStrength: Float           read/write    - Shadow strength clamped to 0..1.
+  - function GetHandle(): Integer
+  - function GetName(): String
+  - procedure SetName(Value: String)
+  - function GetLightType(): Integer
+  - procedure SetLightType(Value: Integer)
+  - function GetEnabled(): Boolean
+  - procedure SetEnabled(Value: Boolean)
+  - function GetAmbient(): TVector3
+  - procedure SetAmbient(Value: TVector3)
+  - function GetDiffuse(): TVector3
+  - procedure SetDiffuse(Value: TVector3)
+  - function GetSpecular(): TVector3
+  - procedure SetSpecular(Value: TVector3)
+  - function GetPosition(): TVector3
+  - procedure SetPosition(Value: TVector3)
+  - function GetDirection(): TVector3
+  - procedure SetDirection(Value: TVector3)
+  - function GetUseTarget(): Boolean
+  - procedure SetUseTarget(Value: Boolean)
+  - function GetTargetPosition(): TVector3
+  - procedure SetTargetPosition(Value: TVector3)
+  - function GetConstantAttenuation(): Float
+  - procedure SetConstantAttenuation(Value: Float)
+  - function GetLinearAttenuation(): Float
+  - procedure SetLinearAttenuation(Value: Float)
+  - function GetQuadraticAttenuation(): Float
+  - procedure SetQuadraticAttenuation(Value: Float)
+  - function GetSpotCutoff(): Float
+  - procedure SetSpotCutoff(Value: Float)
+  - function GetSpotExponent(): Float
+  - procedure SetSpotExponent(Value: Float)
+  - function GetCastShadows(): Boolean
+  - procedure SetCastShadows(Value: Boolean)
+  - function GetShadowStrength(): Float
+  - procedure SetShadowStrength(Value: Float)
+  - procedure SetAttenuation(Constant: Float; Linear: Float; Quadratic: Float)
+  - procedure SetSpot(CutoffDegrees: Float; Exponent: Float)
+
+- class TMaterial
+  - Native material wrapper. The material library manages lifetime.
+  - property Handle: Integer                 read          - Script handle for handle-based material APIs.
+  - property Name: String                    read/write    - Material name.
+  - property TextureCount: Integer           read          - Number of textures in the material.
+  - property MaterialID: Integer             read          - Engine material identifier.
+  - property MaterialType: Integer           read/write    - Native material type value.
+  - property Shader: TShader                 read/write    - Shader used by this material.
+  - function GetHandle(): Integer
+  - function GetName(): String
+  - procedure SetName(Value: String)
+  - function GetTextureCount(): Integer
+  - function GetMaterialID(): Integer
+  - function GetMaterialType(): Integer
+  - procedure SetMaterialType(Value: Integer)
+  - function GetShader(): TShader
+  - procedure SetShader(Value: TShader)
+  - function ShaderParameter(Name: String): Float
+  - procedure SetShaderParameter(Name: String; Value: Float)
+
+- class TShader
+  - Native shader wrapper. Materials/rendering systems manage lifetime.
+  - property Handle: Integer                 read          - Script handle for handle-based shader APIs.
+  - property VertexPath: String              read          - Vertex shader source path.
+  - property FragmentPath: String            read          - Fragment shader source path.
+  - property ProgramID: Integer              read          - Current OpenGL program ID.
+  - function GetHandle(): Integer
+  - function GetVertexPath(): String
+  - function GetFragmentPath(): String
+  - function GetProgramID(): Integer
+  - procedure Use()
+  - procedure Reload()
+  - procedure SetUniformBoolean(Name: String; Value: Boolean)
+  - procedure SetUniformInteger(Name: String; Value: Integer)
+  - procedure SetUniformFloat(Name: String; Value: Float)
+  - procedure SetUniformVector3(Name: String; Value: TVector3)
+  - procedure SetUniformVector4(Name: String; Value: TVector4)
+  - procedure SetUniformMatrix4(Name: String; Value: TMatrix4)
+
+- function ScriptEventName(): String
+- function ScriptTargetKind(): Integer
+- function ScriptTargetName(): String
+- function ScriptTargetHandle(): Integer
+- function ScriptTargetObject(): TSceneObject
+- function ScriptTargetMaterial(): TMaterial
+- function ScriptTargetShader(): TShader
+- function DeltaTime(): Float
+- function TimeSeconds(): Float
+- function KeyCode(Name: String): Integer                                                              - Converts a key name such as 'W', 'Space', 'Escape', 'Left', 'F1', or 'Numpad0' into a Windows virtual-key code.
+- function KeyPressed(KeyCode: Integer): Boolean                                                       - True while the key with this virtual-key code is currently pressed.
+- function KeyPressed(KeyName: String): Boolean                                                        - True while the named key is currently pressed.
+- function MouseButtonCode(Name: String): Integer                                                      - Converts 'Left', 'Right', 'Middle', 'X1', or 'X2' into a Windows mouse button code.
+- function MouseButtonPressed(ButtonCode: Integer): Boolean                                            - True while the mouse button with this code is currently pressed.
+- function MouseButtonPressed(ButtonName: String): Boolean                                             - True while the named mouse button is currently pressed.
+- function MousePosition(): TVector2                                                                   - Current mouse position in renderer client pixels, with origin at the top-left.
+- function MouseX(): Float                                                                             - Current mouse X coordinate in renderer client pixels.
+- function MouseY(): Float                                                                             - Current mouse Y coordinate in renderer client pixels.
+- function MouseInsideViewport(): Boolean                                                              - True when the current mouse position is inside the renderer viewport.
+- function MouseRayOrigin(): TVector3                                                                  - World-space near-plane origin of the ray under the current mouse position.
+- function MouseRayDirection(): TVector3                                                               - Normalized world-space ray direction under the current mouse position.
+- function ScreenRayOrigin(X: Float; Y: Float): TVector3                                               - World-space near-plane origin of the ray under screen/client pixel X,Y.
+- function ScreenRayDirection(X: Float; Y: Float): TVector3                                            - Normalized world-space ray direction under screen/client pixel X,Y.
+- function MousePlaneHit(PlanePoint: TVector3; PlaneNormal: TVector3): Boolean                         - True if the current mouse ray intersects the plane.
+- function MousePlanePoint(PlanePoint: TVector3; PlaneNormal: TVector3): TVector3                      - World-space plane intersection point for the current mouse ray, or Vector3(0) if there is no hit.
+- function ScreenPlaneHit(X: Float; Y: Float; PlanePoint: TVector3; PlaneNormal: TVector3): Boolean    - True if the screen/client pixel ray intersects the plane.
+- function ScreenPlanePoint(X: Float; Y: Float; PlanePoint: TVector3; PlaneNormal: TVector3): TVector3 - World-space plane intersection point for the screen/client pixel ray, or Vector3(0) if there is no hit.
+- function HeightFieldLocalHeight(HeightField: Integer; LocalX: Float; LocalZ: Float): Float           - Interpolated local-space height for a THeightFieldMesh handle.
+- function HeightFieldWorldPoint(HeightField: Integer; WorldPoint: TVector3): TVector3                 - Projects WorldPoint onto the height field using the mesh transform and interpolated height.
+- function HeightFieldWorldHeight(HeightField: Integer; WorldPoint: TVector3): Float                   - World Y value of HeightFieldWorldPoint.
+- function MouseHeightFieldHit(HeightField: Integer): Boolean                                          - True if the current mouse ray intersects the height field mesh.
+- function MouseHeightFieldPoint(HeightField: Integer): TVector3                                       - World-space height field intersection point under the current mouse, or Vector3(0) if there is no hit.
+- function MouseHeightFieldLocalPoint(HeightField: Integer): TVector3                                  - Local-space height field intersection point under the current mouse, or Vector3(0) if there is no hit.
+- function ScreenHeightFieldHit(X: Float; Y: Float; HeightField: Integer): Boolean                     - True if the screen/client pixel ray intersects the height field mesh.
+- function ScreenHeightFieldPoint(X: Float; Y: Float; HeightField: Integer): TVector3                  - World-space height field intersection point for screen/client pixel X,Y, or Vector3(0) if there is no hit.
+- function ScreenHeightFieldLocalPoint(X: Float; Y: Float; HeightField: Integer): TVector3             - Local-space height field intersection point for screen/client pixel X,Y, or Vector3(0) if there is no hit.
+- function ViewportLeft(): Integer                                                                     - OpenGL renderer viewport left/X in client pixels.
+- function ViewportTop(): Integer                                                                      - OpenGL renderer viewport top/Y in client pixels.
+- function ViewportWidth(): Integer                                                                    - OpenGL renderer viewport width in client pixels.
+- function ViewportHeight(): Integer                                                                   - OpenGL renderer viewport height in client pixels.
+- function ViewportPosition(): TVector2                                                                - OpenGL renderer viewport position as Vector2(Left, Top).
+- function ViewportSize(): TVector2                                                                    - OpenGL renderer viewport size as Vector2(Width, Height).
+- function ViewportRect(): TVector4                                                                    - OpenGL renderer viewport rectangle as Vector4(Left, Top, Width, Height).
+- function ViewportAspectRatio(): Float                                                                - OpenGL renderer viewport width divided by height.
+- procedure ViewportSetPosition(Left: Integer; Top: Integer)                                           - Sets the OpenGL renderer viewport position in client pixels.
+- procedure ViewportSetSize(Width: Integer; Height: Integer)                                           - Sets the OpenGL renderer viewport size and refreshes the projection matrix.
+- procedure ViewportSetRect(Left: Integer; Top: Integer; Width: Integer; Height: Integer)              - Sets the OpenGL renderer viewport rectangle and refreshes the projection matrix.
+- function RenderWindowLeft(): Integer                                                                 - Native render window frame left coordinate in screen pixels.
+- function RenderWindowTop(): Integer                                                                  - Native render window frame top coordinate in screen pixels.
+- function RenderWindowWidth(): Integer                                                                - Native render window client width in pixels.
+- function RenderWindowHeight(): Integer                                                               - Native render window client height in pixels.
+- function RenderWindowPosition(): TVector2                                                            - Native render window frame position as Vector2(Left, Top) in screen pixels.
+- function RenderWindowSize(): TVector2                                                                - Native render window client size as Vector2(Width, Height).
+- function RenderWindowRect(): TVector4                                                                - Native render window rectangle as Vector4(Left, Top, ClientWidth, ClientHeight).
+- function RenderWindowAspectRatio(): Float                                                            - Native render window client width divided by client height.
+- procedure RenderWindowSetPosition(Left: Integer; Top: Integer)                                       - Moves the native render window frame to screen pixel Left,Top.
+- procedure RenderWindowSetSize(Width: Integer; Height: Integer)                                       - Resizes the native render window client area and refreshes the renderer viewport.
+- procedure RenderWindowSetRect(Left: Integer; Top: Integer; Width: Integer; Height: Integer)          - Moves the native render window frame and resizes its client area.
+- function RenderWindowFullScreen(): Boolean                                                           - True when the native render window is currently borderless fullscreen.
+- procedure RenderWindowSetFullScreen(Enabled: Boolean)                                                - Enters or leaves borderless fullscreen, restoring the previous placement when disabled.
+- function RenderWindowToggleFullScreen(): Boolean                                                     - Toggles borderless fullscreen and returns the new fullscreen state.
+- function SceneRoot(): Integer
+- function SceneRootObject(): TSceneObject
+- function SceneFind(Name: String): Integer
+- function SceneFindObject(Name: String): TSceneObject
+- procedure SceneUpdate()
+- procedure SceneRender()
+- function PrefabLoad(FileName: String; Parent: Integer): Integer
+- procedure PrefabDestroy(Obj: Integer)
+- function ObjectFromHandle(Handle: Integer): TSceneObject
+- function ObjectHandle(Obj: TSceneObject): Integer
+- function ObjectCreate(Parent: Integer; Name: String): Integer                                        - Creates the object at the default world-space spawn point, 5 units in front of the active camera.
+- procedure ObjectDelete(Obj: Integer)
+- function ObjectChildCount(Obj: Integer): Integer
+- function ObjectChild(Obj: Integer; Index: Integer): Integer
+- function ObjectParent(Obj: Integer): Integer
+- function ObjectName(Obj: Integer): String
+- procedure ObjectSetName(Obj: Integer; Name: String)
+- function ObjectPosition(Obj: Integer): TVector3
+- procedure ObjectSetPosition(Obj: Integer; Position: TVector3)
+- function ObjectRotation(Obj: Integer): TVector3
+- procedure ObjectSetRotation(Obj: Integer; Rotation: TVector3)
+- function ObjectScale(Obj: Integer): TVector3
+- procedure ObjectSetScale(Obj: Integer; Scale: TVector3)
+- function ObjectMatrix(Obj: Integer): TMatrix4
+- function ObjectModelMatrix(Obj: Integer): TMatrix4
+- function ObjectLocalMatrix(Obj: Integer): TMatrix4
+- function ObjectWorldMatrix(Obj: Integer): TMatrix4
+- function ObjectWorldPosition(Obj: Integer): TVector3
+- procedure ObjectSetWireframe(Obj: Integer; Enabled: Boolean)
+- function ObjectHasGeometry(Obj: Integer): Boolean
+- function ObjectHasCamera(Obj: Integer): Boolean
+- function ObjectHasParticles(Obj: Integer): Boolean
+- function ObjectHasBillboards(Obj: Integer): Boolean
+- function ObjectHasAudio(Obj: Integer): Boolean
+- function ObjectMeshCount(Obj: Integer): Integer
+- function ObjectMesh(Obj: Integer; Index: Integer): Integer
+- function ObjectMeshObject(Obj: Integer; Index: Integer): TMesh
+- function ObjectAddMeshFile(Obj: Integer; FileName: String): Integer
+- function ObjectAddMeshFileObject(Obj: Integer; FileName: String): TMesh
+- function ObjectAddPlane(Obj: Integer; Width: Float; Depth: Float; WidthSegments: Integer; DepthSegments: Integer; Name: String): Integer
+- function ObjectAddCube(Obj: Integer; Width: Float; Height: Float; Depth: Float; WidthStacks: Integer; HeightStacks: Integer; DepthStacks: Integer; Name: String): Integer
+- function ObjectAddSphere(Obj: Integer; Radius: Float; StackCount: Integer; SliceCount: Integer; Name: String): Integer
+- function ObjectAddCylinder(Obj: Integer; Radius: Float; Height: Float; Slices: Integer; Stacks: Integer; Name: String): Integer
+- function ObjectAddCapsule(Obj: Integer; Radius: Float; Height: Float; Slices: Integer; Stacks: Integer; Name: String): Integer
+- function ObjectAddTorus(Obj: Integer; MajorRadius: Float; MinorRadius: Float; MajorSegments: Integer; MinorSegments: Integer; Name: String): Integer
+- function ObjectAddCone(Obj: Integer; Radius: Float; Height: Float; Sides: Integer; Stacks: Integer; Name: String): Integer
+- function ObjectAddPrism(Obj: Integer; Radius: Float; Height: Float; Sides: Integer; Stacks: Integer; Name: String): Integer
+- function ObjectAddFrustum(Obj: Integer; BottomRadius: Float; TopRadius: Float; Height: Float; Slices: Integer; Stacks: Integer; BottomCap: Integer; TopCap: Integer; Name: String): Integer
+- function ObjectAddIcosphere(Obj: Integer; Radius: Float; Subdivisions: Integer; Name: String): Integer
+- function ObjectAddGeodesicDome(Obj: Integer; Radius: Float; Subdivisions: Integer; Name: String): Integer
+- function ObjectAddArrow(Obj: Integer; ShaftLength: Float; TipLength: Float; ShaftRadius: Float; TipRadius: Float; Slices: Integer; Stacks: Integer; Name: String): Integer
+- function ObjectAddSuperEllipsoid(Obj: Integer; Radius: Float; VCurve: Float; HCurve: Float; Slices: Integer; Stacks: Integer; Name: String): Integer
+- procedure ObjectSetMaterial(Obj: Integer; MaterialName: String)
+- function MeshFromHandle(Handle: Integer): TMesh
+- function MeshHandle(Mesh: TMesh): Integer
+- function MeshName(Mesh: Integer): String
+- procedure MeshSetName(Mesh: Integer; Name: String)
+- function MeshPosition(Mesh: Integer): TVector3
+- procedure MeshSetPosition(Mesh: Integer; Position: TVector3)
+- function MeshRotation(Mesh: Integer): TVector3
+- procedure MeshSetRotation(Mesh: Integer; Rotation: TVector3)
+- function MeshScale(Mesh: Integer): TVector3
+- procedure MeshSetScale(Mesh: Integer; Scale: TVector3)
+- procedure MeshSetTransform(Mesh: Integer; Position: TVector3; Rotation: TVector3; Scale: TVector3)
+- function MeshVisible(Mesh: Integer): Boolean
+- procedure MeshSetVisible(Mesh: Integer; Visible: Boolean)
+- function MeshWireframe(Mesh: Integer): Boolean
+- procedure MeshSetWireframe(Mesh: Integer; Enabled: Boolean)
+- function MeshAlwaysOnTop(Mesh: Integer): Boolean
+- procedure MeshSetAlwaysOnTop(Mesh: Integer; Value: Boolean)
+- function MeshTag(Mesh: Integer): Integer
+- procedure MeshSetTag(Mesh: Integer; Value: Integer)
+- function MeshType(Mesh: Integer): Integer
+- function MeshVertexCount(Mesh: Integer): Integer
+- function MeshIndexCount(Mesh: Integer): Integer
+- function MeshBoundingBoxMin(Mesh: Integer): TVector3
+- function MeshBoundingBoxMax(Mesh: Integer): TVector3
+- function MeshLocalMatrix(Mesh: Integer): TMatrix4
+- function MeshModelMatrix(Mesh: Integer): TMatrix4
+- function MeshParentModelMatrix(Mesh: Integer): TMatrix4
+- function MeshMaterialName(Mesh: Integer): String
+- procedure MeshSetMaterialName(Mesh: Integer; MaterialName: String)
+- procedure MeshSetMaterial(Mesh: Integer; MaterialName: String)
+- function MeshApplyTransform(Mesh: Integer; Translation: TVector3; Rotation: TVector3; Scale: TVector3): Boolean
+- procedure MeshScaleUVs(Mesh: Integer; ScaleU: Float; ScaleV: Float)
+- procedure MeshRecomputeBoundingBox(Mesh: Integer)
+- function ObjectParticleSystemCount(Obj: Integer): Integer
+- function ObjectParticleSystem(Obj: Integer; Index: Integer): Integer
+- function ObjectCreateParticleSystem(Obj: Integer): Integer
+- procedure ObjectRemoveParticleSystem(Obj: Integer; Index: Integer)
+- function ParticleBlendAlpha(): Integer
+- function ParticleBlendAdditive(): Integer
+- function ParticleTextureNone(): Integer
+- function ParticleTextureSoftCircle(): Integer
+- function ParticleTexturePerlin(): Integer
+- function ParticleTextureFile(): Integer
+- function ParticleSpaceObject(): Integer
+- function ParticleSpaceWorld(): Integer
+- function ParticleCount(Particle: Integer): Integer
+- procedure ParticleClear(Particle: Integer)
+- procedure ParticleBurst(Particle: Integer; Count: Integer)
+- function ParticleBoolean(Particle: Integer; Name: String): Boolean
+- procedure ParticleSetBoolean(Particle: Integer; Name: String; Value: Boolean)
+- function ParticleInteger(Particle: Integer; Name: String): Integer
+- procedure ParticleSetInteger(Particle: Integer; Name: String; Value: Integer)
+- function ParticleFloat(Particle: Integer; Name: String): Float
+- procedure ParticleSetFloat(Particle: Integer; Name: String; Value: Float)
+- function ParticleVector3(Particle: Integer; Name: String): TVector3
+- procedure ParticleSetVector3(Particle: Integer; Name: String; Value: TVector3)
+- function ParticleVector4(Particle: Integer; Name: String): TVector4
+- procedure ParticleSetVector4(Particle: Integer; Name: String; Value: TVector4)
+- function ParticleString(Particle: Integer; Name: String): String
+- procedure ParticleSetString(Particle: Integer; Name: String; Value: String)
+- function ObjectBillboardCount(Obj: Integer): Integer
+- function ObjectBillboard(Obj: Integer; Index: Integer): Integer
+- function ObjectCreateBillboard(Obj: Integer): Integer
+- procedure ObjectRemoveBillboard(Obj: Integer; Index: Integer)
+- function BillboardBlendAlpha(): Integer
+- function BillboardBlendAdditive(): Integer
+- function BillboardBoolean(Billboard: Integer; Name: String): Boolean
+- procedure BillboardSetBoolean(Billboard: Integer; Name: String; Value: Boolean)
+- function BillboardInteger(Billboard: Integer; Name: String): Integer
+- procedure BillboardSetInteger(Billboard: Integer; Name: String; Value: Integer)
+- function BillboardFloat(Billboard: Integer; Name: String): Float
+- procedure BillboardSetFloat(Billboard: Integer; Name: String; Value: Float)
+- function BillboardVector3(Billboard: Integer; Name: String): TVector3
+- procedure BillboardSetVector3(Billboard: Integer; Name: String; Value: TVector3)
+- function BillboardVector4(Billboard: Integer; Name: String): TVector4
+- procedure BillboardSetVector4(Billboard: Integer; Name: String; Value: TVector4)
+- function BillboardString(Billboard: Integer; Name: String): String
+- procedure BillboardSetString(Billboard: Integer; Name: String; Value: String)
+- function ObjectAudioEmitterCount(Obj: Integer): Integer
+- function ObjectAudioEmitter(Obj: Integer; Index: Integer): Integer
+- function ObjectCreateAudioEmitter(Obj: Integer): Integer
+- procedure ObjectRemoveAudioEmitter(Obj: Integer; Index: Integer)
+- function ObjectAudioListener(Obj: Integer): Boolean
+- procedure ObjectSetAudioListener(Obj: Integer; Enabled: Boolean)
+- function ObjectAudioVector3(Obj: Integer; Name: String): TVector3
+- procedure ObjectSetAudioVector3(Obj: Integer; Name: String; Value: TVector3)
+- function ObjectAudioFloat(Obj: Integer; Name: String): Float
+- procedure ObjectSetAudioFloat(Obj: Integer; Name: String; Value: Float)
+- function Audio3DModeNormal(): Integer
+- function Audio3DModeRelative(): Integer
+- function Audio3DModeOff(): Integer
+- function AudioInitialized(): Boolean
+- procedure AudioApply3D()
+- function AudioMasterVolume(): Float
+- procedure AudioSetMasterVolume(Volume: Float)
+- function AudioEmitterBoolean(Emitter: Integer; Name: String): Boolean
+- procedure AudioEmitterSetBoolean(Emitter: Integer; Name: String; Value: Boolean)
+- function AudioEmitterInteger(Emitter: Integer; Name: String): Integer
+- procedure AudioEmitterSetInteger(Emitter: Integer; Name: String; Value: Integer)
+- function AudioEmitterFloat(Emitter: Integer; Name: String): Float
+- procedure AudioEmitterSetFloat(Emitter: Integer; Name: String; Value: Float)
+- function AudioEmitterVector3(Emitter: Integer; Name: String): TVector3
+- procedure AudioEmitterSetVector3(Emitter: Integer; Name: String; Value: TVector3)
+- function AudioEmitterString(Emitter: Integer; Name: String): String
+- procedure AudioEmitterSetString(Emitter: Integer; Name: String; Value: String)
+- function ObjectCreateLight(Obj: Integer): Integer
+- function ObjectLightCount(Obj: Integer): Integer
+- function ObjectLight(Obj: Integer; Index: Integer): Integer
+- function LightFromHandle(Handle: Integer): TLight
+- function LightHandle(Light: TLight): Integer
+- function LightTypeDirectional(): Integer
+- function LightTypePoint(): Integer
+- function LightTypeSpot(): Integer
+- function LightType(Light: Integer): Integer
+- procedure LightSetType(Light: Integer; Type: Integer)
+- function LightEnabled(Light: Integer): Boolean
+- procedure LightSetEnabled(Light: Integer; Enabled: Boolean)
+- function LightDiffuse(Light: Integer): TVector3
+- procedure LightSetDiffuse(Light: Integer; Color: TVector3)
+- function LightAmbient(Light: Integer): TVector3
+- procedure LightSetAmbient(Light: Integer; Color: TVector3)
+- function LightSpecular(Light: Integer): TVector3
+- procedure LightSetSpecular(Light: Integer; Color: TVector3)
+- function LightPosition(Light: Integer): TVector3
+- procedure LightSetPosition(Light: Integer; Position: TVector3)
+- function LightDirection(Light: Integer): TVector3
+- procedure LightSetDirection(Light: Integer; Direction: TVector3)
+- procedure LightSetAttenuation(Light: Integer; Constant: Float; Linear: Float; Quadratic: Float)
+- procedure LightSetSpot(Light: Integer; CutoffDegrees: Float; Exponent: Float)
+- function LightCastShadows(Light: Integer): Boolean
+- procedure LightSetCastShadows(Light: Integer; Enabled: Boolean)
+- function LightShadowStrength(Light: Integer): Float
+- procedure LightSetShadowStrength(Light: Integer; Strength: Float)
+- function ObjectCreateCamera(Obj: Integer): Integer
+- function ObjectCamera(Obj: Integer): Integer
+- procedure CameraLookAt(Camera: Integer; Position: TVector3; Target: TVector3; Up: TVector3)
+- procedure CameraMoveForward(Camera: Integer; Distance: Float)
+- procedure CameraMoveRight(Camera: Integer; Distance: Float)
+- procedure CameraMoveUp(Camera: Integer; Distance: Float)
+- procedure CameraRotateYaw(Camera: Integer; AngleRad: Float)
+- procedure CameraRotatePitch(Camera: Integer; AngleRad: Float)
+- function CameraPosition(Camera: Integer): TVector3
+- function CameraTarget(Camera: Integer): TVector3
+- function CameraViewMatrix(Camera: Integer): TMatrix4
+- function CameraViewProjectionMatrix(Camera: Integer): TMatrix4
+- function MaterialCount(): Integer
+- function MaterialName(Index: Integer): String
+- function MaterialByName(Name: String): Integer
+- function MaterialByNameObject(Name: String): TMaterial
+- function MaterialFromHandle(Handle: Integer): TMaterial
+- function MaterialHandle(Material: TMaterial): Integer
+- function MaterialShaderParameter(Material: Integer; Name: String): Float
+- procedure MaterialSetShaderParameter(Material: Integer; Name: String; Value: Float)
+- function ShaderFromHandle(Handle: Integer): TShader
+- function ShaderHandle(Shader: TShader): Integer
+- function ShaderVertexPath(Shader: Integer): String
+- function ShaderFragmentPath(Shader: Integer): String
+- procedure ShaderUse(Shader: Integer)
+- procedure ShaderReload(Shader: Integer)
+- procedure ShaderSetUniformBoolean(Shader: Integer; Name: String; Value: Boolean)
+- procedure ShaderSetUniformInteger(Shader: Integer; Name: String; Value: Integer)
+- procedure ShaderSetUniformFloat(Shader: Integer; Name: String; Value: Float)
+- procedure ShaderSetUniformVector3(Shader: Integer; Name: String; Value: TVector3)
+- procedure ShaderSetUniformVector4(Shader: Integer; Name: String; Value: TVector4)
+- procedure ShaderSetUniformMatrix4(Shader: Integer; Name: String; Value: TMatrix4)
+- function RendererProjectionMatrix(): TMatrix4
+- function RendererViewMatrix(): TMatrix4
+- function RendererViewProjectionMatrix(): TMatrix4
+- function RendererShadowLightViewProjection(): TMatrix4
+- function RendererShadowLightMatrix(LightIndex: Integer): TMatrix4
+- procedure RendererSetBackgroundColor(Color: TVector4)
+- procedure RendererSetShadowEnabled(Enabled: Boolean)
+- procedure RendererSetShadowTarget(Target: TVector3)
+- procedure RendererSetShadowDistance(Distance: Float)
+- procedure RendererSetShadowArea(Area: Float)
+- procedure RendererSetShadowMapSize(Size: Integer)
+- procedure SkyDomeResetDefaults()
+- function SkyDomeBoolean(Name: String): Boolean
+- procedure SkyDomeSetBoolean(Name: String; Value: Boolean)
+- function SkyDomeInteger(Name: String): Integer
+- procedure SkyDomeSetInteger(Name: String; Value: Integer)
+- function SkyDomeFloat(Name: String): Float
+- procedure SkyDomeSetFloat(Name: String; Value: Float)
+- function SkyDomeVector3(Name: String): TVector3
+- procedure SkyDomeSetVector3(Name: String; Value: TVector3)
+- function SkyDomeVector4(Name: String): TVector4
+- procedure SkyDomeSetVector4(Name: String; Value: TVector4)
+- function PhysicsBodyStatic(): Integer
+- function PhysicsBodyDynamic(): Integer
+- function PhysicsBodyKinematic(): Integer
+- function PhysicsBodyCharacter(): Integer
+- function PhysicsBodyProjectile(): Integer
+- function PhysicsColliderAuto(): Integer
+- function PhysicsColliderNone(): Integer
+- function PhysicsColliderSphere(): Integer
+- function PhysicsColliderCapsule(): Integer
+- function PhysicsColliderAABB(): Integer
+- function PhysicsColliderMesh(): Integer
+- function PhysicsColliderConvexHull(): Integer
+- function PhysicsBodyCount(): Integer
+- function PhysicsBody(Index: Integer): Integer
+- function PhysicsFindBody(Obj: Integer): Integer
+- function PhysicsAddBody(Obj: Integer; BodyType: Integer; ColliderKind: Integer): Integer
+- procedure PhysicsRemoveBody(Body: Integer)
+- procedure PhysicsRemoveBodyForObject(Obj: Integer)
+- procedure PhysicsClear()
+- procedure PhysicsStep(DeltaTime: Float)
+- procedure PhysicsEnsureNativeScene()
+- function PhysicsGravity(): TVector3
+- procedure PhysicsSetGravity(Gravity: TVector3)
+- function PhysicsGroundPlaneEnabled(): Boolean
+- procedure PhysicsSetGroundPlaneEnabled(Enabled: Boolean)
+- function PhysicsGroundHeight(): Float
+- procedure PhysicsSetGroundHeight(Height: Float)
+- procedure PhysicsApplyRadialImpulse(Center: TVector3; Radius: Float; Strength: Float; IncludeStatic: Boolean)
+- function PhysicsRaycastHit(StartPoint: TVector3; Direction: TVector3; MaxDistance: Float): Boolean
+- function PhysicsRaycastPoint(StartPoint: TVector3; Direction: TVector3; MaxDistance: Float): TVector3
+- function PhysicsRaycastNormal(StartPoint: TVector3; Direction: TVector3; MaxDistance: Float): TVector3
+- function PhysicsRaycastBody(StartPoint: TVector3; Direction: TVector3; MaxDistance: Float): Integer
+- function PhysicsBodyObject(Body: Integer): Integer
+- function PhysicsBodyType(Body: Integer): Integer
+- procedure PhysicsBodySetType(Body: Integer; BodyType: Integer)
+- function PhysicsBodyColliderKind(Body: Integer): Integer
+- procedure PhysicsBodySetColliderKind(Body: Integer; ColliderKind: Integer)
+- function PhysicsBodyBoolean(Body: Integer; Name: String): Boolean
+- procedure PhysicsBodySetBoolean(Body: Integer; Name: String; Value: Boolean)
+- function PhysicsBodyFloat(Body: Integer; Name: String): Float
+- procedure PhysicsBodySetFloat(Body: Integer; Name: String; Value: Float)
+- function PhysicsBodyVector3(Body: Integer; Name: String): TVector3
+- procedure PhysicsBodySetVector3(Body: Integer; Name: String; Value: TVector3)
+- procedure PhysicsBodyConfigureSphere(Body: Integer; Radius: Float)
+- procedure PhysicsBodyConfigureCapsule(Body: Integer; Radius: Float; HalfHeight: Float)
+- procedure PhysicsBodyConfigureAABB(Body: Integer; HalfExtents: TVector3)
+- procedure PhysicsBodyConfigureMesh(Body: Integer)
+- procedure PhysicsBodyAutoFitCollider(Body: Integer)
+- procedure PhysicsBodyAddForce(Body: Integer; Force: TVector3)
+- procedure PhysicsBodyAddImpulse(Body: Integer; Impulse: TVector3)
+- procedure PhysicsBodyClearForces(Body: Integer)
+- procedure PhysicsBodyStop(Body: Integer)
+
