@@ -16,6 +16,7 @@ uniform mat4 modelMatrix;
 uniform mat4 lightSpaceMatrix;
 uniform int useSkinning;
 uniform int skinMatrixCount;
+uniform int flipAlphaCutoutV;
 uniform int useVertexWind;
 uniform float windTime;
 uniform vec3 windDirection;
@@ -125,6 +126,7 @@ void main()
         localPosition = (CalculateSkinMatrix() * vec4(position, 1.0)).xyz;
     vec4 worldPosition = modelMatrix * vec4(localPosition, 1.0);
     ApplyVertexWind(worldPosition);
-    shadowTexcoord = vec2(texcoord.x, 1.0 - texcoord.y);
+    shadowTexcoord = flipAlphaCutoutV != 0 ?
+        vec2(texcoord.x, 1.0 - texcoord.y) : texcoord;
     gl_Position = lightSpaceMatrix * worldPosition;
 }
