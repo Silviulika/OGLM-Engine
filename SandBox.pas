@@ -31,6 +31,7 @@ uses
   Vcl.Controls, Vcl.Forms,
   Vcl.Graphics, Vcl.Imaging.pngimage, Vcl.Imaging.jpeg, GraphicEx,
   dglOpenGL, Neslib.FastMath, PasImGui, Editor.ImGuiBackend,
+  Engine.GUI.Editor,
   PasImGui.Utils,
   Renderer.Mesh, Renderer.Particles, Renderer.Billboards, Renderer.AnimatedSprites,
   Renderer.Shader, Renderer.Light, Renderer.SkyDome,
@@ -43,6 +44,7 @@ type
   TPrimitiveKind = (
     pkCube,
     pkPlane,
+    pkGrass,
     pkWaterPlane,
     pkSphere,
     pkCylinder,
@@ -103,6 +105,7 @@ type
     WidthSegments: Integer;
     HeightSegments: Integer;
     DepthSegments: Integer;
+    PlaneCount: Integer;
     Slices: Integer;
     Stacks: Integer;
     Sides: Integer;
@@ -495,6 +498,7 @@ type
   private const
     GIZMO_MATERIAL_NAME = 'GizmoColorMaterial';
     DEFAULT_PBR_MATERIAL_NAME = 'DefaultPBRMaterial';
+    DEFAULT_GRASS_MATERIAL_NAME = 'DefaultGrassMaterial';
     HEIGHTFIELD_THUMB_SIZE = 64;
     MATERIAL_TEXTURE_THUMB_SIZE = 64;
     MATERIAL_FILE_THUMB_SIZE = 64;
@@ -540,12 +544,14 @@ type
     fActorShader: TShader;
     fTreeLeafShader: TShader;
     fTreeTrunkShader: TShader;
+    fGrassShader: TShader;
     fHeightFieldShader: TShader;
     fGizmoShader: TShader;
     fGizmoMaterialLibrary: TMaterialLibrary;
     MaterialLibraries: TMaterialLibraries;
 
     fImGui: TEditorImGuiBackend;
+    fGuiEditor: TGuiEditorImGui;
     fUseImGuiEditor: Boolean;
     fShowImGuiDemo: Boolean;
     fShowPostEffects: Boolean;
@@ -674,6 +680,7 @@ type
 
     function EnsureDefaultMaterialLibrary: TMaterialLibrary;
     function DefaultRenderableMaterialName: string;
+    function EnsureDefaultGrassMaterialName: string;
     function IsEditorOnlyMaterial(AMaterial: TMaterial): Boolean;
     procedure AssignShaderToMaterial(AMaterial: TMaterial);
     procedure EnsureGizmoMaterial;
@@ -682,6 +689,7 @@ type
     procedure AddDefaultPBRTextures(AMaterial: TMaterial);
     procedure AddDefaultTreeLeafTextures(AMaterial: TMaterial);
     procedure AddDefaultTreeTrunkTextures(AMaterial: TMaterial);
+    procedure AddDefaultGrassTextures(AMaterial: TMaterial);
     procedure AddDefaultHeightFieldTextures(AMaterial: TMaterial);
     function TextureDisplayName(const ATex: TMaterialTexture; AIndex: Integer): string;
     function MaterialTypeDisplayName(AMaterialType: TMaterialType): string;
@@ -1928,9 +1936,11 @@ begin
   fActorShader := fEngine.ActorShader;
   fTreeLeafShader := fEngine.TreeLeafShader;
   fTreeTrunkShader := fEngine.TreeTrunkShader;
+  fGrassShader := fEngine.GrassShader;
   fHeightFieldShader := fEngine.HeightFieldShader;
 
   fImGui := TEditorImGuiBackend.Create;
+  fGuiEditor := TGuiEditorImGui.Create;
   ApplyImGuiStyle;
   fUseImGuiEditor := True;
   fShowImGuiDemo := False;
@@ -2040,6 +2050,7 @@ begin
   ClearParticleFilePreviews;
 
   fAudioTestSound := nil;
+  FreeAndNil(fGuiEditor);
   FreeAndNil(fImGui);
   FreeAndNil(fGrid);
   FreeAndNil(fGizmoMaterialLibrary);
@@ -2059,6 +2070,7 @@ begin
   fActorShader := nil;
   fTreeLeafShader := nil;
   fTreeTrunkShader := nil;
+  fGrassShader := nil;
   fHeightFieldShader := nil;
   FreeAndNil(fLog);
 end;
@@ -2264,6 +2276,37 @@ begin
       Exit(Lib.Material[I].Name);
 end;
 
+function TSandBoxForm.EnsureDefaultGrassMaterialName: string;
+var
+  Lib: TMaterialLibrary;
+  Mat: TMaterial;
+begin
+  Result := DEFAULT_GRASS_MATERIAL_NAME;
+  Lib := EnsureDefaultMaterialLibrary;
+  if Lib = nil then
+    Exit('');
+
+  Mat := Lib.GetMaterial(DEFAULT_GRASS_MATERIAL_NAME);
+  if Mat = nil then
+  begin
+    Mat := TMaterial.Create(Managers.Material.mtGrass);
+    try
+      Mat.Name := DEFAULT_GRASS_MATERIAL_NAME;
+      AssignShaderToMaterial(Mat);
+      AddDefaultGrassTextures(Mat);
+      Lib.AddMaterial(Mat);
+      Mat := nil;
+    finally
+      Mat.Free;
+    end;
+  end
+  else
+  begin
+    Mat.Materialtype := Managers.Material.mtGrass;
+    AssignShaderToMaterial(Mat);
+  end;
+end;
+
 procedure TSandBoxForm.AssignShaderToMaterial(AMaterial: TMaterial);
 begin
   if AMaterial = nil then
@@ -2360,6 +2403,8 @@ begin
       Result := fTreeLeafShader;
     mtTreeTrunk:
       Result := fTreeTrunkShader;
+    Managers.Material.mtGrass:
+      Result := fGrassShader;
     mtHeightFieldMaterial:
       Result := fHeightFieldShader;
   else
@@ -2521,6 +2566,45 @@ begin
   AMaterial.AddTextures(Tex);
 end;
 
+procedure TSandBoxForm.AddDefaultGrassTextures(AMaterial: TMaterial);
+var
+  I: Integer;
+  Tex: TArray<TMaterialTexture>;
+
+  procedure LoadTex(Index: Integer; const UniformName: string;
+    const FullPath, DisplayPath: string; InternalFormat: GLint);
+  begin
+    if Tex[Index].LoadTexTGA(FullPath, True, UniformName,
+      InternalFormat, GL_REPEAT, False) then
+      LogLine('Texture loaded: ' + DisplayPath)
+    else
+      LogLine('Texture missing or failed: ' + DisplayPath);
+  end;
+begin
+  if AMaterial = nil then
+    Exit;
+
+  SetLength(Tex, 3);
+  for I := 0 to High(Tex) do
+  begin
+    Tex[I].Texture.DiffuseColor := Vector3(0.33, 0.58, 0.16);
+    Tex[I].Texture.SpecularColor := Vector3(0.35, 0.42, 0.28);
+    Tex[I].Texture.Shininess := 18.0;
+  end;
+
+  LoadTex(0, 'albedoTexture',
+    TEnginePaths.BillboardTexture('Grass_01.tga'),
+    'Data\Billboards\Textures\Grass_01.tga', GL_SRGB8_ALPHA8);
+  LoadTex(1, 'normalTexture',
+    TEnginePaths.Texture('DefaultNormal.tga'),
+    'Data\Tex\DefaultNormal.tga', GL_RGBA8);
+  LoadTex(2, 'specularTexture',
+    TEnginePaths.Texture('DefaultEdge.tga'),
+    'Data\Tex\DefaultEdge.tga', GL_RGBA8);
+
+  AMaterial.AddTextures(Tex);
+end;
+
 procedure TSandBoxForm.AddDefaultHeightFieldTextures(AMaterial: TMaterial);
 var
   I: Integer;
@@ -2608,6 +2692,7 @@ begin
     mtActor: Result := 'Actor';
     mtTreeLeaf: Result := 'Tree Leaf';
     mtTreeTrunk: Result := 'Tree Trunk';
+    Managers.Material.mtGrass: Result := 'Grass';
     mtHeightFieldMaterial: Result := 'Terrain';
     mtShadow: Result := 'Shadow';
   else
@@ -7013,6 +7098,7 @@ begin
     fActorShader := fEngine.ActorShader;
     fTreeLeafShader := fEngine.TreeLeafShader;
     fTreeTrunkShader := fEngine.TreeTrunkShader;
+    fGrassShader := fEngine.GrassShader;
     fHeightFieldShader := fEngine.HeightFieldShader;
     fPhysicsRunning := fEngine.PhysicsRunning;
     SyncOrbitFromCamera;
@@ -9764,6 +9850,8 @@ begin
   DrawImGuiLog;
   DrawImGuiMaterialEditor;
   DrawImGuiMeshEditor;
+  if Assigned(fGuiEditor) then
+    fGuiEditor.Draw;
   DrawImGuiHeightFieldBrowser;
   DrawImGuiTextureBrowser;
   DrawImGuiParticleTextureBrowser;
@@ -9923,6 +10011,15 @@ begin
 
         if ImGui.MenuItem('Particle Editor', nil, fParticleEditorActive) then
           OpenParticleEditor;
+
+        if Assigned(fGuiEditor) and
+          ImGui.MenuItem('GUI Layout Editor', nil, fGuiEditor.Active) then
+        begin
+          if fGuiEditor.Active then
+            fGuiEditor.Active := False
+          else
+            fGuiEditor.Open;
+        end;
 
         if ImGui.MenuItem('Post Effects', nil, fShowPostEffects) then
           fShowPostEffects := not fShowPostEffects;
@@ -15974,6 +16071,54 @@ begin
               ImGui.EndTable;
             end;
           end
+          else if Mat.Materialtype = Managers.Material.mtGrass then
+          begin
+            if ImGui.BeginTable('GrassShaderParamsTable', 2) then
+            begin
+              ImGui.TableNextRow(0, 0);
+              ImGui.TableSetColumnIndex(0);
+              ImGui.PushItemWidth(-1);
+              if ImGui.DragFloat('Alpha Cutoff', @Params.AlphaCutoff, 0.01,
+                0.0, 1.0, '%.2f') then
+              begin
+                Mat.ShaderParameters := Params;
+                RequestRender;
+              end;
+              ImGui.PopItemWidth;
+
+              ImGui.TableSetColumnIndex(1);
+              ImGui.PushItemWidth(-1);
+              if ImGui.DragFloat('Specular Level', @Params.SpecularLevel, 0.01,
+                0.0, 8.0, '%.2f') then
+              begin
+                Mat.ShaderParameters := Params;
+                RequestRender;
+              end;
+              ImGui.PopItemWidth;
+
+              ImGui.TableNextRow(0, 0);
+              ImGui.TableSetColumnIndex(0);
+              ImGui.PushItemWidth(-1);
+              if ImGui.DragFloat('Gamma', @Params.Gamma, 0.05,
+                0.1, 8.0, '%.2f') then
+              begin
+                Mat.ShaderParameters := Params;
+                RequestRender;
+              end;
+              ImGui.PopItemWidth;
+
+              ImGui.TableSetColumnIndex(1);
+              ImGui.PushItemWidth(-1);
+              if ImGui.DragFloat('HDR Exposure', @Params.HdrExposure, 0.01,
+                0.0, 16.0, '%.2f') then
+              begin
+                Mat.ShaderParameters := Params;
+                RequestRender;
+              end;
+              ImGui.PopItemWidth;
+              ImGui.EndTable;
+            end;
+          end
           else if Mat.Materialtype = mtTreeTrunk then
           begin
             if ImGui.BeginTable('TreeTrunkShaderParamsTable', 2) then
@@ -16344,6 +16489,9 @@ begin
       ImGui.SameLine;
       ImGui.RadioButton(PAnsiChar(AnsiString('Tree Trunk')),
         @fMaterialEditor.NewMaterialType, 4);
+      ImGui.SameLine;
+      ImGui.RadioButton(PAnsiChar(AnsiString('Grass')),
+        @fMaterialEditor.NewMaterialType, 5);
 
       if ImGui.Button('Create##AddMaterial') then
       begin
@@ -16357,6 +16505,7 @@ begin
             2: MaterialType := mtActor;
             3: MaterialType := mtTreeLeaf;
             4: MaterialType := mtTreeTrunk;
+            5: MaterialType := Managers.Material.mtGrass;
           else
             MaterialType := mtPBR;
           end;
@@ -16370,6 +16519,8 @@ begin
             AddDefaultTreeLeafTextures(Mat)
           else if MaterialType = mtTreeTrunk then
             AddDefaultTreeTrunkTextures(Mat)
+          else if MaterialType = Managers.Material.mtGrass then
+            AddDefaultGrassTextures(Mat)
           else
             AddDefaultPBRTextures(Mat);
 
@@ -18448,6 +18599,7 @@ begin
   case AKind of
     pkCube: Result := 'Cube';
     pkPlane: Result := 'Plane';
+    pkGrass: Result := 'Grass';
     pkWaterPlane: Result := 'Water Plane';
     pkSphere: Result := 'Sphere';
     pkCylinder: Result := 'Cylinder';
@@ -18468,6 +18620,7 @@ end;
 function TSandBoxForm.PrimitiveBaseName(AKind: TPrimitiveKind): string;
 begin
   case AKind of
+    pkGrass: Result := 'Grass';
     pkWaterPlane: Result := 'WaterPlane';
     pkGeodesicDome: Result := 'GeodesicDome';
     pkSuperEllipsoid: Result := 'SuperEllipsoid';
@@ -18481,7 +18634,9 @@ function TSandBoxForm.TryGetPrimitiveKindForMesh(Mesh: TMesh;
 begin
   Result := True;
 
-  if Mesh is TWaterPlaneMesh then
+  if (Mesh <> nil) and (Mesh.MeshType = Engine.Types.mtGrass) then
+    AKind := pkGrass
+  else if Mesh is TWaterPlaneMesh then
     AKind := pkWaterPlane
   else if Mesh is TCubeMesh then
     AKind := pkCube
@@ -18525,6 +18680,9 @@ begin
     pkPlane:
       Result := TMeshFactory.CreatePlane(10, 10, 1, 1, MeshName);
 
+    pkGrass:
+      Result := TMeshFactory.CreateGrassCrossPlanes(0.8, 1.0, 2, MeshName);
+
     pkWaterPlane:
       Result := TMeshFactory.CreateWaterPlane(20, 20, 64, 64, MeshName);
 
@@ -18566,6 +18724,9 @@ begin
 end;
 
 procedure TSandBoxForm.InitPrimitiveEditorDefaults(AKind: TPrimitiveKind; Mesh: TMesh);
+var
+  Bounds: TAABB;
+  Size: TVector3;
 begin
   fMeshEditor.Kind := AKind;
 
@@ -18587,6 +18748,7 @@ begin
   fMeshEditor.WidthSegments := 1;
   fMeshEditor.HeightSegments := 1;
   fMeshEditor.DepthSegments := 1;
+  fMeshEditor.PlaneCount := 2;
   fMeshEditor.Slices := 32;
   fMeshEditor.Stacks := 1;
   fMeshEditor.Sides := 6;
@@ -18615,6 +18777,13 @@ begin
       begin
         fMeshEditor.Width := 10.0;
         fMeshEditor.Depth := 10.0;
+      end;
+
+    pkGrass:
+      begin
+        fMeshEditor.Width := 0.8;
+        fMeshEditor.Height := 1.0;
+        fMeshEditor.PlaneCount := 2;
       end;
 
     pkWaterPlane:
@@ -18671,6 +18840,15 @@ begin
     fMeshEditor.Depth := TPlaneMesh(Mesh).Depth;
     fMeshEditor.WidthSegments := TPlaneMesh(Mesh).WidthSegments;
     fMeshEditor.DepthSegments := TPlaneMesh(Mesh).DepthSegments;
+  end
+  else if (Mesh <> nil) and (Mesh.MeshType = Engine.Types.mtGrass) then
+  begin
+    Bounds := Mesh.GetBoundingBox;
+    Size := Bounds.Max - Bounds.Min;
+    fMeshEditor.Width := System.Math.Max(0.001,
+      System.Math.Max(Size.X, Size.Z));
+    fMeshEditor.Height := System.Math.Max(0.001, Size.Y);
+    fMeshEditor.PlaneCount := 2;
   end;
 
   if Mesh is TSphereMesh then
@@ -18808,6 +18986,13 @@ begin
         MinInt(fMeshEditor.DepthSegments, 1),
         MeshName);
 
+    pkGrass:
+      Result := TMeshFactory.CreateGrassCrossPlanes(
+        Positive(fMeshEditor.Width),
+        Positive(fMeshEditor.Height),
+        MinInt(fMeshEditor.PlaneCount, 1),
+        MeshName);
+
     pkWaterPlane:
       Result := TMeshFactory.CreateWaterPlane(
         Positive(fMeshEditor.Width),
@@ -18941,6 +19126,7 @@ begin
 
   if ImGui.MenuItem('Cube') then BeginCreatePrimitiveObjectFromImGui(pkCube);
   if ImGui.MenuItem('Plane') then BeginCreatePrimitiveObjectFromImGui(pkPlane);
+  if ImGui.MenuItem('Grass') then BeginCreatePrimitiveObjectFromImGui(pkGrass);
   if ImGui.MenuItem('Sphere') then BeginCreatePrimitiveObjectFromImGui(pkSphere);
   if ImGui.MenuItem('Cylinder') then BeginCreatePrimitiveObjectFromImGui(pkCylinder);
   if ImGui.MenuItem('Capsule') then BeginCreatePrimitiveObjectFromImGui(pkCapsule);
@@ -18979,6 +19165,7 @@ begin
 
   if ImGui.MenuItem('Cube') then BeginCreatePrimitiveMeshFromImGui(pkCube);
   if ImGui.MenuItem('Plane') then BeginCreatePrimitiveMeshFromImGui(pkPlane);
+  if ImGui.MenuItem('Grass') then BeginCreatePrimitiveMeshFromImGui(pkGrass);
   if ImGui.MenuItem('Sphere') then BeginCreatePrimitiveMeshFromImGui(pkSphere);
   if ImGui.MenuItem('Cylinder') then BeginCreatePrimitiveMeshFromImGui(pkCylinder);
   if ImGui.MenuItem('Capsule') then BeginCreatePrimitiveMeshFromImGui(pkCapsule);
@@ -20004,6 +20191,12 @@ begin
   end;
 
   NewObj.MeshList.AddMeshToList(Mesh);
+  if AKind = pkGrass then
+  begin
+    Mesh.MaterialLibrary := EnsureDefaultMaterialLibrary;
+    Mesh.LibMaterialname := EnsureDefaultGrassMaterialName;
+    NewObj.EnableGrassWind;
+  end;
   NewObj.UpdateBoundingRadiusFromMesh;
   NewObj.NotifyChange;
 
@@ -20044,6 +20237,12 @@ begin
   Mesh := CreateDefaultPrimitiveMesh(AKind, GenMeshName(PrimitiveBaseName(AKind) + '_'));
   if Mesh = nil then
     Exit;
+
+  if AKind = pkGrass then
+  begin
+    Mesh.MaterialLibrary := EnsureDefaultMaterialLibrary;
+    Mesh.LibMaterialname := EnsureDefaultGrassMaterialName;
+  end;
 
   NewIndex := fSelectedObject.MeshList.AddMeshToList(Mesh);
 
@@ -20198,6 +20397,14 @@ begin
           Changed := ImGui.DragFloat('Depth', @fMeshEditor.Depth, 0.05, 0.001, 100000, '%.2f') or Changed;
           Changed := ImGui.DragInt('Width Segments', @fMeshEditor.WidthSegments, 1.0, 1, 512, '%d', ImGuiSliderFlags_None) or Changed;
           Changed := ImGui.DragInt('Depth Segments', @fMeshEditor.DepthSegments, 1.0, 1, 512, '%d', ImGuiSliderFlags_None) or Changed;
+        end;
+
+      pkGrass:
+        begin
+          Changed := ImGui.DragFloat('Width', @fMeshEditor.Width, 0.05, 0.001, 100000, '%.2f') or Changed;
+          Changed := ImGui.DragFloat('Height', @fMeshEditor.Height, 0.05, 0.001, 100000, '%.2f') or Changed;
+          Changed := ImGui.DragInt('Plane Count', @fMeshEditor.PlaneCount,
+            1.0, 1, 16, '%d', ImGuiSliderFlags_None) or Changed;
         end;
 
       pkWaterPlane:
@@ -21725,6 +21932,14 @@ begin
   if fUseImGuiEditor and Assigned(fImGui) then
   begin
     fImGui.MouseMove(Pt.X, Pt.Y);
+
+    if Assigned(fGuiEditor) and
+       fGuiEditor.HandleMouseWheel(Pt.X, Pt.Y, WheelDelta) then
+    begin
+      Handled := True;
+      RequestRender;
+      Exit;
+    end;
 
     {
       Do this test before applying the editor zoom.

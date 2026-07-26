@@ -162,7 +162,8 @@ type
                mtArrow,
                mtSuperEllipsoid,
                mtHeightField,
-               mtWater);
+               mtWater,
+               mtGrass);
 
 type
   TMeshTransformDescriptor = record

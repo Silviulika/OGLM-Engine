@@ -59,6 +59,7 @@ type
     FActorShader: TShader;
     FTreeLeafShader: TShader;
     FTreeTrunkShader: TShader;
+    FGrassShader: TShader;
     FHeightFieldShader: TShader;
     FPhysicsWorld: TPhysicsWorld;
     FAudioEngine: TBassAudioEngine;
@@ -152,6 +153,7 @@ type
     property ActorShader: TShader read FActorShader;
     property TreeLeafShader: TShader read FTreeLeafShader;
     property TreeTrunkShader: TShader read FTreeTrunkShader;
+    property GrassShader: TShader read FGrassShader;
     property HeightFieldShader: TShader read FHeightFieldShader;
     property PhysicsWorld: TPhysicsWorld read FPhysicsWorld;
     property PhysicsRunning: Boolean read FPhysicsRunning;
@@ -169,6 +171,7 @@ const
   DEFAULT_ENGINE_SCENE_NAME = 'Scene';
   DEFAULT_ENGINE_MATERIAL_LIBRARY_NAME = 'fDefaultMaterialLib';
   DEFAULT_ENGINE_PBR_MATERIAL_NAME = 'DefaultPBRMaterial';
+  DEFAULT_ENGINE_GRASS_MATERIAL_NAME = 'DefaultGrassMaterial';
   DEFAULT_ENGINE_SCENE_FILE_NAME = 'Default.omescn';
   MAX_ENGINE_SHADER_LIGHTS = 8;
   SCENE_FILE_EXTENSION = '.omescn';
@@ -376,6 +379,7 @@ begin
   FreeAndNil(FActorShader);
   FreeAndNil(FTreeLeafShader);
   FreeAndNil(FTreeTrunkShader);
+  FreeAndNil(FGrassShader);
   FreeAndNil(FHeightFieldShader);
   FreeAndNil(FMaterialLibraries);
   FreeAndNil(FRenderer);
@@ -411,14 +415,16 @@ end;
 
 procedure TGameEngine.LoadCoreShaders;
 begin
-  FDefaultShader := TShader.Create(TEnginePaths.Shader('PBR_POM_4.vert'),
-    TEnginePaths.Shader('PBR_POM_4.frag'));
+  FDefaultShader := TShader.Create(TEnginePaths.Shader('PBR_POM.vert'),
+    TEnginePaths.Shader('PBR_POM.frag'));
   FActorShader := TShader.Create(TEnginePaths.Shader('Actor_PBR.vert'),
     TEnginePaths.Shader('Actor_PBR.frag'));
-  FTreeLeafShader := TShader.Create(TEnginePaths.Shader('PBR_POM_4.vert'),
+  FTreeLeafShader := TShader.Create(TEnginePaths.Shader('PBR_POM.vert'),
     TEnginePaths.Shader('TreeLeaf.frag'));
-  FTreeTrunkShader := TShader.Create(TEnginePaths.Shader('PBR_POM_4.vert'),
+  FTreeTrunkShader := TShader.Create(TEnginePaths.Shader('PBR_POM.vert'),
     TEnginePaths.Shader('TreeTrunk.frag'));
+  FGrassShader := TShader.Create(TEnginePaths.Shader('Grass.vert'),
+    TEnginePaths.Shader('Grass.frag'));
   FHeightFieldShader := TShader.Create(TEnginePaths.Shader('HeightField_MultiMaterial.vert'),
     TEnginePaths.Shader('HeightField_MultiMaterial.frag'));
 
@@ -426,6 +432,7 @@ begin
   FActorShader.OnUpdateShader := OnUpdateShader;
   FTreeLeafShader.OnUpdateShader := OnUpdateShader;
   FTreeTrunkShader.OnUpdateShader := OnUpdateShader;
+  FGrassShader.OnUpdateShader := OnUpdateShader;
   FHeightFieldShader.OnUpdateShader := OnUpdateShader;
 
   FRenderer.LoadShadowShaderFromFile(TEnginePaths.Shader('ShadowDepth.vert'),
@@ -494,6 +501,8 @@ begin
       Result := FTreeLeafShader;
     mtTreeTrunk:
       Result := FTreeTrunkShader;
+    Managers.Material.mtGrass:
+      Result := FGrassShader;
     mtHeightFieldMaterial:
       Result := FHeightFieldShader;
   else
@@ -560,11 +569,18 @@ var
   Lib: TMaterialLibrary;
   Tex: TArray<TMaterialTexture>;
 
-  procedure LoadTex(Index: Integer; const FileName, UniformName: string;
-    SRGB: Boolean; InternalFormat: GLint; WrapMode: GLint);
+  procedure LoadTexFromPath(Index: Integer; const FullPath, UniformName: string;
+    MipMap: Boolean; InternalFormat: GLint; WrapMode: GLint);
   begin
-    Tex[Index].LoadTexTGA(TEnginePaths.Texture(FileName), SRGB, UniformName,
+    Tex[Index].LoadTexTGA(FullPath, MipMap, UniformName,
       InternalFormat, WrapMode, False);
+  end;
+
+  procedure LoadTex(Index: Integer; const FileName, UniformName: string;
+    MipMap: Boolean; InternalFormat: GLint; WrapMode: GLint);
+  begin
+    LoadTexFromPath(Index, TEnginePaths.Texture(FileName), UniformName,
+      MipMap, InternalFormat, WrapMode);
   end;
 
 begin
@@ -595,6 +611,36 @@ begin
       LoadTex(5, 'DefaultEdge.tga', 'specularTexture', True, GL_RGBA8, GL_REPEAT);
       LoadTex(6, 'DefaultAmbient.tga', 'ambientOcclusionTexture', True, GL_RGBA8, GL_REPEAT);
       LoadTex(7, 'DefaultIrradiance.tga', 'specularBRDF_LUT', False, GL_RGBA8, GL_CLAMP_TO_EDGE);
+
+      Mat.AddTextures(Tex);
+      Lib.AddMaterial(Mat);
+      Mat := nil;
+    finally
+      Mat.Free;
+    end;
+  end;
+
+  if Lib.GetMaterial(DEFAULT_ENGINE_GRASS_MATERIAL_NAME) = nil then
+  begin
+    Mat := TMaterial.Create(Managers.Material.mtGrass);
+    try
+      Mat.Name := DEFAULT_ENGINE_GRASS_MATERIAL_NAME;
+      Mat.Shader := FGrassShader;
+
+      SetLength(Tex, 3);
+      for I := 0 to High(Tex) do
+      begin
+        Tex[I].Texture.DiffuseColor := Vector3(0.33, 0.58, 0.16);
+        Tex[I].Texture.SpecularColor := Vector3(0.35, 0.42, 0.28);
+        Tex[I].Texture.Shininess := 18.0;
+      end;
+
+      LoadTexFromPath(0, TEnginePaths.BillboardTexture('Grass_01.tga'),
+        'albedoTexture', True, GL_SRGB8_ALPHA8, GL_REPEAT);
+      LoadTex(1, 'DefaultNormal.tga', 'normalTexture', True, GL_RGBA8,
+        GL_REPEAT);
+      LoadTex(2, 'DefaultEdge.tga', 'specularTexture', True, GL_RGBA8,
+        GL_REPEAT);
 
       Mat.AddTextures(Tex);
       Lib.AddMaterial(Mat);

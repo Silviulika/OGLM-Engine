@@ -261,6 +261,7 @@ type
     procedure UpdateAnimations(DeltaTime: Single);
     procedure EnableTreeWind;
     procedure EnableVertexTreeWind;
+    procedure EnableGrassWind;
     procedure DisableWind;
     procedure ApplyVertexWindUniforms(Shader: TShader);
     function AnimationCount: Integer;
@@ -1307,6 +1308,11 @@ end;
 procedure TSceneObject.EnableVertexTreeWind;
 begin
   WindSettings := TWindActorSettings.DefaultVertexTree;
+end;
+
+procedure TSceneObject.EnableGrassWind;
+begin
+  WindSettings := TWindActorSettings.DefaultGrass;
 end;
 
 procedure TSceneObject.DisableWind;

@@ -13,6 +13,10 @@ type
 
     class function CreatePlane(Width, Depth: Single; WidthSegments, DepthSegments: Integer; aName: String;
       BuildTangentsAndBitangents: Boolean = True; IsStatic: Boolean = True): TMesh;
+    class function CreateGrassCrossPlanes(Width, Height: Single;
+      PlaneCount: Integer; aName: String;
+      BuildTangentsAndBitangents: Boolean = True;
+      IsStatic: Boolean = True): TMesh;
     class function CreateWaterPlane(Width, Depth: Single; WidthSegments,
       DepthSegments: Integer; aName: String;
       BuildTangentsAndBitangents: Boolean = True; IsStatic: Boolean = True): TMesh;
@@ -71,6 +75,19 @@ class function TMeshFactory.CreatePlane(Width, Depth: Single; WidthSegments, Dep
   BuildTangentsAndBitangents: Boolean = True; IsStatic: Boolean = True): TMesh;
 begin
   Result := TPlaneMesh.Create(Width, Depth, WidthSegments, DepthSegments, aName, IsStatic);
+  if BuildTangentsAndBitangents then
+    Result.BuildTangentsAndBitangents;
+end;
+
+class function TMeshFactory.CreateGrassCrossPlanes(Width, Height: Single;
+  PlaneCount: Integer; aName: String; BuildTangentsAndBitangents,
+  IsStatic: Boolean): TMesh;
+var
+  Vertices: TArray<TVertex>;
+  Indices: TArray<GLuint>;
+begin
+  CreateGrassCrossPlaneVertices(Vertices, Indices, Width, Height, PlaneCount);
+  Result := TMesh.Create(Vertices, Indices, aName, Engine.Types.mtGrass, IsStatic);
   if BuildTangentsAndBitangents then
     Result.BuildTangentsAndBitangents;
 end;

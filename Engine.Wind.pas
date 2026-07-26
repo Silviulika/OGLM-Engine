@@ -26,6 +26,7 @@ type
     class function Disabled: TWindActorSettings; static;
     class function DefaultTree: TWindActorSettings; static;
     class function DefaultVertexTree: TWindActorSettings; static;
+    class function DefaultGrass: TWindActorSettings; static;
     procedure Sanitize;
     procedure SaveToStream(AStream: TStream);
     procedure LoadFromStream(AStream: TStream);
@@ -138,6 +139,20 @@ begin
   Result.TrunkFlex := 0.32;
   Result.BranchFlex := 0.85;
   Result.LeafFlutter := 0.65;
+  Result.Sanitize;
+end;
+
+class function TWindActorSettings.DefaultGrass: TWindActorSettings;
+begin
+  Result := DefaultTree;
+  Result.Kind := wakVertexTree;
+  Result.Strength := 10.0 * Pi / 180.0;
+  Result.Frequency := 1.15;
+  Result.GustStrength := 0.45;
+  Result.GustFrequency := 0.21;
+  Result.TrunkFlex := 0.08;
+  Result.BranchFlex := 1.15;
+  Result.LeafFlutter := 2.2;
   Result.Sanitize;
 end;
 

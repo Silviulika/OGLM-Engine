@@ -2093,7 +2093,7 @@ end;
 
 procedure TRenderer.ApplyShadowMaterial(AMesh: TMesh);
 const
-  LEAF_ALPHA_TEXTURE_UNIT = 9;
+  ALPHA_CUTOUT_TEXTURE_UNIT = 9;
 var
   Mat: TMaterial;
   Tex: TMaterialTexture;
@@ -2103,6 +2103,7 @@ begin
     Exit;
 
   fShadowShader.SetUniform('useAlphaCutout', GLint(0));
+  fShadowShader.SetUniform('flipAlphaCutoutV', GLint(1));
   if (AMesh = nil) or (AMesh.MaterialLibrary = nil) then
     Exit;
 
@@ -2113,7 +2114,8 @@ begin
   else
     Mat := nil;
 
-  if (Mat = nil) or (Mat.Materialtype <> mtTreeLeaf) then
+  if (Mat = nil) or
+     not (Mat.Materialtype in [mtTreeLeaf, Managers.Material.mtGrass]) then
     Exit;
 
   for I := 0 to Mat.Count - 1 do
@@ -2122,12 +2124,14 @@ begin
     if SameText(Trim(Tex.Texture.Name), 'albedoTexture') and
        (Tex.Texture.TexID <> 0) then
     begin
-      glActiveTexture(GL_TEXTURE0 + LEAF_ALPHA_TEXTURE_UNIT);
+      glActiveTexture(GL_TEXTURE0 + ALPHA_CUTOUT_TEXTURE_UNIT);
       glBindTexture(GL_TEXTURE_2D, Tex.Texture.TexID);
       fShadowShader.SetUniform('leafAlphaTexture',
-        GLint(LEAF_ALPHA_TEXTURE_UNIT));
+        GLint(ALPHA_CUTOUT_TEXTURE_UNIT));
       fShadowShader.SetUniform('alphaCutoff',
         GLfloat(Mat.ShaderParameters.AlphaCutoff));
+      fShadowShader.SetUniform('flipAlphaCutoutV',
+        GLint(Ord(Mat.Materialtype <> Managers.Material.mtGrass)));
       fShadowShader.SetUniform('useAlphaCutout', GLint(1));
       Exit;
     end;

@@ -34,6 +34,9 @@ procedure FixTextureSeam(var Vertices: TArray<TVertex>; var Indices: TArray<GLui
 procedure CreatePlaneVertices(out Vertices: TArray<TVertex>; out Indices: TArray<GLuint>;
   Width, Depth: Single; WidthSegments, DepthSegments: Integer);
 
+procedure CreateGrassCrossPlaneVertices(out Vertices: TArray<TVertex>;
+  out Indices: TArray<GLuint>; Width, Height: Single; PlaneCount: Integer);
+
 //-------------------------------------------------------------------------------
 /// <summary>Creates a heightfield terrain mesh from a regular height sample grid.</summary>
 /// <param name="Vertices">Output vertex array with positions, normals, UVs, tangents, and bitangents.</param>
@@ -459,6 +462,64 @@ begin
         // Second triangle: bottom-left, top-right, bottom-right
         Builder.AddTriangle(idx00, idx11, idx01);
       end;
+
+    Vertices := Builder.Vertices.ToArray;
+    Indices := Builder.Indices.ToArray;
+  finally
+    Builder.Vertices.Free;
+    Builder.Indices.Free;
+  end;
+end;
+
+procedure CreateGrassCrossPlaneVertices(out Vertices: TArray<TVertex>;
+  out Indices: TArray<GLuint>; Width, Height: Single; PlaneCount: Integer);
+var
+  Builder: TVertexBuilder;
+  I: Integer;
+  Angle, HalfWidth: Single;
+  Right, Up, FaceNormal: TVector3;
+  Vert: TVertex;
+  IdxBL, IdxBR, IdxTR, IdxTL: Integer;
+
+  function AddGrassVertex(const APosition: TVector3;
+    const ATexCoord: TVector2): Integer;
+  begin
+    Vert.Position := APosition;
+    Vert.Normal := FaceNormal;
+    Vert.TexCoord := ATexCoord;
+    Vert.Tangent := Right;
+    Vert.Bitangent := Up;
+    Result := Builder.AddVertex(Vert);
+  end;
+
+begin
+  Builder.Vertices := TList<TVertex>.Create;
+  Builder.Indices := TList<GLuint>.Create;
+  try
+    Width := System.Math.Max(0.001, Width);
+    Height := System.Math.Max(0.001, Height);
+    PlaneCount := System.Math.EnsureRange(PlaneCount, 1, 16);
+    HalfWidth := Width * 0.5;
+    Up := Vector3(0.0, 1.0, 0.0);
+
+    for I := 0 to PlaneCount - 1 do
+    begin
+      Angle := I * Pi / PlaneCount;
+      Right := Vector3(Cos(Angle), 0.0, Sin(Angle));
+      FaceNormal := Vector3(-Right.Z, 0.0, Right.X);
+
+      IdxBL := AddGrassVertex(Right * -HalfWidth,
+        Vector2(0.0, 0.0));
+      IdxBR := AddGrassVertex(Right * HalfWidth,
+        Vector2(1.0, 0.0));
+      IdxTR := AddGrassVertex(Right * HalfWidth + Up * Height,
+        Vector2(1.0, 1.0));
+      IdxTL := AddGrassVertex(Right * -HalfWidth + Up * Height,
+        Vector2(0.0, 1.0));
+
+      Builder.AddTriangle(IdxBL, IdxBR, IdxTR);
+      Builder.AddTriangle(IdxBL, IdxTR, IdxTL);
+    end;
 
     Vertices := Builder.Vertices.ToArray;
     Indices := Builder.Indices.ToArray;

@@ -13,7 +13,7 @@ uses
   Renderer.Camera, Renderer.Light, Renderer.Mesh, Renderer.Mesh.Factory,
   Renderer.Renderer, Renderer.SkyDome, Renderer.Shader, Renderer.Particles, Renderer.Billboards,
   Engine.Types, Engine.Audio, Engine.Physics, Engine.Animation, Engine.Keyboard,
-  Engine.Mouse;
+  Engine.Mouse, Engine.Wind;
 
 type
   TEngineScriptTargetKind = (
@@ -310,6 +310,15 @@ type
     function GetMaterialShaderParameter(AMaterial: TMaterial; const AName: string): Single;
     procedure SetMaterialShaderParameter(AMaterial: TMaterial; const AName: string;
       const AValue: Single);
+    function GetObjectWindInteger(AObject: TSceneObject; const AName: string): Integer;
+    procedure SetObjectWindInteger(AObject: TSceneObject; const AName: string;
+      const AValue: Integer);
+    function GetObjectWindFloat(AObject: TSceneObject; const AName: string): Single;
+    procedure SetObjectWindFloat(AObject: TSceneObject; const AName: string;
+      const AValue: Single);
+    function GetObjectWindVector3(AObject: TSceneObject; const AName: string): TVector3;
+    procedure SetObjectWindVector3(AObject: TSceneObject; const AName: string;
+      const AValue: TVector3);
     function RequireRenderer: TRenderer;
     function RenderWindowHandle: HWND;
     function TryGetRenderWindowRect(out ARect: TRect): Boolean;
@@ -425,6 +434,7 @@ type
     procedure DoObjectAddMeshFile(Info: TProgramInfo);
     procedure DoObjectAddMeshFileObject(Info: TProgramInfo);
     procedure DoObjectAddPlane(Info: TProgramInfo);
+    procedure DoObjectAddGrassCrossPlanes(Info: TProgramInfo);
     procedure DoObjectAddCube(Info: TProgramInfo);
     procedure DoObjectAddSphere(Info: TProgramInfo);
     procedure DoObjectAddCylinder(Info: TProgramInfo);
@@ -438,6 +448,19 @@ type
     procedure DoObjectAddArrow(Info: TProgramInfo);
     procedure DoObjectAddSuperEllipsoid(Info: TProgramInfo);
     procedure DoObjectSetMaterial(Info: TProgramInfo);
+    procedure DoObjectEnableTreeWind(Info: TProgramInfo);
+    procedure DoObjectEnableVertexWind(Info: TProgramInfo);
+    procedure DoObjectEnableGrassWind(Info: TProgramInfo);
+    procedure DoObjectDisableWind(Info: TProgramInfo);
+    procedure DoObjectHasWind(Info: TProgramInfo);
+    procedure DoObjectHasBoneWind(Info: TProgramInfo);
+    procedure DoObjectHasVertexWind(Info: TProgramInfo);
+    procedure DoObjectWindInteger(Info: TProgramInfo);
+    procedure DoObjectSetWindInteger(Info: TProgramInfo);
+    procedure DoObjectWindFloat(Info: TProgramInfo);
+    procedure DoObjectSetWindFloat(Info: TProgramInfo);
+    procedure DoObjectWindVector3(Info: TProgramInfo);
+    procedure DoObjectSetWindVector3(Info: TProgramInfo);
 
     procedure DoMeshFromHandle(Info: TProgramInfo);
     procedure DoMeshHandle(Info: TProgramInfo);
@@ -458,6 +481,7 @@ type
     procedure DoMeshSetAlwaysOnTop(Info: TProgramInfo);
     procedure DoMeshTag(Info: TProgramInfo);
     procedure DoMeshSetTag(Info: TProgramInfo);
+    procedure DoMeshTypeGrass(Info: TProgramInfo);
     procedure DoMeshType(Info: TProgramInfo);
     procedure DoMeshVertexCount(Info: TProgramInfo);
     procedure DoMeshIndexCount(Info: TProgramInfo);
@@ -592,12 +616,23 @@ type
 
     procedure DoMaterialCount(Info: TProgramInfo);
     procedure DoMaterialName(Info: TProgramInfo);
+    procedure DoDefaultGrassMaterialName(Info: TProgramInfo);
     procedure DoMaterialByName(Info: TProgramInfo);
     procedure DoMaterialByNameObject(Info: TProgramInfo);
     procedure DoMaterialFromHandle(Info: TProgramInfo);
     procedure DoMaterialHandle(Info: TProgramInfo);
+    procedure DoMaterialTypePBR(Info: TProgramInfo);
+    procedure DoMaterialTypeShadow(Info: TProgramInfo);
+    procedure DoMaterialTypeHeightField(Info: TProgramInfo);
+    procedure DoMaterialTypeActor(Info: TProgramInfo);
+    procedure DoMaterialTypeTreeLeaf(Info: TProgramInfo);
+    procedure DoMaterialTypeTreeTrunk(Info: TProgramInfo);
+    procedure DoMaterialTypeGrass(Info: TProgramInfo);
     procedure DoMaterialShaderParameter(Info: TProgramInfo);
     procedure DoMaterialSetShaderParameter(Info: TProgramInfo);
+    procedure DoWindKindNone(Info: TProgramInfo);
+    procedure DoWindKindTree(Info: TProgramInfo);
+    procedure DoWindKindVertexTree(Info: TProgramInfo);
 
     procedure DoShaderFromHandle(Info: TProgramInfo);
     procedure DoShaderHandle(Info: TProgramInfo);
@@ -771,7 +806,21 @@ type
     procedure DoSceneObjectMeshObject(Info: TProgramInfo; ExtObject: TObject);
     procedure DoSceneObjectAddMeshFile(Info: TProgramInfo; ExtObject: TObject);
     procedure DoSceneObjectAddMeshFileObject(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectAddGrassCrossPlanes(Info: TProgramInfo; ExtObject: TObject);
     procedure DoSceneObjectSetMaterial(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectEnableTreeWind(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectEnableVertexWind(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectEnableGrassWind(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectDisableWind(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectGetHasWind(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectGetHasBoneWind(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectGetHasVertexWind(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectWindInteger(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectSetWindInteger(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectWindFloat(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectSetWindFloat(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectWindVector3(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectSetWindVector3(Info: TProgramInfo; ExtObject: TObject);
     procedure DoSceneObjectGetParticleSystemCount(Info: TProgramInfo; ExtObject: TObject);
     procedure DoSceneObjectParticleSystem(Info: TProgramInfo; ExtObject: TObject);
     procedure DoSceneObjectCreateParticleSystem(Info: TProgramInfo; ExtObject: TObject);
@@ -3002,6 +3051,10 @@ begin
   AddMethod('GetHasAudio', 'Boolean', [], [], DoSceneObjectGetHasAudio);
   AddMethod('GetHasSkeletonAnimation', 'Boolean', [], [],
     DoSceneObjectGetHasSkeletonAnimation);
+  AddMethod('GetHasWind', 'Boolean', [], [], DoSceneObjectGetHasWind);
+  AddMethod('GetHasBoneWind', 'Boolean', [], [], DoSceneObjectGetHasBoneWind);
+  AddMethod('GetHasVertexWind', 'Boolean', [], [],
+    DoSceneObjectGetHasVertexWind);
   AddMethod('GetAnimationCount', 'Integer', [], [],
     DoSceneObjectGetAnimationCount);
   AddMethod('AnimationName', 'String', ['Index'], ['Integer'],
@@ -3058,7 +3111,27 @@ begin
   AddMethod('MeshObject', 'TMesh', ['Index'], ['Integer'], DoSceneObjectMeshObject);
   AddMethod('AddMeshFile', 'Integer', ['FileName'], ['String'], DoSceneObjectAddMeshFile);
   AddMethod('AddMeshFileObject', 'TMesh', ['FileName'], ['String'], DoSceneObjectAddMeshFileObject);
+  AddMethod('AddGrassCrossPlanes', 'Integer',
+    ['Width', 'Height', 'PlaneCount', 'Name'],
+    ['Float', 'Float', 'Integer', 'String'],
+    DoSceneObjectAddGrassCrossPlanes);
   AddMethod('SetMaterial', '', ['MaterialName'], ['String'], DoSceneObjectSetMaterial);
+  AddMethod('EnableTreeWind', '', [], [], DoSceneObjectEnableTreeWind);
+  AddMethod('EnableVertexWind', '', [], [], DoSceneObjectEnableVertexWind);
+  AddMethod('EnableGrassWind', '', [], [], DoSceneObjectEnableGrassWind);
+  AddMethod('DisableWind', '', [], [], DoSceneObjectDisableWind);
+  AddMethod('WindInteger', 'Integer', ['Name'], ['String'],
+    DoSceneObjectWindInteger);
+  AddMethod('SetWindInteger', '', ['Name', 'Value'], ['String', 'Integer'],
+    DoSceneObjectSetWindInteger);
+  AddMethod('WindFloat', 'Float', ['Name'], ['String'],
+    DoSceneObjectWindFloat);
+  AddMethod('SetWindFloat', '', ['Name', 'Value'], ['String', 'Float'],
+    DoSceneObjectSetWindFloat);
+  AddMethod('WindVector3', 'TVector3', ['Name'], ['String'],
+    DoSceneObjectWindVector3);
+  AddMethod('SetWindVector3', '', ['Name', 'Value'], ['String', 'TVector3'],
+    DoSceneObjectSetWindVector3);
   AddMethod('GetParticleSystemCount', 'Integer', [], [], DoSceneObjectGetParticleSystemCount);
   AddMethod('ParticleSystem', 'Integer', ['Index'], ['Integer'], DoSceneObjectParticleSystem);
   AddMethod('CreateParticleSystem', 'Integer', [], [], DoSceneObjectCreateParticleSystem);
@@ -3091,6 +3164,9 @@ begin
   AddProperty('HasAudio', 'Boolean', 'GetHasAudio', '');
   AddProperty('HasSkeletonAnimation', 'Boolean',
     'GetHasSkeletonAnimation', '');
+  AddProperty('HasWind', 'Boolean', 'GetHasWind', '');
+  AddProperty('HasBoneWind', 'Boolean', 'GetHasBoneWind', '');
+  AddProperty('HasVertexWind', 'Boolean', 'GetHasVertexWind', '');
   AddProperty('AnimationCount', 'Integer', 'GetAnimationCount', '');
   AddProperty('CurrentAnimationName', 'String', 'GetCurrentAnimationName', '');
   AddProperty('CurrentAnimationIndex', 'Integer',
@@ -3889,6 +3965,150 @@ begin
     raise Exception.CreateFmt('Unknown material shader parameter: %s', [AName]);
 
   AMaterial.ShaderParameters := Params;
+end;
+
+function TdwsEngineUnit.GetObjectWindInteger(AObject: TSceneObject;
+  const AName: string): Integer;
+var
+  Settings: TWindActorSettings;
+begin
+  if AObject = nil then
+    raise Exception.Create('Scene object is nil.');
+
+  Settings := AObject.WindSettings;
+  if SameText(AName, 'Kind') or SameText(AName, 'WindKind') then
+    Exit(Ord(Settings.Kind));
+
+  raise Exception.CreateFmt('Unknown object wind integer parameter: %s',
+    [AName]);
+end;
+
+procedure TdwsEngineUnit.SetObjectWindInteger(AObject: TSceneObject;
+  const AName: string; const AValue: Integer);
+var
+  Settings: TWindActorSettings;
+  Value: Integer;
+begin
+  if AObject = nil then
+    raise Exception.Create('Scene object is nil.');
+
+  Settings := AObject.WindSettings;
+  if SameText(AName, 'Kind') or SameText(AName, 'WindKind') then
+  begin
+    Value := EnsureRange(AValue, Ord(Low(TWindActorKind)),
+      Ord(High(TWindActorKind)));
+    Settings.Kind := TWindActorKind(Value);
+    Settings.Enabled := Settings.Kind <> wakNone;
+  end
+  else
+    raise Exception.CreateFmt('Unknown object wind integer parameter: %s',
+      [AName]);
+
+  AObject.WindSettings := Settings;
+  AObject.NotifyChange;
+end;
+
+function TdwsEngineUnit.GetObjectWindFloat(AObject: TSceneObject;
+  const AName: string): Single;
+var
+  Settings: TWindActorSettings;
+begin
+  if AObject = nil then
+    raise Exception.Create('Scene object is nil.');
+
+  Settings := AObject.WindSettings;
+  if SameText(AName, 'Strength') then
+    Exit(Settings.Strength);
+  if SameText(AName, 'StrengthDegrees') then
+    Exit(Settings.Strength * 180.0 / Pi);
+  if SameText(AName, 'Frequency') then
+    Exit(Settings.Frequency);
+  if SameText(AName, 'GustStrength') then
+    Exit(Settings.GustStrength);
+  if SameText(AName, 'GustFrequency') then
+    Exit(Settings.GustFrequency);
+  if SameText(AName, 'PhaseOffset') or SameText(AName, 'Phase') then
+    Exit(Settings.PhaseOffset);
+  if SameText(AName, 'PhaseDegrees') then
+    Exit(Settings.PhaseOffset * 180.0 / Pi);
+  if SameText(AName, 'TrunkFlex') or SameText(AName, 'BaseFlex') then
+    Exit(Settings.TrunkFlex);
+  if SameText(AName, 'BranchFlex') or SameText(AName, 'BladeFlex') then
+    Exit(Settings.BranchFlex);
+  if SameText(AName, 'LeafFlutter') or SameText(AName, 'BladeFlutter') then
+    Exit(Settings.LeafFlutter);
+
+  raise Exception.CreateFmt('Unknown object wind float parameter: %s',
+    [AName]);
+end;
+
+procedure TdwsEngineUnit.SetObjectWindFloat(AObject: TSceneObject;
+  const AName: string; const AValue: Single);
+var
+  Settings: TWindActorSettings;
+begin
+  if AObject = nil then
+    raise Exception.Create('Scene object is nil.');
+
+  Settings := AObject.WindSettings;
+  if SameText(AName, 'Strength') then
+    Settings.Strength := AValue
+  else if SameText(AName, 'StrengthDegrees') then
+    Settings.Strength := AValue * Pi / 180.0
+  else if SameText(AName, 'Frequency') then
+    Settings.Frequency := AValue
+  else if SameText(AName, 'GustStrength') then
+    Settings.GustStrength := AValue
+  else if SameText(AName, 'GustFrequency') then
+    Settings.GustFrequency := AValue
+  else if SameText(AName, 'PhaseOffset') or SameText(AName, 'Phase') then
+    Settings.PhaseOffset := AValue
+  else if SameText(AName, 'PhaseDegrees') then
+    Settings.PhaseOffset := AValue * Pi / 180.0
+  else if SameText(AName, 'TrunkFlex') or SameText(AName, 'BaseFlex') then
+    Settings.TrunkFlex := AValue
+  else if SameText(AName, 'BranchFlex') or SameText(AName, 'BladeFlex') then
+    Settings.BranchFlex := AValue
+  else if SameText(AName, 'LeafFlutter') or SameText(AName, 'BladeFlutter') then
+    Settings.LeafFlutter := AValue
+  else
+    raise Exception.CreateFmt('Unknown object wind float parameter: %s',
+      [AName]);
+
+  AObject.WindSettings := Settings;
+  AObject.NotifyChange;
+end;
+
+function TdwsEngineUnit.GetObjectWindVector3(AObject: TSceneObject;
+  const AName: string): TVector3;
+begin
+  if AObject = nil then
+    raise Exception.Create('Scene object is nil.');
+
+  if SameText(AName, 'Direction') or SameText(AName, 'WindDirection') then
+    Exit(AObject.WindSettings.Direction);
+
+  raise Exception.CreateFmt('Unknown object wind vector parameter: %s',
+    [AName]);
+end;
+
+procedure TdwsEngineUnit.SetObjectWindVector3(AObject: TSceneObject;
+  const AName: string; const AValue: TVector3);
+var
+  Settings: TWindActorSettings;
+begin
+  if AObject = nil then
+    raise Exception.Create('Scene object is nil.');
+
+  Settings := AObject.WindSettings;
+  if SameText(AName, 'Direction') or SameText(AName, 'WindDirection') then
+    Settings.Direction := AValue
+  else
+    raise Exception.CreateFmt('Unknown object wind vector parameter: %s',
+      [AName]);
+
+  AObject.WindSettings := Settings;
+  AObject.NotifyChange;
 end;
 
 function TdwsEngineUnit.RequireRenderer: TRenderer;
@@ -4838,6 +5058,24 @@ begin
       Info.ParamAsInteger[3], Info.ParamAsInteger[4], Info.ParamAsString[5]));
 end;
 
+procedure TdwsEngineUnit.DoObjectAddGrassCrossPlanes(Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+  Mesh: TMesh;
+  Handle: Integer;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  Mesh := TMeshFactory.CreateGrassCrossPlanes(Info.ParamAsFloat[1],
+    Info.ParamAsFloat[2], Info.ParamAsInteger[3], Info.ParamAsString[4]);
+  Handle := AddMeshToObject(Obj, Mesh);
+  if Handle <> 0 then
+  begin
+    SetMeshMaterialName(Mesh, 'DefaultGrassMaterial');
+    NotifyMeshChanged(Mesh);
+  end;
+  Info.ResultAsInteger := Handle;
+end;
+
 procedure TdwsEngineUnit.DoObjectAddCube(Info: TProgramInfo);
 begin
   Info.ResultAsInteger := AddMeshToObject(
@@ -4947,6 +5185,102 @@ begin
       Obj.MeshList.Item[I].MaterialLibrary := FContext.MaterialLibrary;
         Obj.MeshList.Item[I].LibMaterialname := Info.ParamAsString[1];
     end;
+end;
+
+procedure TdwsEngineUnit.DoObjectEnableTreeWind(Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  Obj.EnableTreeWind;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoObjectEnableVertexWind(Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  Obj.EnableVertexTreeWind;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoObjectEnableGrassWind(Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  Obj.EnableGrassWind;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoObjectDisableWind(Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  Obj.DisableWind;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoObjectHasWind(Info: TProgramInfo);
+begin
+  Info.ResultAsBoolean :=
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]).HasWindAnimation;
+end;
+
+procedure TdwsEngineUnit.DoObjectHasBoneWind(Info: TProgramInfo);
+begin
+  Info.ResultAsBoolean :=
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]).HasBoneWindAnimation;
+end;
+
+procedure TdwsEngineUnit.DoObjectHasVertexWind(Info: TProgramInfo);
+begin
+  Info.ResultAsBoolean :=
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]).HasVertexWindAnimation;
+end;
+
+procedure TdwsEngineUnit.DoObjectWindInteger(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := GetObjectWindInteger(
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]),
+    Info.ParamAsString[1]);
+end;
+
+procedure TdwsEngineUnit.DoObjectSetWindInteger(Info: TProgramInfo);
+begin
+  SetObjectWindInteger(
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]),
+    Info.ParamAsString[1], Info.ParamAsInteger[2]);
+end;
+
+procedure TdwsEngineUnit.DoObjectWindFloat(Info: TProgramInfo);
+begin
+  Info.ResultAsFloat := GetObjectWindFloat(
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]),
+    Info.ParamAsString[1]);
+end;
+
+procedure TdwsEngineUnit.DoObjectSetWindFloat(Info: TProgramInfo);
+begin
+  SetObjectWindFloat(
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]),
+    Info.ParamAsString[1], Info.ParamAsFloat[2]);
+end;
+
+procedure TdwsEngineUnit.DoObjectWindVector3(Info: TProgramInfo);
+begin
+  SetResultVector3(Info, GetObjectWindVector3(
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]),
+    Info.ParamAsString[1]));
+end;
+
+procedure TdwsEngineUnit.DoObjectSetWindVector3(Info: TProgramInfo);
+begin
+  SetObjectWindVector3(
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]),
+    Info.ParamAsString[1], ParamAsVector3(Info, 2));
 end;
 
 procedure TdwsEngineUnit.DoSceneObjectCreate(Info: TProgramInfo; var ExtObject: TObject);
@@ -5522,6 +5856,23 @@ begin
   SetResultMesh(Info, Mesh);
 end;
 
+procedure TdwsEngineUnit.DoSceneObjectAddGrassCrossPlanes(Info: TProgramInfo;
+  ExtObject: TObject);
+var
+  Mesh: TMesh;
+  Handle: Integer;
+begin
+  Mesh := TMeshFactory.CreateGrassCrossPlanes(Info.ParamAsFloat[0],
+    Info.ParamAsFloat[1], Info.ParamAsInteger[2], Info.ParamAsString[3]);
+  Handle := AddMeshToObject(RequireSceneObject(ExtObject), Mesh);
+  if Handle <> 0 then
+  begin
+    SetMeshMaterialName(Mesh, 'DefaultGrassMaterial');
+    NotifyMeshChanged(Mesh);
+  end;
+  Info.ResultAsInteger := Handle;
+end;
+
 procedure TdwsEngineUnit.DoSceneObjectSetMaterial(Info: TProgramInfo;
   ExtObject: TObject);
 var
@@ -5535,6 +5886,106 @@ begin
       Obj.MeshList.Item[I].MaterialLibrary := FContext.MaterialLibrary;
       Obj.MeshList.Item[I].LibMaterialname := Info.ParamAsString[0];
     end;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectEnableTreeWind(Info: TProgramInfo;
+  ExtObject: TObject);
+var
+  Obj: TSceneObject;
+begin
+  Obj := RequireSceneObject(ExtObject);
+  Obj.EnableTreeWind;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectEnableVertexWind(Info: TProgramInfo;
+  ExtObject: TObject);
+var
+  Obj: TSceneObject;
+begin
+  Obj := RequireSceneObject(ExtObject);
+  Obj.EnableVertexTreeWind;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectEnableGrassWind(Info: TProgramInfo;
+  ExtObject: TObject);
+var
+  Obj: TSceneObject;
+begin
+  Obj := RequireSceneObject(ExtObject);
+  Obj.EnableGrassWind;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectDisableWind(Info: TProgramInfo;
+  ExtObject: TObject);
+var
+  Obj: TSceneObject;
+begin
+  Obj := RequireSceneObject(ExtObject);
+  Obj.DisableWind;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectGetHasWind(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsBoolean := RequireSceneObject(ExtObject).HasWindAnimation;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectGetHasBoneWind(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsBoolean := RequireSceneObject(ExtObject).HasBoneWindAnimation;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectGetHasVertexWind(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsBoolean := RequireSceneObject(ExtObject).HasVertexWindAnimation;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectWindInteger(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsInteger := GetObjectWindInteger(
+    RequireSceneObject(ExtObject), Info.ParamAsString[0]);
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectSetWindInteger(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  SetObjectWindInteger(RequireSceneObject(ExtObject),
+    Info.ParamAsString[0], Info.ParamAsInteger[1]);
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectWindFloat(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsFloat := GetObjectWindFloat(
+    RequireSceneObject(ExtObject), Info.ParamAsString[0]);
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectSetWindFloat(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  SetObjectWindFloat(RequireSceneObject(ExtObject),
+    Info.ParamAsString[0], Info.ParamAsFloat[1]);
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectWindVector3(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  SetResultVector3(Info, GetObjectWindVector3(
+    RequireSceneObject(ExtObject), Info.ParamAsString[0]));
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectSetWindVector3(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  SetObjectWindVector3(RequireSceneObject(ExtObject),
+    Info.ParamAsString[0], ParamAsVector3(Info, 1));
 end;
 
 procedure TdwsEngineUnit.DoSceneObjectGetParticleSystemCount(Info: TProgramInfo;
@@ -6096,6 +6547,11 @@ begin
   Mesh := FContext.MeshFromHandle(Info.ParamAsInteger[0]);
   Mesh.Tag := Info.ParamAsInteger[1];
   NotifyMeshChanged(Mesh);
+end;
+
+procedure TdwsEngineUnit.DoMeshTypeGrass(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(Engine.Types.mtGrass);
 end;
 
 procedure TdwsEngineUnit.DoMeshType(Info: TProgramInfo);
@@ -7623,6 +8079,11 @@ begin
     Info.ResultAsString := '';
 end;
 
+procedure TdwsEngineUnit.DoDefaultGrassMaterialName(Info: TProgramInfo);
+begin
+  Info.ResultAsString := 'DefaultGrassMaterial';
+end;
+
 procedure TdwsEngineUnit.DoMaterialByName(Info: TProgramInfo);
 var
   Mat: TMaterial;
@@ -7653,6 +8114,41 @@ begin
   Info.ResultAsInteger := FContext.HandleOf(ParamAsMaterial(Info, 0));
 end;
 
+procedure TdwsEngineUnit.DoMaterialTypePBR(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(mtPBR);
+end;
+
+procedure TdwsEngineUnit.DoMaterialTypeShadow(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(mtShadow);
+end;
+
+procedure TdwsEngineUnit.DoMaterialTypeHeightField(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(mtHeightFieldMaterial);
+end;
+
+procedure TdwsEngineUnit.DoMaterialTypeActor(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(mtActor);
+end;
+
+procedure TdwsEngineUnit.DoMaterialTypeTreeLeaf(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(mtTreeLeaf);
+end;
+
+procedure TdwsEngineUnit.DoMaterialTypeTreeTrunk(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(mtTreeTrunk);
+end;
+
+procedure TdwsEngineUnit.DoMaterialTypeGrass(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(Managers.Material.mtGrass);
+end;
+
 procedure TdwsEngineUnit.DoMaterialShaderParameter(Info: TProgramInfo);
 begin
   Info.ResultAsFloat := GetMaterialShaderParameter(
@@ -7663,6 +8159,21 @@ procedure TdwsEngineUnit.DoMaterialSetShaderParameter(Info: TProgramInfo);
 begin
   SetMaterialShaderParameter(FContext.MaterialFromHandle(Info.ParamAsInteger[0]),
     Info.ParamAsString[1], Info.ParamAsFloat[2]);
+end;
+
+procedure TdwsEngineUnit.DoWindKindNone(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(wakNone);
+end;
+
+procedure TdwsEngineUnit.DoWindKindTree(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(wakTree);
+end;
+
+procedure TdwsEngineUnit.DoWindKindVertexTree(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(wakVertexTree);
 end;
 
 procedure TdwsEngineUnit.DoShaderFromHandle(Info: TProgramInfo);
@@ -8624,6 +9135,7 @@ begin
   RegisterEngineFunction('ObjectAddMeshFile', 'Integer', ['Obj', 'FileName'], ['Integer', 'String'], DoObjectAddMeshFile);
   RegisterEngineFunction('ObjectAddMeshFileObject', 'TMesh', ['Obj', 'FileName'], ['Integer', 'String'], DoObjectAddMeshFileObject);
   RegisterEngineFunction('ObjectAddPlane', 'Integer', ['Obj', 'Width', 'Depth', 'WidthSegments', 'DepthSegments', 'Name'], ['Integer', 'Float', 'Float', 'Integer', 'Integer', 'String'], DoObjectAddPlane);
+  RegisterEngineFunction('ObjectAddGrassCrossPlanes', 'Integer', ['Obj', 'Width', 'Height', 'PlaneCount', 'Name'], ['Integer', 'Float', 'Float', 'Integer', 'String'], DoObjectAddGrassCrossPlanes);
   RegisterEngineFunction('ObjectAddCube', 'Integer', ['Obj', 'Width', 'Height', 'Depth', 'WidthStacks', 'HeightStacks', 'DepthStacks', 'Name'], ['Integer', 'Float', 'Float', 'Float', 'Integer', 'Integer', 'Integer', 'String'], DoObjectAddCube);
   RegisterEngineFunction('ObjectAddSphere', 'Integer', ['Obj', 'Radius', 'StackCount', 'SliceCount', 'Name'], ['Integer', 'Float', 'Integer', 'Integer', 'String'], DoObjectAddSphere);
   RegisterEngineFunction('ObjectAddCylinder', 'Integer', ['Obj', 'Radius', 'Height', 'Slices', 'Stacks', 'Name'], ['Integer', 'Float', 'Float', 'Integer', 'Integer', 'String'], DoObjectAddCylinder);
@@ -8637,6 +9149,19 @@ begin
   RegisterEngineFunction('ObjectAddArrow', 'Integer', ['Obj', 'ShaftLength', 'TipLength', 'ShaftRadius', 'TipRadius', 'Slices', 'Stacks', 'Name'], ['Integer', 'Float', 'Float', 'Float', 'Float', 'Integer', 'Integer', 'String'], DoObjectAddArrow);
   RegisterEngineFunction('ObjectAddSuperEllipsoid', 'Integer', ['Obj', 'Radius', 'VCurve', 'HCurve', 'Slices', 'Stacks', 'Name'], ['Integer', 'Float', 'Float', 'Float', 'Integer', 'Integer', 'String'], DoObjectAddSuperEllipsoid);
   RegisterEngineFunction('ObjectSetMaterial', '', ['Obj', 'MaterialName'], ['Integer', 'String'], DoObjectSetMaterial);
+  RegisterEngineFunction('ObjectEnableTreeWind', '', ['Obj'], ['Integer'], DoObjectEnableTreeWind);
+  RegisterEngineFunction('ObjectEnableVertexWind', '', ['Obj'], ['Integer'], DoObjectEnableVertexWind);
+  RegisterEngineFunction('ObjectEnableGrassWind', '', ['Obj'], ['Integer'], DoObjectEnableGrassWind);
+  RegisterEngineFunction('ObjectDisableWind', '', ['Obj'], ['Integer'], DoObjectDisableWind);
+  RegisterEngineFunction('ObjectHasWind', 'Boolean', ['Obj'], ['Integer'], DoObjectHasWind);
+  RegisterEngineFunction('ObjectHasBoneWind', 'Boolean', ['Obj'], ['Integer'], DoObjectHasBoneWind);
+  RegisterEngineFunction('ObjectHasVertexWind', 'Boolean', ['Obj'], ['Integer'], DoObjectHasVertexWind);
+  RegisterEngineFunction('ObjectWindInteger', 'Integer', ['Obj', 'Name'], ['Integer', 'String'], DoObjectWindInteger);
+  RegisterEngineFunction('ObjectSetWindInteger', '', ['Obj', 'Name', 'Value'], ['Integer', 'String', 'Integer'], DoObjectSetWindInteger);
+  RegisterEngineFunction('ObjectWindFloat', 'Float', ['Obj', 'Name'], ['Integer', 'String'], DoObjectWindFloat);
+  RegisterEngineFunction('ObjectSetWindFloat', '', ['Obj', 'Name', 'Value'], ['Integer', 'String', 'Float'], DoObjectSetWindFloat);
+  RegisterEngineFunction('ObjectWindVector3', 'TVector3', ['Obj', 'Name'], ['Integer', 'String'], DoObjectWindVector3);
+  RegisterEngineFunction('ObjectSetWindVector3', '', ['Obj', 'Name', 'Value'], ['Integer', 'String', 'TVector3'], DoObjectSetWindVector3);
 
   RegisterEngineFunction('MeshFromHandle', 'TMesh', ['Handle'], ['Integer'], DoMeshFromHandle);
   RegisterEngineFunction('MeshHandle', 'Integer', ['Mesh'], ['TMesh'], DoMeshHandle);
@@ -8657,6 +9182,7 @@ begin
   RegisterEngineFunction('MeshSetAlwaysOnTop', '', ['Mesh', 'Value'], ['Integer', 'Boolean'], DoMeshSetAlwaysOnTop);
   RegisterEngineFunction('MeshTag', 'Integer', ['Mesh'], ['Integer'], DoMeshTag);
   RegisterEngineFunction('MeshSetTag', '', ['Mesh', 'Value'], ['Integer', 'Integer'], DoMeshSetTag);
+  RegisterEngineFunction('MeshTypeGrass', 'Integer', [], [], DoMeshTypeGrass);
   RegisterEngineFunction('MeshType', 'Integer', ['Mesh'], ['Integer'], DoMeshType);
   RegisterEngineFunction('MeshVertexCount', 'Integer', ['Mesh'], ['Integer'], DoMeshVertexCount);
   RegisterEngineFunction('MeshIndexCount', 'Integer', ['Mesh'], ['Integer'], DoMeshIndexCount);
@@ -8791,12 +9317,23 @@ begin
 
   RegisterEngineFunction('MaterialCount', 'Integer', [], [], DoMaterialCount);
   RegisterEngineFunction('MaterialName', 'String', ['Index'], ['Integer'], DoMaterialName);
+  RegisterEngineFunction('DefaultGrassMaterialName', 'String', [], [], DoDefaultGrassMaterialName);
   RegisterEngineFunction('MaterialByName', 'Integer', ['Name'], ['String'], DoMaterialByName);
   RegisterEngineFunction('MaterialByNameObject', 'TMaterial', ['Name'], ['String'], DoMaterialByNameObject);
   RegisterEngineFunction('MaterialFromHandle', 'TMaterial', ['Handle'], ['Integer'], DoMaterialFromHandle);
   RegisterEngineFunction('MaterialHandle', 'Integer', ['Material'], ['TMaterial'], DoMaterialHandle);
+  RegisterEngineFunction('MaterialTypePBR', 'Integer', [], [], DoMaterialTypePBR);
+  RegisterEngineFunction('MaterialTypeShadow', 'Integer', [], [], DoMaterialTypeShadow);
+  RegisterEngineFunction('MaterialTypeHeightField', 'Integer', [], [], DoMaterialTypeHeightField);
+  RegisterEngineFunction('MaterialTypeActor', 'Integer', [], [], DoMaterialTypeActor);
+  RegisterEngineFunction('MaterialTypeTreeLeaf', 'Integer', [], [], DoMaterialTypeTreeLeaf);
+  RegisterEngineFunction('MaterialTypeTreeTrunk', 'Integer', [], [], DoMaterialTypeTreeTrunk);
+  RegisterEngineFunction('MaterialTypeGrass', 'Integer', [], [], DoMaterialTypeGrass);
   RegisterEngineFunction('MaterialShaderParameter', 'Float', ['Material', 'Name'], ['Integer', 'String'], DoMaterialShaderParameter);
   RegisterEngineFunction('MaterialSetShaderParameter', '', ['Material', 'Name', 'Value'], ['Integer', 'String', 'Float'], DoMaterialSetShaderParameter);
+  RegisterEngineFunction('WindKindNone', 'Integer', [], [], DoWindKindNone);
+  RegisterEngineFunction('WindKindTree', 'Integer', [], [], DoWindKindTree);
+  RegisterEngineFunction('WindKindVertexTree', 'Integer', [], [], DoWindKindVertexTree);
 
   RegisterEngineFunction('ShaderFromHandle', 'TShader', ['Handle'], ['Integer'], DoShaderFromHandle);
   RegisterEngineFunction('ShaderHandle', 'Integer', ['Shader'], ['TShader'], DoShaderHandle);
