@@ -62,8 +62,8 @@ type
   TVertex = packed record
     Position: TVector3;  // 3 floats
     Normal: TVector3;    // 3 floats
-    Tangent: TVector3;   // 3 floats � tangent (aligned with U axis)
-    Bitangent: TVector3; // 3 floats � bitangent (aligned with V axis)
+    Tangent: TVector3;   // 3 floats - tangent (aligned with U axis)
+    Bitangent: TVector3; // 3 floats - bitangent (aligned with V axis)
     TexCoord: TVector2;  // 2 floats
   end;
 
