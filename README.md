@@ -79,8 +79,6 @@ The Engine checkout must include at least:
 
 ```text
 Data\
-GuiEditor\
-MaterialEditor\
 OGLM_SandBox.dpr
 OGLM_SandBox.dproj
 ```
