@@ -13299,7 +13299,7 @@ begin
 
   fScriptManager.BindEngine(fRenderer, fSceneManager, EnsureDefaultMaterialLibrary,
     DefaultRenderableMaterialName, MeshRenderHandler, fPhysicsWorld, fAudioEngine,
-    LoadPrefabForScript, DestroyPrefabForScript);
+    LoadPrefabForScript, DestroyPrefabForScript, LogLine, fEngine.GuiManager);
 end;
 
 function TSandBoxForm.ResolveScriptFileName(const AFileName,
@@ -22008,6 +22008,13 @@ begin
     end;
   end;
 
+  if (fEngine <> nil) and fEngine.GuiMouseDown(Button, Shift, X, Y) then
+  begin
+    SetCapture(Handle);
+    RequestRender;
+    Exit;
+  end;
+
   if Button = mbLeft then
   begin
     RefreshGizmo;
@@ -22265,6 +22272,13 @@ begin
       RequestRender;
       Exit;
     end;
+  end;
+
+  if (not fDraggingGizmo) and (not fMouseDown) and (not fPanActive) and
+     (fEngine <> nil) and fEngine.GuiMouseMove(Shift, X, Y) then
+  begin
+    RequestRender;
+    Exit;
   end;
 
   if (not fDraggingGizmo) and (not fMouseDown) and (not fPanActive) then
@@ -22548,6 +22562,14 @@ begin
     end;
   end;
 
+  if (not fDraggingGizmo) and (not fMouseDown) and (not fPanActive) and
+     (fEngine <> nil) and fEngine.GuiMouseUp(Button, Shift, X, Y) then
+  begin
+    ReleaseCapture;
+    RequestRender;
+    Exit;
+  end;
+
   if fDraggingGizmo then
   begin
     fDraggingGizmo := False;
@@ -22604,6 +22626,13 @@ begin
     end;
   end;
 
+  if (fEngine <> nil) and fEngine.GuiKeyDown(Key, Shift) then
+  begin
+    Key := 0;
+    RequestRender;
+    Exit;
+  end;
+
   case Key of
     VK_F9:
       begin
@@ -22642,6 +22671,12 @@ begin
     if ImGuiWantsKeyboardCapture then
       Key := 0;
   end;
+
+  if (Key <> 0) and (fEngine <> nil) and fEngine.GuiKeyUp(Key, Shift) then
+  begin
+    Key := 0;
+    RequestRender;
+  end;
 end;
 
 procedure TSandBoxForm.EditorShortcutKeyPress(Sender: TObject; var Key: Char);
@@ -22651,6 +22686,12 @@ begin
     fImGui.KeyPress(Key);
     if ImGuiWantsKeyboardCapture then
       Key := #0;
+  end;
+
+  if (Key <> #0) and (fEngine <> nil) and fEngine.GuiKeyPress(Key) then
+  begin
+    Key := #0;
+    RequestRender;
   end;
 end;
 

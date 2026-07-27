@@ -159,6 +159,11 @@
         <DCCReference Include="Engine.Keyboard.pas"/>
         <DCCReference Include="Engine.Mouse.pas"/>
         <DCCReference Include="Engine.Wind.pas"/>
+        <DCCReference Include="Engine.Gui.pas"/>
+        <DCCReference Include="Engine.Gui.BitmapFont.pas"/>
+        <DCCReference Include="Engine.Gui.Controls.pas"/>
+        <DCCReference Include="Engine.Gui.Manager.pas"/>
+        <DCCReference Include="Engine.Gui.Scripting.pas"/>
         <DCCReference Include="Engine.Scripting.pas"/>
         <DCCReference Include="Renderer.Mesh.Factory.pas"/>
         <DCCReference Include="Renderer.Mesh.List.pas"/>

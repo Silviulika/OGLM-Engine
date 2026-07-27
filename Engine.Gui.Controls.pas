@@ -68,6 +68,7 @@ type
     FOnMouseLeave: TNotifyEvent;
     FOnMouseMove: TMouseMoveEvent;
     FOnMouseUp: TMouseEvent;
+    procedure RemoveControlReference(AControl: TGuiBaseControl);
     procedure SetActiveControl(const Value: TGuiBaseControl);
     procedure SetFocusedControl(const Value: TGuiFocusControl);
   protected
@@ -216,6 +217,8 @@ type
     procedure SetFocused(Value: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
+    function MouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer): Boolean; override;
     procedure Render(ARenderer: TGuiRenderer; AViewportWidth, AViewportHeight: Integer); override;
   published
     property AllowUp: Boolean read FAllowUp write FAllowUp;
@@ -537,7 +540,16 @@ end;
 { TGuiBaseControl }
 
 destructor TGuiBaseControl.Destroy;
+var
+  Ancestor: TGuiControl;
 begin
+  Ancestor := Parent;
+  while Ancestor <> nil do
+  begin
+    if Ancestor is TGuiBaseControl then
+      TGuiBaseControl(Ancestor).RemoveControlReference(Self);
+    Ancestor := Ancestor.Parent;
+  end;
   if FEnteredControl <> nil then
     FEnteredControl.DoMouseLeave;
   inherited;
@@ -723,6 +735,16 @@ end;
 procedure TGuiBaseControl.SetActiveControl(const Value: TGuiBaseControl);
 begin
   FActiveControl := Value;
+end;
+
+procedure TGuiBaseControl.RemoveControlReference(AControl: TGuiBaseControl);
+begin
+  if FActiveControl = AControl then
+    FActiveControl := nil;
+  if FEnteredControl = AControl then
+    FEnteredControl := nil;
+  if FFocusedControl = AControl then
+    SetFocusedControl(nil);
 end;
 
 procedure TGuiBaseControl.SetFocusedControl(const Value: TGuiFocusControl);
@@ -1167,7 +1189,20 @@ procedure TGuiButton.InternalMouseUp(Shift: TShiftState; Button: TMouseButton; X
 begin
   if (Button = mbLeft) and (FGroup < 0) then
     Pressed := False;
+  if FindRootControl.ActiveControl = Self then
+    FindRootControl.ActiveControl := nil;
   inherited;
+end;
+
+function TGuiButton.MouseUp(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer): Boolean;
+begin
+  if FindRootControl.ActiveControl = Self then
+  begin
+    InternalMouseUp(Shift, Button, X, Y);
+    Exit(True);
+  end;
+  Result := inherited;
 end;
 
 procedure TGuiButton.Render(ARenderer: TGuiRenderer; AViewportWidth, AViewportHeight: Integer);

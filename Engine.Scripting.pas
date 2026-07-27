@@ -13,7 +13,8 @@ uses
   Renderer.Camera, Renderer.Light, Renderer.Mesh, Renderer.Mesh.Factory,
   Renderer.Renderer, Renderer.SkyDome, Renderer.Shader, Renderer.Particles, Renderer.Billboards,
   Engine.Types, Engine.Audio, Engine.Physics, Engine.Animation, Engine.Keyboard,
-  Engine.Mouse, Engine.Wind;
+  Engine.Mouse, Engine.Wind, Engine.Gui, Engine.Gui.Manager,
+  Engine.Gui.Scripting;
 
 type
   TEngineScriptTargetKind = (
@@ -150,6 +151,7 @@ type
     FDWS: TDelphiWebScript;
     FFastMath: TdwsFastMath;
     FEngineUnit: TdwsEngineUnit;
+    FGuiUnit: TdwsGuiUnit;
     FContext: TEngineScriptContext;
     FScripts: System.Generics.Collections.TObjectList<TEngineScriptAsset>;
     FProgramCache: TDictionary<string, IdwsProgram>;
@@ -191,7 +193,8 @@ type
       AAudioEngine: TBassAudioEngine = nil;
       APrefabLoader: TEngineScriptPrefabLoadCallback = nil;
       APrefabDestroyer: TEngineScriptPrefabDestroyCallback = nil;
-      ALogCallback: TEngineScriptLogCallback = nil);
+      ALogCallback: TEngineScriptLogCallback = nil;
+      AGuiManager: TGuiManager = nil);
     procedure SetFrameTiming(const ADeltaTime, ATimeSeconds: Double);
     procedure ResetRuntimeState;
 
@@ -219,6 +222,9 @@ type
     function ExecuteScriptEntry(AScript: TEngineScriptAsset;
       const AEntryPoint, AEventName: string): TEngineScriptExecutionResult;
     function ExecuteLifecycleEvent(const AEventName: string): TEngineScriptExecutionResult;
+    function ExecuteGuiEvent(AControl: TGuiControl; const AScriptName,
+      AHandlerName, AEventName: string;
+      const AData: TGuiEventData): TEngineScriptExecutionResult;
     function ExecuteGlobalScripts(const AEventName: string = ''): TEngineScriptExecutionResult;
     function ExecuteScriptsForTarget(ATargetKind: TEngineScriptTargetKind;
       ATarget: TObject; const AEventName: string = ''): TEngineScriptExecutionResult;
@@ -1693,6 +1699,7 @@ begin
   FDWS := TDelphiWebScript.Create(nil);
   FFastMath := TdwsFastMath.RegisterFastMath(nil, FDWS);
   FEngineUnit := TdwsEngineUnit.RegisterEngine(nil, FDWS, FContext);
+  FGuiUnit := TdwsGuiUnit.RegisterGui(nil, FDWS, nil);
 end;
 
 destructor TEngineScriptManager.Destroy;
@@ -1701,6 +1708,7 @@ begin
   // before destroying the compiler/runtime component.
   ResetRuntimeState;
   FProgramCache.Free;
+  FGuiUnit.Free;
   FEngineUnit.Free;
   FFastMath.Free;
   FDWS.Free;
@@ -1715,11 +1723,12 @@ procedure TEngineScriptManager.BindEngine(ARenderer: TRenderer;
   APhysicsWorld: TPhysicsWorld; AAudioEngine: TBassAudioEngine;
   APrefabLoader: TEngineScriptPrefabLoadCallback;
   APrefabDestroyer: TEngineScriptPrefabDestroyCallback;
-  ALogCallback: TEngineScriptLogCallback);
+  ALogCallback: TEngineScriptLogCallback; AGuiManager: TGuiManager);
 begin
   FContext.Bind(ARenderer, ASceneManager, AMaterialLibrary, ADefaultMaterialName,
     ADefaultMeshRender, APhysicsWorld, AAudioEngine, APrefabLoader,
     APrefabDestroyer, ALogCallback);
+  FGuiUnit.BindManager(AGuiManager);
   ResolveScriptTargets;
 end;
 
@@ -2286,6 +2295,7 @@ var
   Prog: IdwsProgram;
   Exec: IdwsProgramExecution;
   Obj: TSceneObject;
+  PreviousGuiScriptName: string;
 begin
   if AScript = nil then
     Exit(TEngineScriptExecutionResult.Error('Script is nil.'));
@@ -2326,9 +2336,12 @@ begin
     // step is reused.
     if Assigned(Obj) and Assigned(Obj.ScriptState) then
       Obj.ScriptState.Running := True;
+    PreviousGuiScriptName := FGuiUnit.CurrentScriptName;
+    FGuiUnit.CurrentScriptName := AScript.Name;
     try
-    Exec := Prog.Execute;
+      Exec := Prog.Execute;
     finally
+      FGuiUnit.CurrentScriptName := PreviousGuiScriptName;
       if Assigned(Obj) and Assigned(Obj.ScriptState) then
         Obj.ScriptState.Running := False;
     end;
@@ -2365,6 +2378,47 @@ begin
       ScriptResult := ExecuteScriptEntry(Script, AEventName, AEventName);
       MergeResult(Result, ScriptResult, Script.Name);
     end;
+end;
+
+function TEngineScriptManager.ExecuteGuiEvent(AControl: TGuiControl;
+  const AScriptName, AHandlerName, AEventName: string;
+  const AData: TGuiEventData): TEngineScriptExecutionResult;
+var
+  Script: TEngineScriptAsset;
+  ScriptResult: TEngineScriptExecutionResult;
+  HandlerName: string;
+begin
+  Result := TEngineScriptExecutionResult.Ok;
+  HandlerName := Trim(AHandlerName);
+  if (AControl = nil) or (HandlerName = '') then
+    Exit;
+
+  FGuiUnit.BeginEvent(AControl, AEventName, HandlerName, AData);
+  try
+    if Trim(AScriptName) <> '' then
+    begin
+      Script := FindByName(AScriptName);
+      if Script = nil then
+        Exit(TEngineScriptExecutionResult.Error(
+          'GUI event script not found: ' + AScriptName));
+      if not ScriptDefinesCallable(Script, HandlerName) then
+        Exit(TEngineScriptExecutionResult.Error(Format(
+          'GUI event handler "%s" was not found in script "%s".',
+          [HandlerName, Script.Name])));
+      Result := ExecuteScriptEntry(Script, HandlerName, AEventName);
+      Exit;
+    end;
+
+    for Script in FScripts do
+      if Assigned(Script) and Script.Enabled and
+         ScriptDefinesCallable(Script, HandlerName) then
+      begin
+        ScriptResult := ExecuteScriptEntry(Script, HandlerName, AEventName);
+        MergeResult(Result, ScriptResult, Script.Name);
+      end;
+  finally
+    FGuiUnit.EndEvent;
+  end;
 end;
 
 function TEngineScriptManager.ExecuteGlobalScripts(

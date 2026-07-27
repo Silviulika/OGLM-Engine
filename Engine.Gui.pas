@@ -1240,6 +1240,11 @@ end;
 
 destructor TGuiControl.Destroy;
 begin
+  while FChildren.Count > 0 do
+  begin
+    FChildren[FChildren.Count - 1].FParent := nil;
+    FChildren.Delete(FChildren.Count - 1);
+  end;
   SetParent(nil);
   FChildren.Free;
   inherited;

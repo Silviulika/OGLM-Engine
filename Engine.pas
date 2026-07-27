@@ -16,6 +16,8 @@ uses
   Engine.Audio,
   Engine.Physics,
   Engine.Scripting,
+  Engine.Gui,
+  Engine.Gui.Manager,
   Managers.Material,
   Managers.Scene,
   Renderer.Camera,
@@ -40,6 +42,7 @@ type
     EnableSkyDome: Boolean;
     EnableAudio: Boolean;
     EnableScripts: Boolean;
+    EnableGUI: Boolean;
 
     class function Default: TEngineSettings; static;
   end;
@@ -64,12 +67,14 @@ type
     FPhysicsWorld: TPhysicsWorld;
     FAudioEngine: TBassAudioEngine;
     FScriptManager: TEngineScriptManager;
+    FGuiManager: TGuiManager;
     FCameraUp: TVector3;
     FPhysicsRunning: Boolean;
     FPrefabLoader: TEngineScriptPrefabLoadCallback;
     FPrefabDestroyer: TEngineScriptPrefabDestroyCallback;
     FScriptLogCallback: TEngineScriptLogCallback;
     FRunningScriptLifecycleEvent: Boolean;
+    FRunningGuiScriptEvent: Boolean;
     FLastScriptLifecycleError: string;
 
     procedure LoadCoreShaders;
@@ -85,6 +90,8 @@ type
     procedure SaveScenePhysicsToStream(Stream: TStream);
     procedure SaveScenePhysicsCacheToStream(Stream: TStream);
     procedure SaveSceneScriptsToStream(Stream: TStream);
+    procedure GuiScriptEvent(AControl: TGuiControl; const AEventName,
+      AScriptName, AHandlerName: string; const AData: TGuiEventData);
   public
     constructor Create(AHost: TWinControl); overload;
     constructor Create(AHost: TWinControl; const ASettings: TEngineSettings); overload;
@@ -113,6 +120,14 @@ type
       const APrefabLoader: TEngineScriptPrefabLoadCallback;
       const APrefabDestroyer: TEngineScriptPrefabDestroyCallback);
     procedure SetScriptLogCallback(const ALogCallback: TEngineScriptLogCallback);
+    function GuiMouseDown(Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer): Boolean;
+    function GuiMouseMove(Shift: TShiftState; X, Y: Integer): Boolean;
+    function GuiMouseUp(Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer): Boolean;
+    function GuiKeyDown(var Key: Word; Shift: TShiftState): Boolean;
+    function GuiKeyPress(var Key: Char): Boolean;
+    function GuiKeyUp(var Key: Word; Shift: TShiftState): Boolean;
     procedure Render;
 
     function EnsureDefaultMaterialLibrary: TMaterialLibrary;
@@ -159,6 +174,7 @@ type
     property PhysicsRunning: Boolean read FPhysicsRunning;
     property AudioEngine: TBassAudioEngine read FAudioEngine;
     property ScriptManager: TEngineScriptManager read FScriptManager;
+    property GuiManager: TGuiManager read FGuiManager;
     property LastScriptLifecycleError: string read FLastScriptLifecycleError;
   end;
 
@@ -171,7 +187,6 @@ const
   DEFAULT_ENGINE_SCENE_NAME = 'Scene';
   DEFAULT_ENGINE_MATERIAL_LIBRARY_NAME = 'fDefaultMaterialLib';
   DEFAULT_ENGINE_PBR_MATERIAL_NAME = 'DefaultPBRMaterial';
-  DEFAULT_ENGINE_GRASS_MATERIAL_NAME = 'DefaultGrassMaterial';
   DEFAULT_ENGINE_SCENE_FILE_NAME = 'Default.omescn';
   MAX_ENGINE_SHADER_LIGHTS = 8;
   SCENE_FILE_EXTENSION = '.omescn';
@@ -287,6 +302,7 @@ begin
   Result.EnableSkyDome := True;
   Result.EnableAudio := True;
   Result.EnableScripts := True;
+  Result.EnableGUI := True;
 end;
 
 { TGameEngine }
@@ -325,7 +341,7 @@ begin
   FRenderer.ActivateContext;
   FRenderer.EmptyObjectMarkersEnabled := False;
 
-  if FSettings.EnableScripts then
+  if FSettings.EnableScripts or FSettings.EnableGUI then
   begin
     FRenderer.OnBeforeRender := RendererBeforeRender;
     FRenderer.OnRender := RendererRender;
@@ -352,6 +368,13 @@ begin
 
   LoadCoreShaders;
 
+  if FSettings.EnableGUI then
+  begin
+    FGuiManager := TGuiManager.Create(nil, FRenderer);
+    FGuiManager.OnScriptEvent := GuiScriptEvent;
+    FGuiManager.Resize(WidthValue, HeightValue);
+  end;
+
   FMaterialLibraries := TMaterialLibraries.Create;
   EnsureDefaultMaterialLibrary;
   LoadDefaultTextures;
@@ -372,6 +395,7 @@ begin
   if Assigned(FRenderer) then
     FRenderer.ActivateContext;
 
+  FreeAndNil(FGuiManager);
   FreeAndNil(FScriptManager);
   FreeAndNil(FAudioEngine);
   FreeAndNil(FPhysicsWorld);
@@ -441,6 +465,9 @@ begin
     TEnginePaths.Shader('Water.frag'));
   FRenderer.LoadPostProcessShaderFromFile(TEnginePaths.Shader('PostProcessHDR.vert'),
     TEnginePaths.Shader('PostProcessHDR.frag'));
+  if FSettings.EnableGUI then
+    FRenderer.LoadGuiShaderFromFile(TEnginePaths.Shader('GUI.vert'),
+      TEnginePaths.Shader('GUI.frag'));
 end;
 
 function TGameEngine.EnsureDefaultMaterialLibrary: TMaterialLibrary;
@@ -611,36 +638,6 @@ begin
       LoadTex(5, 'DefaultEdge.tga', 'specularTexture', True, GL_RGBA8, GL_REPEAT);
       LoadTex(6, 'DefaultAmbient.tga', 'ambientOcclusionTexture', True, GL_RGBA8, GL_REPEAT);
       LoadTex(7, 'DefaultIrradiance.tga', 'specularBRDF_LUT', False, GL_RGBA8, GL_CLAMP_TO_EDGE);
-
-      Mat.AddTextures(Tex);
-      Lib.AddMaterial(Mat);
-      Mat := nil;
-    finally
-      Mat.Free;
-    end;
-  end;
-
-  if Lib.GetMaterial(DEFAULT_ENGINE_GRASS_MATERIAL_NAME) = nil then
-  begin
-    Mat := TMaterial.Create(Managers.Material.mtGrass);
-    try
-      Mat.Name := DEFAULT_ENGINE_GRASS_MATERIAL_NAME;
-      Mat.Shader := FGrassShader;
-
-      SetLength(Tex, 3);
-      for I := 0 to High(Tex) do
-      begin
-        Tex[I].Texture.DiffuseColor := Vector3(0.33, 0.58, 0.16);
-        Tex[I].Texture.SpecularColor := Vector3(0.35, 0.42, 0.28);
-        Tex[I].Texture.Shininess := 18.0;
-      end;
-
-      LoadTexFromPath(0, TEnginePaths.BillboardTexture('Grass_01.tga'),
-        'albedoTexture', True, GL_SRGB8_ALPHA8, GL_REPEAT);
-      LoadTex(1, 'DefaultNormal.tga', 'normalTexture', True, GL_RGBA8,
-        GL_REPEAT);
-      LoadTex(2, 'DefaultEdge.tga', 'specularTexture', True, GL_RGBA8,
-        GL_REPEAT);
 
       Mat.AddTextures(Tex);
       Lib.AddMaterial(Mat);
@@ -1309,7 +1306,7 @@ begin
 
   FScriptManager.BindEngine(FRenderer, FSceneManager, EnsureDefaultMaterialLibrary,
     DefaultRenderableMaterialName, MeshRenderHandler, FPhysicsWorld, FAudioEngine,
-    FPrefabLoader, FPrefabDestroyer, FScriptLogCallback);
+    FPrefabLoader, FPrefabDestroyer, FScriptLogCallback, FGuiManager);
 end;
 
 procedure TGameEngine.ExecuteScriptLifecycleEvent(const AEventName: string);
@@ -1329,6 +1326,29 @@ begin
       FLastScriptLifecycleError := RunResult.Messages;
   finally
     FRunningScriptLifecycleEvent := False;
+  end;
+end;
+
+procedure TGameEngine.GuiScriptEvent(AControl: TGuiControl;
+  const AEventName, AScriptName, AHandlerName: string;
+  const AData: TGuiEventData);
+var
+  RunResult: TEngineScriptExecutionResult;
+begin
+  if (FScriptManager = nil) or FRunningGuiScriptEvent then
+    Exit;
+
+  FRunningGuiScriptEvent := True;
+  try
+    BindScriptEngine;
+    RunResult := FScriptManager.ExecuteGuiEvent(AControl, AScriptName,
+      AHandlerName, AEventName, AData);
+    if RunResult.Success then
+      FLastScriptLifecycleError := ''
+    else
+      FLastScriptLifecycleError := RunResult.Messages;
+  finally
+    FRunningGuiScriptEvent := False;
   end;
 end;
 
@@ -1552,6 +1572,8 @@ end;
 procedure TGameEngine.RendererAfterRender(Sender: TObject);
 begin
   ExecuteScriptLifecycleEvent('OnAfterRender');
+  if FGuiManager <> nil then
+    FGuiManager.Render;
 end;
 
 procedure TGameEngine.SaveSceneRenderSettingsToStream(Stream: TStream);
@@ -1978,6 +2000,8 @@ begin
   FRenderer.Resize(AWidth, AHeight);
   FRenderer.InitFOV(DegToRad(FSettings.FieldOfViewDegrees),
     FSettings.NearPlane, FSettings.FarPlane);
+  if FGuiManager <> nil then
+    FGuiManager.Resize(AWidth, AHeight);
 end;
 
 procedure TGameEngine.ActivateRenderContext;
@@ -2334,6 +2358,41 @@ procedure TGameEngine.SetScriptLogCallback(
 begin
   FScriptLogCallback := ALogCallback;
   BindScriptEngine;
+end;
+
+function TGameEngine.GuiMouseDown(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer): Boolean;
+begin
+  Result := (FGuiManager <> nil) and
+    FGuiManager.MouseDown(Button, Shift, X, Y);
+end;
+
+function TGameEngine.GuiMouseMove(Shift: TShiftState;
+  X, Y: Integer): Boolean;
+begin
+  Result := (FGuiManager <> nil) and FGuiManager.MouseMove(Shift, X, Y);
+end;
+
+function TGameEngine.GuiMouseUp(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer): Boolean;
+begin
+  Result := (FGuiManager <> nil) and
+    FGuiManager.MouseUp(Button, Shift, X, Y);
+end;
+
+function TGameEngine.GuiKeyDown(var Key: Word; Shift: TShiftState): Boolean;
+begin
+  Result := (FGuiManager <> nil) and FGuiManager.KeyDown(Key, Shift);
+end;
+
+function TGameEngine.GuiKeyPress(var Key: Char): Boolean;
+begin
+  Result := (FGuiManager <> nil) and FGuiManager.KeyPress(Key);
+end;
+
+function TGameEngine.GuiKeyUp(var Key: Word; Shift: TShiftState): Boolean;
+begin
+  Result := (FGuiManager <> nil) and FGuiManager.KeyUp(Key, Shift);
 end;
 
 procedure TGameEngine.Render;
