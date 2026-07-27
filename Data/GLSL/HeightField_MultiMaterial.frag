@@ -12,6 +12,8 @@ const float TerrainSpecularIBLStrength = 0.22;
 const float TerrainDiffuseIBLStrength = 0.22;
 const float TerrainExposureBoost = 0.3;
 const float TerrainHeightBlendDepth = 0.18;
+const float TerrainDetileBlendMin = 0.20;
+const float TerrainDetileBlendMax = 0.80;
 const int MaxLights = 8;
 const int MaxTerrainLayers = 5;
 const int MaxTerrainPOMLayers = 24;
@@ -194,6 +196,160 @@ vec2 TerrainAlphaUV(vec2 materialUV)
     return alphaUV;
 }
 
+// Blend randomized neighboring UV tiles to hide terrain material repetition.
+float TerrainHash12(vec2 p)
+{
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+vec2 TerrainHash22(vec2 p)
+{
+    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+mat2 TerrainTileRotation(float rotationIndex)
+{
+    if (rotationIndex < 0.5)
+        return mat2(1.0, 0.0, 0.0, 1.0);
+    if (rotationIndex < 1.5)
+        return mat2(0.0, 1.0, -1.0, 0.0);
+    if (rotationIndex < 2.5)
+        return mat2(-1.0, 0.0, 0.0, -1.0);
+    return mat2(0.0, -1.0, 1.0, 0.0);
+}
+
+float TerrainDetileWeight(vec2 localUV, vec2 cellOffset)
+{
+    vec2 blend = smoothstep(
+        vec2(TerrainDetileBlendMin),
+        vec2(TerrainDetileBlendMax),
+        localUV
+    );
+    vec2 weight = mix(1.0 - blend, blend, cellOffset);
+    return weight.x * weight.y;
+}
+
+void TerrainDetileUV(vec2 materialUV, vec2 uvDx, vec2 uvDy,
+                     int layer, vec2 cellOffset,
+                     out vec2 sampleUV, out vec2 sampleDx, out vec2 sampleDy,
+                     out mat2 uvRotation)
+{
+    float layerSeed = float(layer) * 29.731 + 7.913;
+    vec2 cell = floor(materialUV) + cellOffset;
+    vec2 localUV = materialUV - cell;
+    vec2 hashBase = cell + vec2(layerSeed, layerSeed * 1.37);
+    float rotationIndex = floor(TerrainHash12(hashBase) * 4.0);
+    vec2 tileOffset = TerrainHash22(hashBase + 19.19);
+
+    uvRotation = TerrainTileRotation(rotationIndex);
+    sampleUV = uvRotation * (localUV - 0.5) + 0.5 + tileOffset;
+    sampleDx = uvRotation * uvDx;
+    sampleDy = uvRotation * uvDy;
+}
+
+vec3 TerrainSampleAlbedo(int layer, vec2 materialUV, vec2 uvDx, vec2 uvDy)
+{
+    vec2 localUV = fract(materialUV);
+    vec3 result = vec3(0.0);
+    float totalWeight = 0.0;
+
+    for (int y = 0; y < 2; ++y)
+    {
+        for (int x = 0; x < 2; ++x)
+        {
+            vec2 cellOffset = vec2(float(x), float(y));
+            float weight = TerrainDetileWeight(localUV, cellOffset);
+            vec2 sampleUV;
+            vec2 sampleDx;
+            vec2 sampleDy;
+            mat2 uvRotation;
+
+            TerrainDetileUV(
+                materialUV, uvDx, uvDy, layer, cellOffset,
+                sampleUV, sampleDx, sampleDy, uvRotation
+            );
+            result += textureGrad(
+                albedoTextures[layer], sampleUV, sampleDx, sampleDy
+            ).rgb * weight;
+            totalWeight += weight;
+        }
+    }
+
+    return result / max(totalWeight, Epsilon);
+}
+
+vec3 TerrainSampleNormal(int layer, vec2 materialUV, vec2 uvDx, vec2 uvDy)
+{
+    vec2 localUV = fract(materialUV);
+    vec3 result = vec3(0.0);
+    float totalWeight = 0.0;
+
+    for (int y = 0; y < 2; ++y)
+    {
+        for (int x = 0; x < 2; ++x)
+        {
+            vec2 cellOffset = vec2(float(x), float(y));
+            float weight = TerrainDetileWeight(localUV, cellOffset);
+            vec2 sampleUV;
+            vec2 sampleDx;
+            vec2 sampleDy;
+            mat2 uvRotation;
+            vec3 sampleNormal;
+
+            TerrainDetileUV(
+                materialUV, uvDx, uvDy, layer, cellOffset,
+                sampleUV, sampleDx, sampleDy, uvRotation
+            );
+            sampleNormal = textureGrad(
+                normalTextures[layer], sampleUV, sampleDx, sampleDy
+            ).rgb * 2.0 - 1.0;
+            sampleNormal.xy = transpose(uvRotation) * sampleNormal.xy;
+            result += sampleNormal * weight;
+            totalWeight += weight;
+        }
+    }
+
+    result /= max(totalWeight, Epsilon);
+    if (dot(result, result) <= Epsilon)
+        return vec3(0.0, 0.0, 1.0);
+    return normalize(result);
+}
+
+float TerrainSampleRoughness(int layer, vec2 materialUV, vec2 uvDx, vec2 uvDy)
+{
+    vec2 localUV = fract(materialUV);
+    float result = 0.0;
+    float totalWeight = 0.0;
+
+    for (int y = 0; y < 2; ++y)
+    {
+        for (int x = 0; x < 2; ++x)
+        {
+            vec2 cellOffset = vec2(float(x), float(y));
+            float weight = TerrainDetileWeight(localUV, cellOffset);
+            vec2 sampleUV;
+            vec2 sampleDx;
+            vec2 sampleDy;
+            mat2 uvRotation;
+
+            TerrainDetileUV(
+                materialUV, uvDx, uvDy, layer, cellOffset,
+                sampleUV, sampleDx, sampleDy, uvRotation
+            );
+            result += textureGrad(
+                roughnessTextures[layer], sampleUV, sampleDx, sampleDy
+            ).r * weight;
+            totalWeight += weight;
+        }
+    }
+
+    return result / max(totalWeight, Epsilon);
+}
+
 void LayerWeights(vec2 uv, out float weights[MaxTerrainLayers])
 {
     float sumWeights = 0.0;
@@ -366,18 +522,18 @@ void main()
         if (weight <= Epsilon)
             continue;
 
-        vec3 layerAlbedo = textureGrad(
-            albedoTextures[i], materialUV, baseUvDx, baseUvDy
-        ).rgb;
-        vec3 layerNormal = textureGrad(
-            normalTextures[i], materialUV, baseUvDx, baseUvDy
-        ).rgb * 2.0 - 1.0;
+        vec3 layerAlbedo = TerrainSampleAlbedo(
+            i, materialUV, baseUvDx, baseUvDy
+        );
+        vec3 layerNormal = TerrainSampleNormal(
+            i, materialUV, baseUvDx, baseUvDy
+        );
         float layerMetallic = textureGrad(
             metalnessTextures[i], materialUV, baseUvDx, baseUvDy
         ).r;
-        float layerRoughness = textureGrad(
-            roughnessTextures[i], materialUV, baseUvDx, baseUvDy
-        ).r;
+        float layerRoughness = TerrainSampleRoughness(
+            i, materialUV, baseUvDx, baseUvDy
+        );
 
         albedo += layerAlbedo * weight;
         tangentNormal += normalize(layerNormal) * weight;
