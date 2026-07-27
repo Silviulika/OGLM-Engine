@@ -164,8 +164,6 @@ Select `All configurations - Windows 64-bit`, then ensure these paths are
 available:
 
 ```text
-GuiEditor
-MaterialEditor
 External\kraft\src
 External\pasmp\src
 External\GraphicEx
