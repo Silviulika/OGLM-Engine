@@ -40,7 +40,8 @@ uses
   Engine.Types in 'Engine.Types.pas',
   Engine.Physics in 'Engine.Physics.pas',
   Engine.Audio in 'Engine.Audio.pas',
-  Engine.GUI.Editor in 'Engine.GUI.Editor.pas';
+  Engine.GUI.Editor in 'Engine.GUI.Editor.pas',
+  Editor.GuiDesigner in 'Editor.GuiDesigner.pas';
 
 {$R *.res}
 

@@ -86,10 +86,12 @@ type
     function TryLoadScenePhysicsCacheFromStream(Stream: TStream): Boolean;
     function TryLoadSceneMaterialsFromStream(Stream: TStream): Boolean;
     function TryLoadSceneScriptsFromStream(Stream: TStream): Boolean;
+    function TryLoadSceneGuiFromStream(Stream: TStream): Boolean;
     procedure SaveSceneRenderSettingsToStream(Stream: TStream);
     procedure SaveScenePhysicsToStream(Stream: TStream);
     procedure SaveScenePhysicsCacheToStream(Stream: TStream);
     procedure SaveSceneScriptsToStream(Stream: TStream);
+    procedure SaveSceneGuiToStream(Stream: TStream);
     procedure GuiScriptEvent(AControl: TGuiControl; const AEventName,
       AScriptName, AHandlerName: string; const AData: TGuiEventData);
   public
@@ -202,6 +204,9 @@ const
   SCENE_SCRIPTS_VERSION = 1;
   SCENE_SCRIPTS_MAGIC: array[0..7] of AnsiChar =
     ('O', 'M', 'E', 'S', 'C', 'P', '0', '1');
+  SCENE_GUI_VERSION = 1;
+  SCENE_GUI_MAGIC: array[0..7] of AnsiChar =
+    ('O', 'M', 'E', 'G', 'U', 'I', '0', '1');
   MATERIAL_LIBRARY_MAGIC: array[0..7] of AnsiChar =
     ('O', 'M', 'E', 'M', 'L', 'B', '0', '1');
 
@@ -691,6 +696,8 @@ begin
     FPhysicsWorld.Clear;
   if Assigned(FAudioEngine) then
     FAudioEngine.ClearSounds;
+  if Assigned(FGuiManager) then
+    FGuiManager.Clear;
 
   if FRoot = nil then
     Exit;
@@ -1296,6 +1303,37 @@ begin
   end;
 end;
 
+function TGameEngine.TryLoadSceneGuiFromStream(Stream: TStream): Boolean;
+var
+  PayloadEnd: Int64;
+  Payload: TMemoryStream;
+begin
+  Result := TryBeginSceneChunk(Stream, SCENE_GUI_MAGIC, SCENE_GUI_VERSION,
+    'scene GUI', PayloadEnd);
+  if not Result then
+    Exit;
+
+  try
+    if FGuiManager = nil then
+      Exit;
+
+    Payload := TMemoryStream.Create;
+    try
+      if PayloadEnd > Stream.Position then
+        Payload.CopyFrom(Stream, PayloadEnd - Stream.Position);
+      Payload.Position := 0;
+      if Payload.Size > 0 then
+        FGuiManager.LoadFromStream(Payload)
+      else
+        FGuiManager.Clear;
+    finally
+      Payload.Free;
+    end;
+  finally
+    Stream.Position := PayloadEnd;
+  end;
+end;
+
 procedure TGameEngine.BindScriptEngine;
 begin
   if not FSettings.EnableScripts then
@@ -1886,6 +1924,31 @@ begin
   end;
 end;
 
+procedure TGameEngine.SaveSceneGuiToStream(Stream: TStream);
+var
+  Payload: TMemoryStream;
+  Version: Integer;
+  PayloadSize: Int64;
+begin
+  if (Stream = nil) or (FGuiManager = nil) then
+    Exit;
+
+  Payload := TMemoryStream.Create;
+  try
+    FGuiManager.SaveToStream(Payload);
+    Stream.WriteBuffer(SCENE_GUI_MAGIC[0], SizeOf(SCENE_GUI_MAGIC));
+    Version := SCENE_GUI_VERSION;
+    Stream.WriteBuffer(Version, SizeOf(Version));
+    PayloadSize := Payload.Size;
+    Stream.WriteBuffer(PayloadSize, SizeOf(PayloadSize));
+    Payload.Position := 0;
+    if PayloadSize > 0 then
+      Stream.CopyFrom(Payload, PayloadSize);
+  finally
+    Payload.Free;
+  end;
+end;
+
 procedure TGameEngine.SaveSceneToFile(const AFileName: string;
   const AExcludedMaterialName: string);
 var
@@ -1914,6 +1977,7 @@ begin
     if FMaterialLibraries <> nil then
       FMaterialLibraries.SaveToStream(Stream, AExcludedMaterialName);
     SaveSceneScriptsToStream(Stream);
+    SaveSceneGuiToStream(Stream);
   finally
     Stream.Free;
   end;
@@ -1954,6 +2018,8 @@ begin
       FAudioEngine.ClearSounds;
     if Assigned(FScriptManager) then
       FScriptManager.Clear;
+    if Assigned(FGuiManager) then
+      FGuiManager.Clear;
 
     if FPhysicsWorld = nil then
       FPhysicsWorld := TPhysicsWorld.Create(FRoot)
@@ -1968,6 +2034,7 @@ begin
     ResetMaterialLibraries;
     TryLoadSceneMaterialsFromStream(Stream);
     TryLoadSceneScriptsFromStream(Stream);
+    TryLoadSceneGuiFromStream(Stream);
   finally
     Stream.Free;
   end;

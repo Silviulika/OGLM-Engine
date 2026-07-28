@@ -141,10 +141,13 @@ type
     fToneGamma: Single;
     fPostProcessShader: TShader;
     fPostProcessFBO: GLuint;
+    fPostProcessRenderFBO: GLuint;
     fPostProcessColorTexture: GLuint;
+    fPostProcessColorRBO: GLuint;
     fPostProcessDepthRBO: GLuint;
     fPostProcessWidth: Integer;
     fPostProcessHeight: Integer;
+    fPostProcessSamples: Integer;
     fFullscreenVAO: GLuint;
     fFullscreenVBO: GLuint;
     fGodRaysEnabled: Boolean;
@@ -783,10 +786,13 @@ begin
   fWaterTime := 0.0;
   fPostProcessShader := nil;
   fPostProcessFBO := 0;
+  fPostProcessRenderFBO := 0;
   fPostProcessColorTexture := 0;
+  fPostProcessColorRBO := 0;
   fPostProcessDepthRBO := 0;
   fPostProcessWidth := 0;
   fPostProcessHeight := 0;
+  fPostProcessSamples := 1;
   fFullscreenVAO := 0;
   fFullscreenVBO := 0;
   ResetPostEffectsToDefaults;
@@ -917,6 +923,7 @@ begin
   if fHDREnabled = Value then
   begin
     if Value or ((fPostProcessFBO = 0) and (fPostProcessColorTexture = 0) and
+       (fPostProcessRenderFBO = 0) and (fPostProcessColorRBO = 0) and
        (fPostProcessDepthRBO = 0)) then
       Exit;
   end
@@ -1014,9 +1021,17 @@ begin
   if GetPostProcessActive then
   begin
     SetupPostProcessResources(fViewport.Width, fViewport.Height);
-    glBindFramebuffer(GL_FRAMEBUFFER, fPostProcessFBO);
+    if (fPostProcessSamples > 1) and (fPostProcessRenderFBO <> 0) then
+    begin
+      glBindFramebuffer(GL_FRAMEBUFFER, fPostProcessRenderFBO);
+      glEnable(GL_MULTISAMPLE);
+    end
+    else
+    begin
+      glBindFramebuffer(GL_FRAMEBUFFER, fPostProcessFBO);
+      glDisable(GL_MULTISAMPLE);
+    end;
     glViewport(0, 0, fPostProcessWidth, fPostProcessHeight);
-    glDisable(GL_MULTISAMPLE);
   end
   else
   begin
@@ -1297,10 +1312,22 @@ begin
     fPostProcessDepthRBO := 0;
   end;
 
+  if fPostProcessColorRBO <> 0 then
+  begin
+    glDeleteRenderbuffers(1, @fPostProcessColorRBO);
+    fPostProcessColorRBO := 0;
+  end;
+
   if fPostProcessColorTexture <> 0 then
   begin
     glDeleteTextures(1, @fPostProcessColorTexture);
     fPostProcessColorTexture := 0;
+  end;
+
+  if fPostProcessRenderFBO <> 0 then
+  begin
+    glDeleteFramebuffers(1, @fPostProcessRenderFBO);
+    fPostProcessRenderFBO := 0;
   end;
 
   if fPostProcessFBO <> 0 then
@@ -1311,57 +1338,123 @@ begin
 
   fPostProcessWidth := 0;
   fPostProcessHeight := 0;
+  fPostProcessSamples := 1;
 end;
 
 procedure TRenderer.SetupPostProcessResources(AWidth, AHeight: Integer);
 var
   Status: GLenum;
+  RequestedSamples: Integer;
+  MaxSamples: Integer;
+  Samples: Integer;
+
+  function TryBuildResources(ASamples: Integer; out AStatus: GLenum): Boolean;
+  begin
+    Result := False;
+    AStatus := GL_FRAMEBUFFER_COMPLETE;
+    fPostProcessSamples := ASamples;
+
+    glGenFramebuffers(1, @fPostProcessFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, fPostProcessFBO);
+
+    glGenTextures(1, @fPostProcessColorTexture);
+    glBindTexture(GL_TEXTURE_2D, fPostProcessColorTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, fPostProcessWidth,
+      fPostProcessHeight, 0, GL_RGBA, GL_FLOAT, nil);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+      fPostProcessColorTexture, 0);
+
+    if ASamples <= 1 then
+    begin
+      glGenRenderbuffers(1, @fPostProcessDepthRBO);
+      glBindRenderbuffer(GL_RENDERBUFFER, fPostProcessDepthRBO);
+      glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24,
+        fPostProcessWidth, fPostProcessHeight);
+      glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+        GL_RENDERBUFFER, fPostProcessDepthRBO);
+
+      AStatus := glCheckFramebufferStatus(GL_FRAMEBUFFER);
+      Exit(AStatus = GL_FRAMEBUFFER_COMPLETE);
+    end;
+
+    AStatus := glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if AStatus <> GL_FRAMEBUFFER_COMPLETE then
+      Exit;
+
+    glGenFramebuffers(1, @fPostProcessRenderFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, fPostProcessRenderFBO);
+
+    glGenRenderbuffers(1, @fPostProcessColorRBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, fPostProcessColorRBO);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, ASamples, GL_RGBA16F,
+      fPostProcessWidth, fPostProcessHeight);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+      GL_RENDERBUFFER, fPostProcessColorRBO);
+
+    glGenRenderbuffers(1, @fPostProcessDepthRBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, fPostProcessDepthRBO);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, ASamples,
+      GL_DEPTH_COMPONENT24, fPostProcessWidth, fPostProcessHeight);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+      GL_RENDERBUFFER, fPostProcessDepthRBO);
+
+    AStatus := glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    Result := AStatus = GL_FRAMEBUFFER_COMPLETE;
+  end;
 begin
   ActivateContext;
 
   AWidth := System.Math.Max(64, AWidth);
   AHeight := System.Math.Max(64, AHeight);
 
+  RequestedSamples := ActiveAntialiasingSamples;
+  Samples := 1;
+  if (RequestedSamples > 1) and Assigned(glRenderbufferStorageMultisample) and
+     Assigned(glBlitFramebuffer) then
+  begin
+    MaxSamples := MaxRenderTextureAntialiasingSamples;
+    if MaxSamples > 1 then
+      Samples := EnsureRange(RequestedSamples, 2, MaxSamples);
+  end;
+
   if (fPostProcessFBO <> 0) and (fPostProcessColorTexture <> 0) and
      (fPostProcessDepthRBO <> 0) and (fPostProcessWidth = AWidth) and
-     (fPostProcessHeight = AHeight) then
-    Exit;
+     (fPostProcessHeight = AHeight) and (fPostProcessSamples = Samples) then
+  begin
+    if (Samples <= 1) or
+       ((fPostProcessRenderFBO <> 0) and (fPostProcessColorRBO <> 0)) then
+      Exit;
+  end;
 
   DestroyPostProcessResources;
 
   fPostProcessWidth := AWidth;
   fPostProcessHeight := AHeight;
 
-  glGenFramebuffers(1, @fPostProcessFBO);
-  glBindFramebuffer(GL_FRAMEBUFFER, fPostProcessFBO);
+  try
+    if not TryBuildResources(Samples, Status) then
+    begin
+      if Samples > 1 then
+      begin
+        DestroyPostProcessResources;
+        fPostProcessWidth := AWidth;
+        fPostProcessHeight := AHeight;
+        Samples := 1;
+      end;
 
-  glGenTextures(1, @fPostProcessColorTexture);
-  glBindTexture(GL_TEXTURE_2D, fPostProcessColorTexture);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, fPostProcessWidth,
-    fPostProcessHeight, 0, GL_RGBA, GL_FLOAT, nil);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-    fPostProcessColorTexture, 0);
-
-  glGenRenderbuffers(1, @fPostProcessDepthRBO);
-  glBindRenderbuffer(GL_RENDERBUFFER, fPostProcessDepthRBO);
-  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24,
-    fPostProcessWidth, fPostProcessHeight);
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-    GL_RENDERBUFFER, fPostProcessDepthRBO);
-
-  Status := glCheckFramebufferStatus(GL_FRAMEBUFFER);
-
-  glBindRenderbuffer(GL_RENDERBUFFER, 0);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-  if Status <> GL_FRAMEBUFFER_COMPLETE then
-    raise Exception.CreateFmt('HDR post-process framebuffer incomplete: %d',
-      [Status]);
+      if not TryBuildResources(Samples, Status) then
+        raise Exception.CreateFmt('HDR post-process framebuffer incomplete: %d',
+          [Status]);
+    end;
+  finally
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  end;
 end;
 
 procedure TRenderer.SetupFullscreenQuad;
@@ -2010,6 +2103,7 @@ end;
 procedure TRenderer.RenderPostProcess;
 var
   OldDepthTestEnabled, OldBlendEnabled, OldCullEnabled: GLboolean;
+  OldMultisampleEnabled: GLboolean;
   OldDepthMask: GLboolean;
   LightPosition: TVector2;
   HasGodRayLight: Boolean;
@@ -2024,9 +2118,21 @@ begin
   if fFullscreenVAO = 0 then
     Exit;
 
+  if fPostProcessSamples > 1 then
+  begin
+    if (fPostProcessRenderFBO = 0) or (not Assigned(glBlitFramebuffer)) then
+      Exit;
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fPostProcessRenderFBO);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fPostProcessFBO);
+    glBlitFramebuffer(0, 0, fPostProcessWidth, fPostProcessHeight, 0, 0,
+      fPostProcessWidth, fPostProcessHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+  end;
+
   OldDepthTestEnabled := glIsEnabled(GL_DEPTH_TEST);
   OldBlendEnabled := glIsEnabled(GL_BLEND);
   OldCullEnabled := glIsEnabled(GL_CULL_FACE);
+  OldMultisampleEnabled := glIsEnabled(GL_MULTISAMPLE);
   glGetBooleanv(GL_DEPTH_WRITEMASK, @OldDepthMask);
 
   glBindFramebuffer(GL_FRAMEBUFFER, PresentFramebuffer);
@@ -2038,6 +2144,7 @@ begin
   glDepthMask(GL_FALSE);
   glDisable(GL_BLEND);
   glDisable(GL_CULL_FACE);
+  glDisable(GL_MULTISAMPLE);
 
   fPostProcessShader.Use;
   fPostProcessShader.SetTexture('sceneTexture', 0, GL_TEXTURE_2D,
@@ -2088,6 +2195,10 @@ begin
       glEnable(GL_CULL_FACE)
     else
       glDisable(GL_CULL_FACE);
+    if OldMultisampleEnabled = GL_TRUE then
+      glEnable(GL_MULTISAMPLE)
+    else
+      glDisable(GL_MULTISAMPLE);
   end;
 end;
 

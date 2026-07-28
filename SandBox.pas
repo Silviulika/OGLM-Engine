@@ -31,7 +31,7 @@ uses
   Vcl.Controls, Vcl.Forms,
   Vcl.Graphics, Vcl.Imaging.pngimage, Vcl.Imaging.jpeg, GraphicEx,
   dglOpenGL, Neslib.FastMath, PasImGui, Editor.ImGuiBackend,
-  Engine.GUI.Editor,
+  Engine.GUI.Editor, Editor.GuiDesigner,
   PasImGui.Utils,
   Renderer.Mesh, Renderer.Particles, Renderer.Billboards, Renderer.AnimatedSprites,
   Renderer.Shader, Renderer.Light, Renderer.SkyDome,
@@ -552,6 +552,7 @@ type
 
     fImGui: TEditorImGuiBackend;
     fGuiEditor: TGuiEditorImGui;
+    fGuiDesigner: TGuiDesignerImGui;
     fUseImGuiEditor: Boolean;
     fShowImGuiDemo: Boolean;
     fShowPostEffects: Boolean;
@@ -673,6 +674,7 @@ type
     function EditorViewportHeight: Integer;
     procedure ActivateMainRenderContext;
     procedure RequestRender;
+    procedure GuiDesignerChanged(Sender: TObject);
     procedure LogLine(const Text: string);
     function ImGuiWantsKeyboardCapture: Boolean;
     function ImGuiBlocksSceneMouse: Boolean;
@@ -1941,6 +1943,9 @@ begin
 
   fImGui := TEditorImGuiBackend.Create;
   fGuiEditor := TGuiEditorImGui.Create;
+  fGuiDesigner := TGuiDesignerImGui.Create(fEngine.GuiManager);
+  fGuiDesigner.LayoutSource := fGuiEditor.Layout;
+  fGuiDesigner.OnChanged := GuiDesignerChanged;
   ApplyImGuiStyle;
   fUseImGuiEditor := True;
   fShowImGuiDemo := False;
@@ -2050,6 +2055,7 @@ begin
   ClearParticleFilePreviews;
 
   fAudioTestSound := nil;
+  FreeAndNil(fGuiDesigner);
   FreeAndNil(fGuiEditor);
   FreeAndNil(fImGui);
   FreeAndNil(fGrid);
@@ -2179,6 +2185,11 @@ begin
     fRenderRequested := False;
     fEngine.Render;
   end;
+end;
+
+procedure TSandBoxForm.GuiDesignerChanged(Sender: TObject);
+begin
+  RequestRender;
 end;
 
 procedure TSandBoxForm.LogLine(const Text: string);
@@ -9852,6 +9863,8 @@ begin
   DrawImGuiMeshEditor;
   if Assigned(fGuiEditor) then
     fGuiEditor.Draw;
+  if Assigned(fGuiDesigner) then
+    fGuiDesigner.Draw;
   DrawImGuiHeightFieldBrowser;
   DrawImGuiTextureBrowser;
   DrawImGuiParticleTextureBrowser;
@@ -10019,6 +10032,16 @@ begin
             fGuiEditor.Active := False
           else
             fGuiEditor.Open;
+        end;
+
+        if Assigned(fGuiDesigner) and
+          ImGui.MenuItem('Engine GUI Designer', nil,
+            fGuiDesigner.Active) then
+        begin
+          if fGuiDesigner.Active then
+            fGuiDesigner.Active := False
+          else
+            fGuiDesigner.Open;
         end;
 
         if ImGui.MenuItem('Post Effects', nil, fShowPostEffects) then
@@ -22008,6 +22031,14 @@ begin
     end;
   end;
 
+  if Assigned(fGuiDesigner) and
+     fGuiDesigner.HandleMouseDown(Button, Shift, X, Y) then
+  begin
+    SetCapture(Handle);
+    RequestRender;
+    Exit;
+  end;
+
   if (fEngine <> nil) and fEngine.GuiMouseDown(Button, Shift, X, Y) then
   begin
     SetCapture(Handle);
@@ -22272,6 +22303,13 @@ begin
       RequestRender;
       Exit;
     end;
+  end;
+
+  if Assigned(fGuiDesigner) and
+     fGuiDesigner.HandleMouseMove(Shift, X, Y) then
+  begin
+    RequestRender;
+    Exit;
   end;
 
   if (not fDraggingGizmo) and (not fMouseDown) and (not fPanActive) and
@@ -22562,6 +22600,14 @@ begin
     end;
   end;
 
+  if Assigned(fGuiDesigner) and
+     fGuiDesigner.HandleMouseUp(Button, Shift, X, Y) then
+  begin
+    ReleaseCapture;
+    RequestRender;
+    Exit;
+  end;
+
   if (not fDraggingGizmo) and (not fMouseDown) and (not fPanActive) and
      (fEngine <> nil) and fEngine.GuiMouseUp(Button, Shift, X, Y) then
   begin
@@ -22624,6 +22670,13 @@ begin
       Key := 0;
       Exit;
     end;
+  end;
+
+  if Assigned(fGuiDesigner) and
+     fGuiDesigner.HandleKeyDown(Key, Shift) then
+  begin
+    RequestRender;
+    Exit;
   end;
 
   if (fEngine <> nil) and fEngine.GuiKeyDown(Key, Shift) then
