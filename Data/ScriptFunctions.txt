@@ -560,6 +560,12 @@ Generated from Engine.Scripting.pas and DWS.FastMath.pas
 - function SceneFindObject(Name: String): TSceneObject
 - procedure SceneUpdate()
 - procedure SceneRender()
+- procedure SceneSave(FileName: String)                                                              - Saves the current scene. Relative names are saved in Data\Scenes with the .omescn extension.
+- function SceneTrySave(FileName: String): Boolean                                                   - Saves the current scene and returns False on failure; call EngineLastError() for details.
+- procedure SceneLoad(FileName: String)                                                              - Loads a scene. Relative names are loaded from Data\Scenes and .omescn is added when needed.
+- function SceneTryLoad(FileName: String): Boolean                                                   - Requests or loads a scene and returns False on immediate failure; call EngineLastError() for details.
+- procedure EngineShutdown()                                                                         - Requests a normal engine/editor window shutdown.
+- function EngineLastError(): String                                                                 - Last save/load engine error reported to scripts, or empty after success.
 - function PrefabLoad(FileName: String; Parent: Integer): Integer
 - procedure PrefabDestroy(Obj: Integer)
 - function ObjectFromHandle(Handle: Integer): TSceneObject
