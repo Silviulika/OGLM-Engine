@@ -4,6 +4,7 @@ interface
 
 uses
   Winapi.Windows,
+  Winapi.Messages,
   System.Classes,
   System.SysUtils,
   System.IOUtils,
@@ -76,11 +77,17 @@ type
     FRunningScriptLifecycleEvent: Boolean;
     FRunningGuiScriptEvent: Boolean;
     FLastScriptLifecycleError: string;
+    FPendingScriptSceneLoadFileName: string;
+    FPendingScriptShutdown: Boolean;
+    FProcessingPendingScriptRequests: Boolean;
+    FOnSceneLoaded: TNotifyEvent;
 
     procedure LoadCoreShaders;
     procedure ResetMaterialLibraries;
     procedure ConfigureRenderer;
     procedure LoadDefaultSceneIfPresent;
+    function ResolveSceneFileName(const AFileName: string;
+      const AForSave: Boolean): string;
     function TryLoadSceneRenderSettingsFromStream(Stream: TStream): Boolean;
     function TryLoadScenePhysicsFromStream(Stream: TStream): Boolean;
     function TryLoadScenePhysicsCacheFromStream(Stream: TStream): Boolean;
@@ -94,6 +101,9 @@ type
     procedure SaveSceneGuiToStream(Stream: TStream);
     procedure GuiScriptEvent(AControl: TGuiControl; const AEventName,
       AScriptName, AHandlerName: string; const AData: TGuiEventData);
+    function ScriptExecutionActive: Boolean;
+    procedure ProcessPendingScriptRequests;
+    procedure NotifySceneLoaded;
   public
     constructor Create(AHost: TWinControl); overload;
     constructor Create(AHost: TWinControl; const ASettings: TEngineSettings); overload;
@@ -122,6 +132,11 @@ type
       const APrefabLoader: TEngineScriptPrefabLoadCallback;
       const APrefabDestroyer: TEngineScriptPrefabDestroyCallback);
     procedure SetScriptLogCallback(const ALogCallback: TEngineScriptLogCallback);
+    function ScriptSaveScene(const AFileName: string;
+      out AErrorMessage: string): Boolean;
+    function ScriptLoadScene(const AFileName: string;
+      out AErrorMessage: string): Boolean;
+    procedure ScriptShutdown;
     function GuiMouseDown(Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer): Boolean;
     function GuiMouseMove(Shift: TShiftState; X, Y: Integer): Boolean;
@@ -178,6 +193,7 @@ type
     property ScriptManager: TEngineScriptManager read FScriptManager;
     property GuiManager: TGuiManager read FGuiManager;
     property LastScriptLifecycleError: string read FLastScriptLifecycleError;
+    property OnSceneLoaded: TNotifyEvent read FOnSceneLoaded write FOnSceneLoaded;
   end;
 
 function Create(AHost: TWinControl): TGameEngine; overload;
@@ -425,6 +441,22 @@ begin
     DEFAULT_ENGINE_SCENE_FILE_NAME);
   if FileExists(DefaultFileName) then
     TryLoadSceneFromFile(DefaultFileName, ErrorMessage);
+end;
+
+function TGameEngine.ResolveSceneFileName(const AFileName: string;
+  const AForSave: Boolean): string;
+begin
+  if TPath.IsPathRooted(AFileName) then
+    Result := AFileName
+  else if (not AForSave) and SameText(ExtractFileExt(AFileName),
+    SCENE_FILE_EXTENSION) then
+    Result := TEnginePaths.Scene(ExtractFileName(AFileName))
+  else
+    Result := TEnginePaths.Scene(ChangeFileExt(ExtractFileName(AFileName),
+      SCENE_FILE_EXTENSION));
+
+  if ExtractFileName(Result) = '' then
+    raise Exception.Create('A scene file name is required.');
 end;
 
 procedure TGameEngine.ConfigureRenderer;
@@ -1344,7 +1376,104 @@ begin
 
   FScriptManager.BindEngine(FRenderer, FSceneManager, EnsureDefaultMaterialLibrary,
     DefaultRenderableMaterialName, MeshRenderHandler, FPhysicsWorld, FAudioEngine,
-    FPrefabLoader, FPrefabDestroyer, FScriptLogCallback, FGuiManager);
+    FPrefabLoader, FPrefabDestroyer, FScriptLogCallback, ScriptSaveScene,
+    ScriptLoadScene, ScriptShutdown, FGuiManager);
+end;
+
+function TGameEngine.ScriptExecutionActive: Boolean;
+begin
+  Result := FRunningScriptLifecycleEvent or FRunningGuiScriptEvent or
+    ((FScriptManager <> nil) and (FScriptManager.Context <> nil) and
+     (FScriptManager.Context.CurrentScriptName <> ''));
+end;
+
+function TGameEngine.ScriptSaveScene(const AFileName: string;
+  out AErrorMessage: string): Boolean;
+begin
+  AErrorMessage := '';
+  try
+    SaveSceneToFile(AFileName);
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      AErrorMessage := E.Message;
+      Result := False;
+    end;
+  end;
+end;
+
+function TGameEngine.ScriptLoadScene(const AFileName: string;
+  out AErrorMessage: string): Boolean;
+var
+  ResolvedFileName: string;
+begin
+  AErrorMessage := '';
+  try
+    ResolvedFileName := ResolveSceneFileName(AFileName, False);
+    if not FileExists(ResolvedFileName) then
+      raise Exception.Create('Scene file not found: ' + ResolvedFileName);
+
+    if ScriptExecutionActive then
+    begin
+      FPendingScriptSceneLoadFileName := ResolvedFileName;
+      Exit(True);
+    end;
+
+    Result := TryLoadSceneFromFile(ResolvedFileName, AErrorMessage);
+  except
+    on E: Exception do
+    begin
+      AErrorMessage := E.Message;
+      Result := False;
+    end;
+  end;
+end;
+
+procedure TGameEngine.ScriptShutdown;
+begin
+  FPendingScriptShutdown := True;
+  ProcessPendingScriptRequests;
+end;
+
+procedure TGameEngine.ProcessPendingScriptRequests;
+var
+  FileName: string;
+  ErrorMessage: string;
+  HostWindow: HWND;
+begin
+  if FProcessingPendingScriptRequests or ScriptExecutionActive then
+    Exit;
+
+  FProcessingPendingScriptRequests := True;
+  try
+    FileName := FPendingScriptSceneLoadFileName;
+    if FileName <> '' then
+    begin
+      FPendingScriptSceneLoadFileName := '';
+      if TryLoadSceneFromFile(FileName, ErrorMessage) then
+        FLastScriptLifecycleError := ''
+      else
+        FLastScriptLifecycleError := ErrorMessage;
+    end;
+
+    if FPendingScriptShutdown then
+    begin
+      FPendingScriptShutdown := False;
+      HostWindow := GetAncestor(FHost.Handle, GA_ROOT);
+      if HostWindow = 0 then
+        HostWindow := FHost.Handle;
+      PostMessage(HostWindow, WM_CLOSE, 0, 0);
+    end;
+  finally
+    FProcessingPendingScriptRequests := False;
+  end;
+end;
+
+procedure TGameEngine.NotifySceneLoaded;
+begin
+  if Assigned(FOnSceneLoaded) then
+    FOnSceneLoaded(Self);
 end;
 
 procedure TGameEngine.ExecuteScriptLifecycleEvent(const AEventName: string);
@@ -1365,6 +1494,7 @@ begin
   finally
     FRunningScriptLifecycleEvent := False;
   end;
+  ProcessPendingScriptRequests;
 end;
 
 procedure TGameEngine.GuiScriptEvent(AControl: TGuiControl;
@@ -1388,6 +1518,7 @@ begin
   finally
     FRunningGuiScriptEvent := False;
   end;
+  ProcessPendingScriptRequests;
 end;
 
 procedure TGameEngine.ApplyFrameUniformsToShader(Shader: TShader);
@@ -1958,13 +2089,7 @@ begin
   if FSceneManager = nil then
     raise Exception.Create('No scene manager is available.');
 
-  if TPath.IsPathRooted(AFileName) then
-    ResolvedFileName := AFileName
-  else
-    ResolvedFileName := TEnginePaths.Scene(ChangeFileExt(ExtractFileName(AFileName),
-      SCENE_FILE_EXTENSION));
-  if ExtractFileName(ResolvedFileName) = '' then
-    raise Exception.Create('A scene file name is required.');
+  ResolvedFileName := ResolveSceneFileName(AFileName, True);
 
   ForceDirectories(ExtractFilePath(ResolvedFileName));
   FSceneManager.Name := ChangeFileExt(ExtractFileName(ResolvedFileName), '');
@@ -1991,13 +2116,7 @@ begin
   if FSceneManager = nil then
     raise Exception.Create('No scene manager is available.');
 
-  if TPath.IsPathRooted(AFileName) then
-    ResolvedFileName := AFileName
-  else if SameText(ExtractFileExt(AFileName), SCENE_FILE_EXTENSION) then
-    ResolvedFileName := TEnginePaths.Scene(ExtractFileName(AFileName))
-  else
-    ResolvedFileName := TEnginePaths.Scene(ChangeFileExt(ExtractFileName(AFileName),
-      SCENE_FILE_EXTENSION));
+  ResolvedFileName := ResolveSceneFileName(AFileName, False);
 
   if not FileExists(ResolvedFileName) then
     raise Exception.Create('Scene file not found: ' + ResolvedFileName);
@@ -2041,6 +2160,7 @@ begin
 
   RestoreSceneAfterLoad;
   BindScriptEngine;
+  NotifySceneLoaded;
 end;
 
 function TGameEngine.TryLoadSceneFromFile(const AFileName: string;
@@ -2085,6 +2205,7 @@ begin
   ResetMaterialLibraries;
   RestoreSceneAfterLoad;
   BindScriptEngine;
+  NotifySceneLoaded;
 end;
 
 procedure TGameEngine.Update(const DeltaTime, NewTime: Double);
@@ -2097,6 +2218,7 @@ begin
     FScriptManager.SetFrameTiming(DeltaTime, NewTime);
     ExecuteScriptLifecycleEvent('OnUpdate');
   end;
+  ProcessPendingScriptRequests;
 
   if FRoot <> nil then
   begin

@@ -852,6 +852,7 @@ type
     function TryLoadSceneScriptsFromStream(Stream: TStream): Boolean;
     procedure SaveSceneToFile(const AFileName: string);
     procedure LoadSceneFromFile(const AFileName: string);
+    procedure EngineSceneLoaded(Sender: TObject);
     function TryLoadDefaultSceneFromDisk(const AFileName: string): Boolean;
     procedure SaveDefaultSceneToDisk(const AFileName: string);
     procedure ExecuteSceneFileBrowserAction;
@@ -1922,6 +1923,7 @@ begin
   EngineSettings.Height := EditorViewportHeight;
   EngineSettings.AntialiasingSamples := 16;
   fEngine := TGameEngine.Create(Self, EngineSettings);
+  fEngine.OnSceneLoaded := EngineSceneLoaded;
   fEngine.SetScriptPrefabCallbacks(LoadPrefabForScript, DestroyPrefabForScript);
   fEngine.SetScriptLogCallback(LogLine);
   fRenderer := fEngine.Renderer;
@@ -7095,34 +7097,6 @@ begin
 
     ReleaseCurrentGizmo;
     fEngine.LoadSceneFromFile(AFileName);
-    fRenderer := fEngine.Renderer;
-    fSceneManager := fEngine.SceneManager;
-    fRoot := fEngine.Root;
-    fSceneWorld := fEngine.SceneWorld;
-    fLight := fEngine.MainLight;
-    fCamera := fEngine.Camera;
-    fPhysicsWorld := fEngine.PhysicsWorld;
-    fAudioEngine := fEngine.AudioEngine;
-    fScriptManager := fEngine.ScriptManager;
-    MaterialLibraries := fEngine.MaterialLibraries;
-    fShader := fEngine.DefaultShader;
-    fActorShader := fEngine.ActorShader;
-    fTreeLeafShader := fEngine.TreeLeafShader;
-    fTreeTrunkShader := fEngine.TreeTrunkShader;
-    fGrassShader := fEngine.GrassShader;
-    fHeightFieldShader := fEngine.HeightFieldShader;
-    fPhysicsRunning := fEngine.PhysicsRunning;
-    SyncOrbitFromCamera;
-    EnsureLightBillboards(fRoot);
-    fSelectedObject := fSceneWorld;
-    fSelectedMesh := nil;
-    fSelectedMeshIndex := -1;
-    fSelectedParticleSystemIndex := -1;
-    fSelectedBillboardIndex := -1;
-    fSelectedAnimatedSpriteIndex := -1;
-    fSelectedAudioEmitterIndex := -1;
-    ResetScriptEditorForSceneChange;
-    RefreshGizmo;
     LogLine('Scene loaded: ' + AFileName);
   except
     on E: Exception do
@@ -7131,6 +7105,42 @@ begin
       LogLine('Scene load failed: ' + E.Message);
     end;
   end;
+end;
+
+procedure TSandBoxForm.EngineSceneLoaded(Sender: TObject);
+begin
+  if fEngine = nil then
+    Exit;
+
+  fRenderer := fEngine.Renderer;
+  fSceneManager := fEngine.SceneManager;
+  fRoot := fEngine.Root;
+  fSceneWorld := fEngine.SceneWorld;
+  fLight := fEngine.MainLight;
+  fCamera := fEngine.Camera;
+  fPhysicsWorld := fEngine.PhysicsWorld;
+  fAudioEngine := fEngine.AudioEngine;
+  fScriptManager := fEngine.ScriptManager;
+  MaterialLibraries := fEngine.MaterialLibraries;
+  fShader := fEngine.DefaultShader;
+  fActorShader := fEngine.ActorShader;
+  fTreeLeafShader := fEngine.TreeLeafShader;
+  fTreeTrunkShader := fEngine.TreeTrunkShader;
+  fGrassShader := fEngine.GrassShader;
+  fHeightFieldShader := fEngine.HeightFieldShader;
+  fPhysicsRunning := fEngine.PhysicsRunning;
+  SyncOrbitFromCamera;
+  EnsureLightBillboards(fRoot);
+  fSelectedObject := fSceneWorld;
+  fSelectedMesh := nil;
+  fSelectedMeshIndex := -1;
+  fSelectedParticleSystemIndex := -1;
+  fSelectedBillboardIndex := -1;
+  fSelectedAnimatedSpriteIndex := -1;
+  fSelectedAudioEmitterIndex := -1;
+  ResetScriptEditorForSceneChange;
+  RefreshGizmo;
+  RequestRender;
 end;
 
 function TSandBoxForm.TryLoadDefaultSceneFromDisk(const AFileName: string): Boolean;
@@ -13322,7 +13332,8 @@ begin
 
   fScriptManager.BindEngine(fRenderer, fSceneManager, EnsureDefaultMaterialLibrary,
     DefaultRenderableMaterialName, MeshRenderHandler, fPhysicsWorld, fAudioEngine,
-    LoadPrefabForScript, DestroyPrefabForScript, LogLine, fEngine.GuiManager);
+    LoadPrefabForScript, DestroyPrefabForScript, LogLine, fEngine.ScriptSaveScene,
+    fEngine.ScriptLoadScene, fEngine.ScriptShutdown, fEngine.GuiManager);
 end;
 
 function TSandBoxForm.ResolveScriptFileName(const AFileName,

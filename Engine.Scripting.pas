@@ -29,6 +29,9 @@ type
     AParent: TSceneObject): TSceneObject of object;
   TEngineScriptPrefabDestroyCallback = procedure(AObject: TSceneObject) of object;
   TEngineScriptLogCallback = procedure(const AMessage: string) of object;
+  TEngineScriptSceneFileCallback = function(const AFileName: string;
+    out AErrorMessage: string): Boolean of object;
+  TEngineScriptShutdownCallback = procedure of object;
 
   TEngineScriptExecutionResult = record
     Success: Boolean;
@@ -100,6 +103,10 @@ type
     PrefabLoader: TEngineScriptPrefabLoadCallback;
     PrefabDestroyer: TEngineScriptPrefabDestroyCallback;
     LogCallback: TEngineScriptLogCallback;
+    SceneSaveCallback: TEngineScriptSceneFileCallback;
+    SceneLoadCallback: TEngineScriptSceneFileCallback;
+    ShutdownCallback: TEngineScriptShutdownCallback;
+    EngineLastError: string;
     DeltaTime: Single;
     TimeSeconds: Double;
 
@@ -118,7 +125,10 @@ type
       AAudioEngine: TBassAudioEngine = nil;
       APrefabLoader: TEngineScriptPrefabLoadCallback = nil;
       APrefabDestroyer: TEngineScriptPrefabDestroyCallback = nil;
-      ALogCallback: TEngineScriptLogCallback = nil);
+      ALogCallback: TEngineScriptLogCallback = nil;
+      ASceneSaveCallback: TEngineScriptSceneFileCallback = nil;
+      ASceneLoadCallback: TEngineScriptSceneFileCallback = nil;
+      AShutdownCallback: TEngineScriptShutdownCallback = nil);
     procedure ClearHandles;
 
     function HandleOf(AObject: TObject): Integer;
@@ -194,6 +204,9 @@ type
       APrefabLoader: TEngineScriptPrefabLoadCallback = nil;
       APrefabDestroyer: TEngineScriptPrefabDestroyCallback = nil;
       ALogCallback: TEngineScriptLogCallback = nil;
+      ASceneSaveCallback: TEngineScriptSceneFileCallback = nil;
+      ASceneLoadCallback: TEngineScriptSceneFileCallback = nil;
+      AShutdownCallback: TEngineScriptShutdownCallback = nil;
       AGuiManager: TGuiManager = nil);
     procedure SetFrameTiming(const ADeltaTime, ATimeSeconds: Double);
     procedure ResetRuntimeState;
@@ -404,8 +417,14 @@ type
     procedure DoSceneFindObject(Info: TProgramInfo);
     procedure DoSceneUpdate(Info: TProgramInfo);
     procedure DoSceneRender(Info: TProgramInfo);
+    procedure DoSceneSave(Info: TProgramInfo);
+    procedure DoSceneTrySave(Info: TProgramInfo);
+    procedure DoSceneLoad(Info: TProgramInfo);
+    procedure DoSceneTryLoad(Info: TProgramInfo);
     procedure DoPrefabLoad(Info: TProgramInfo);
     procedure DoPrefabDestroy(Info: TProgramInfo);
+    procedure DoEngineShutdown(Info: TProgramInfo);
+    procedure DoEngineLastError(Info: TProgramInfo);
 
     procedure DoObjectFromHandle(Info: TProgramInfo);
     procedure DoObjectHandle(Info: TProgramInfo);
@@ -1723,11 +1742,15 @@ procedure TEngineScriptManager.BindEngine(ARenderer: TRenderer;
   APhysicsWorld: TPhysicsWorld; AAudioEngine: TBassAudioEngine;
   APrefabLoader: TEngineScriptPrefabLoadCallback;
   APrefabDestroyer: TEngineScriptPrefabDestroyCallback;
-  ALogCallback: TEngineScriptLogCallback; AGuiManager: TGuiManager);
+  ALogCallback: TEngineScriptLogCallback;
+  ASceneSaveCallback: TEngineScriptSceneFileCallback;
+  ASceneLoadCallback: TEngineScriptSceneFileCallback;
+  AShutdownCallback: TEngineScriptShutdownCallback; AGuiManager: TGuiManager);
 begin
   FContext.Bind(ARenderer, ASceneManager, AMaterialLibrary, ADefaultMaterialName,
     ADefaultMeshRender, APhysicsWorld, AAudioEngine, APrefabLoader,
-    APrefabDestroyer, ALogCallback);
+    APrefabDestroyer, ALogCallback, ASceneSaveCallback, ASceneLoadCallback,
+    AShutdownCallback);
   FGuiUnit.BindManager(AGuiManager);
   ResolveScriptTargets;
 end;
@@ -2620,7 +2643,10 @@ procedure TEngineScriptContext.Bind(ARenderer: TRenderer; ASceneManager: TSceneM
   ADefaultMeshRender: TOnMeshRender; APhysicsWorld: TPhysicsWorld;
   AAudioEngine: TBassAudioEngine; APrefabLoader: TEngineScriptPrefabLoadCallback;
   APrefabDestroyer: TEngineScriptPrefabDestroyCallback;
-  ALogCallback: TEngineScriptLogCallback);
+  ALogCallback: TEngineScriptLogCallback;
+  ASceneSaveCallback: TEngineScriptSceneFileCallback;
+  ASceneLoadCallback: TEngineScriptSceneFileCallback;
+  AShutdownCallback: TEngineScriptShutdownCallback);
 begin
   ClearHandles;
   Renderer := ARenderer;
@@ -2633,6 +2659,9 @@ begin
   PrefabLoader := APrefabLoader;
   PrefabDestroyer := APrefabDestroyer;
   LogCallback := ALogCallback;
+  SceneSaveCallback := ASceneSaveCallback;
+  SceneLoadCallback := ASceneLoadCallback;
+  ShutdownCallback := AShutdownCallback;
 end;
 
 procedure TEngineScriptContext.ClearHandles;
@@ -4887,6 +4916,94 @@ begin
     FContext.Renderer.Render;
 end;
 
+procedure TdwsEngineUnit.DoSceneSave(Info: TProgramInfo);
+var
+  ErrorMessage: string;
+begin
+  RequireContext;
+  if not Assigned(FContext.SceneSaveCallback) then
+    raise Exception.Create('Scene saving is not bound to the script engine.');
+
+  ErrorMessage := '';
+  if not FContext.SceneSaveCallback(Info.ParamAsString[0], ErrorMessage) then
+  begin
+    if ErrorMessage = '' then
+      ErrorMessage := 'Scene save failed.';
+    FContext.EngineLastError := ErrorMessage;
+    raise Exception.Create(ErrorMessage);
+  end;
+
+  FContext.EngineLastError := '';
+end;
+
+procedure TdwsEngineUnit.DoSceneTrySave(Info: TProgramInfo);
+var
+  ErrorMessage: string;
+  Success: Boolean;
+begin
+  RequireContext;
+  if not Assigned(FContext.SceneSaveCallback) then
+  begin
+    FContext.EngineLastError := 'Scene saving is not bound to the script engine.';
+    Info.ResultAsBoolean := False;
+    Exit;
+  end;
+
+  ErrorMessage := '';
+  Success := FContext.SceneSaveCallback(Info.ParamAsString[0], ErrorMessage);
+  Info.ResultAsBoolean := Success;
+  if Success then
+    FContext.EngineLastError := ''
+  else if ErrorMessage <> '' then
+    FContext.EngineLastError := ErrorMessage
+  else
+    FContext.EngineLastError := 'Scene save failed.';
+end;
+
+procedure TdwsEngineUnit.DoSceneLoad(Info: TProgramInfo);
+var
+  ErrorMessage: string;
+begin
+  RequireContext;
+  if not Assigned(FContext.SceneLoadCallback) then
+    raise Exception.Create('Scene loading is not bound to the script engine.');
+
+  ErrorMessage := '';
+  if not FContext.SceneLoadCallback(Info.ParamAsString[0], ErrorMessage) then
+  begin
+    if ErrorMessage = '' then
+      ErrorMessage := 'Scene load failed.';
+    FContext.EngineLastError := ErrorMessage;
+    raise Exception.Create(ErrorMessage);
+  end;
+
+  FContext.EngineLastError := '';
+end;
+
+procedure TdwsEngineUnit.DoSceneTryLoad(Info: TProgramInfo);
+var
+  ErrorMessage: string;
+  Success: Boolean;
+begin
+  RequireContext;
+  if not Assigned(FContext.SceneLoadCallback) then
+  begin
+    FContext.EngineLastError := 'Scene loading is not bound to the script engine.';
+    Info.ResultAsBoolean := False;
+    Exit;
+  end;
+
+  ErrorMessage := '';
+  Success := FContext.SceneLoadCallback(Info.ParamAsString[0], ErrorMessage);
+  Info.ResultAsBoolean := Success;
+  if Success then
+    FContext.EngineLastError := ''
+  else if ErrorMessage <> '' then
+    FContext.EngineLastError := ErrorMessage
+  else
+    FContext.EngineLastError := 'Scene load failed.';
+end;
+
 procedure TdwsEngineUnit.DoPrefabLoad(Info: TProgramInfo);
 var
   Parent, Obj: TSceneObject;
@@ -4916,6 +5033,21 @@ begin
   end
   else
     DestroySceneObjectForScript(Obj);
+end;
+
+procedure TdwsEngineUnit.DoEngineShutdown(Info: TProgramInfo);
+begin
+  RequireContext;
+  if not Assigned(FContext.ShutdownCallback) then
+    raise Exception.Create('Engine shutdown is not bound to the script engine.');
+
+  FContext.ShutdownCallback;
+end;
+
+procedure TdwsEngineUnit.DoEngineLastError(Info: TProgramInfo);
+begin
+  RequireContext;
+  Info.ResultAsString := FContext.EngineLastError;
 end;
 
 procedure TdwsEngineUnit.DoObjectFromHandle(Info: TProgramInfo);
@@ -9153,6 +9285,12 @@ begin
   RegisterEngineFunction('SceneFindObject', 'TSceneObject', ['Name'], ['String'], DoSceneFindObject);
   RegisterEngineFunction('SceneUpdate', '', [], [], DoSceneUpdate);
   RegisterEngineFunction('SceneRender', '', [], [], DoSceneRender);
+  RegisterEngineFunction('SceneSave', '', ['FileName'], ['String'], DoSceneSave);
+  RegisterEngineFunction('SceneTrySave', 'Boolean', ['FileName'], ['String'], DoSceneTrySave);
+  RegisterEngineFunction('SceneLoad', '', ['FileName'], ['String'], DoSceneLoad);
+  RegisterEngineFunction('SceneTryLoad', 'Boolean', ['FileName'], ['String'], DoSceneTryLoad);
+  RegisterEngineFunction('EngineShutdown', '', [], [], DoEngineShutdown);
+  RegisterEngineFunction('EngineLastError', 'String', [], [], DoEngineLastError);
   RegisterEngineFunction('PrefabLoad', 'Integer', ['FileName', 'Parent'], ['String', 'Integer'], DoPrefabLoad);
   RegisterEngineFunction('PrefabDestroy', '', ['Obj'], ['Integer'], DoPrefabDestroy);
 
