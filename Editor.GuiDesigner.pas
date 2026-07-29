@@ -97,7 +97,8 @@ function GuiDesignerBackgroundDrawList(
 const
   GUI_DESIGNER_ADD_POPUP = 'Add engine GUI control###EngineGuiAddControl';
   GUI_DESIGNER_RESIZE_HANDLE = 9.0;
-  GUI_DESIGNER_EVENT_NAMES: array[0..13] of string = (
+  GUI_DESIGNER_EVENT_NAMES: array[0..14] of string = (
+    'OnCreate',
     'OnButtonClick',
     'OnChange',
     'OnMouseDown',

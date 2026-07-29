@@ -66,6 +66,7 @@ type
     FHandleToControl: TDictionary<Integer, TGuiControl>;
     FControlToHandle: TDictionary<TGuiControl, Integer>;
     FPendingDeletes: TList<TGuiControl>;
+    FPendingCreates: TList<TGuiControl>;
     FNextHandle: Integer;
     FDispatchDepth: Integer;
     FEnabled: Boolean;
@@ -85,6 +86,7 @@ type
     procedure ConfigureControlEvents(AControl: TGuiControl);
     procedure DispatchEvent(AControl: TGuiControl; const AEventName: string;
       const AData: TGuiEventData);
+    procedure DispatchPendingCreateEvents;
     procedure QueueControlDelete(AControl: TGuiControl);
     procedure FlushPendingDeletes;
     procedure RemoveControlRuntime(AControl: TGuiControl);
@@ -377,6 +379,7 @@ begin
   FHandleToControl := TDictionary<Integer, TGuiControl>.Create;
   FControlToHandle := TDictionary<TGuiControl, Integer>.Create;
   FPendingDeletes := TList<TGuiControl>.Create;
+  FPendingCreates := TList<TGuiControl>.Create;
   FNextHandle := 1;
   FEnabled := True;
   FInputEnabled := True;
@@ -402,6 +405,7 @@ begin
   FControlToHandle.Free;
   FHandleToControl.Free;
   FBindings.Free;
+  FPendingCreates.Free;
   FPendingDeletes.Free;
   FControls.Free;
   inherited;
@@ -417,6 +421,8 @@ var
   Value: string;
 begin
   Value := Trim(AEventName);
+  if SameText(Value, 'OnCreate') then
+    Exit('OnCreate');
   if SameText(Value, 'OnClick') or SameText(Value, 'OnButtonClick') then
     Exit('OnButtonClick');
   if SameText(Value, 'OnMove') or SameText(Value, 'OnMoving') or
@@ -607,6 +613,22 @@ begin
   end;
 end;
 
+procedure TGuiManager.DispatchPendingCreateEvents;
+var
+  Control: TGuiControl;
+  PendingControls: TArray<TGuiControl>;
+begin
+  if (FPendingCreates.Count = 0) or not FEventDispatchEnabled or
+     not Assigned(FOnScriptEvent) then
+    Exit;
+
+  PendingControls := FPendingCreates.ToArray;
+  FPendingCreates.Clear;
+  for Control in PendingControls do
+    if ContainsControl(Control) then
+      DispatchEvent(Control, 'OnCreate', TGuiEventData.Empty);
+end;
+
 procedure TGuiManager.QueueControlDelete(AControl: TGuiControl);
 var
   I: Integer;
@@ -648,6 +670,7 @@ begin
 
   if Assigned(FOnControlRemoved) then
     FOnControlRemoved(AControl);
+  FPendingCreates.Remove(AControl);
   FBindings.Remove(AControl);
   FControls.Remove(AControl);
   if FControlToHandle.TryGetValue(AControl, Handle) then
@@ -798,6 +821,7 @@ begin
   while FControls.Count > 0 do
     DeleteControl(FControls[FControls.Count - 1]);
   FBindings.Clear;
+  FPendingCreates.Clear;
   FHandleToControl.Clear;
   FControlToHandle.Clear;
   FNextHandle := 1;
@@ -813,11 +837,15 @@ end;
 procedure TGuiManager.Render;
 begin
   FlushPendingDeletes;
-  if not FEnabled or (FRenderer = nil) or (FRoot = nil) or
-     (FRenderer.GuiRenderer = nil) or (FControls.Count = 0) then
+  if not FEnabled or (FRenderer = nil) or (FRoot = nil) then
     Exit;
 
   Resize(FRenderer.Width, FRenderer.Height);
+  DispatchPendingCreateEvents;
+  FlushPendingDeletes;
+  if (FRenderer.GuiRenderer = nil) or (FControls.Count = 0) then
+    Exit;
+
   FRoot.Render(FRenderer.GuiRenderer, FRenderer.Width, FRenderer.Height);
 end;
 
@@ -1395,6 +1423,7 @@ begin
     FControls.Add(Result);
     ConfigureControlEvents(Result);
     HandleOf(Result);
+    FPendingCreates.Add(Result);
   except
     Result.Free;
     raise;

@@ -385,6 +385,8 @@ type
     procedure DoScreenHeightFieldHit(Info: TProgramInfo);
     procedure DoScreenHeightFieldPoint(Info: TProgramInfo);
     procedure DoScreenHeightFieldLocalPoint(Info: TProgramInfo);
+    procedure DoScreenWidth(Info: TProgramInfo);
+    procedure DoScreenHeight(Info: TProgramInfo);
     procedure DoViewportLeft(Info: TProgramInfo);
     procedure DoViewportTop(Info: TProgramInfo);
     procedure DoViewportWidth(Info: TProgramInfo);
@@ -4657,6 +4659,26 @@ begin
     SetResultVector3(Info, LocalPoint)
   else
     SetResultVector3(Info, Vector3(0.0, 0.0, 0.0));
+end;
+
+procedure TdwsEngineUnit.DoScreenWidth(Info: TProgramInfo);
+var
+  MonitorRect: TRect;
+begin
+  if TryGetMonitorRect(RenderWindowHandle, MonitorRect) then
+    Info.ResultAsInteger := MonitorRect.Right - MonitorRect.Left
+  else
+    Info.ResultAsInteger := GetSystemMetrics(SM_CXSCREEN);
+end;
+
+procedure TdwsEngineUnit.DoScreenHeight(Info: TProgramInfo);
+var
+  MonitorRect: TRect;
+begin
+  if TryGetMonitorRect(RenderWindowHandle, MonitorRect) then
+    Info.ResultAsInteger := MonitorRect.Bottom - MonitorRect.Top
+  else
+    Info.ResultAsInteger := GetSystemMetrics(SM_CYSCREEN);
 end;
 
 procedure TdwsEngineUnit.DoViewportLeft(Info: TProgramInfo);
@@ -9253,6 +9275,8 @@ begin
   RegisterEngineFunction('ScreenHeightFieldHit', 'Boolean', ['X', 'Y', 'HeightField'], ['Float', 'Float', 'Integer'], DoScreenHeightFieldHit);
   RegisterEngineFunction('ScreenHeightFieldPoint', 'TVector3', ['X', 'Y', 'HeightField'], ['Float', 'Float', 'Integer'], DoScreenHeightFieldPoint);
   RegisterEngineFunction('ScreenHeightFieldLocalPoint', 'TVector3', ['X', 'Y', 'HeightField'], ['Float', 'Float', 'Integer'], DoScreenHeightFieldLocalPoint);
+  RegisterEngineFunction('ScreenWidth', 'Integer', [], [], DoScreenWidth);
+  RegisterEngineFunction('ScreenHeight', 'Integer', [], [], DoScreenHeight);
   RegisterEngineFunction('ViewportLeft', 'Integer', [], [], DoViewportLeft);
   RegisterEngineFunction('ViewportTop', 'Integer', [], [], DoViewportTop);
   RegisterEngineFunction('ViewportWidth', 'Integer', [], [], DoViewportWidth);
