@@ -1,5 +1,5 @@
 OpenGL Micro Engine Script Functions
-Generated from Engine.Scripting.pas and DWS.FastMath.pas
+Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.pas
 
 [DWS.FastMath]
 - function Clamp(Value: Float; MinValue: Float; MaxValue: Float): Float
@@ -230,6 +230,176 @@ Generated from Engine.Scripting.pas and DWS.FastMath.pas
 - function IVector4ToString(A: TIVector4): String
 - procedure ShowMessage(Msg: String)
 
+[Engine.Gui.Scripting]
+- GUI classes are available automatically; a script does not need a uses clause.
+- Controls are owned by the engine GUI manager. Delete() destroys a control and its children.
+- SetEventHandler(EventName, HandlerName) binds a parameterless DWScript procedure
+  from the current script. An empty HandlerName removes that binding.
+- Supported event names:
+  OnCreate, OnMouseDown, OnMouseMove, OnMouseUp, OnMouseEnter, OnMouseLeave,
+  OnKeyDown, OnKeyPress, OnKeyUp, OnButtonClick (alias OnClick), OnChange,
+  OnWindowMove (aliases OnMove and OnMoving), OnWindowShow (alias OnShow),
+  OnWindowHide (alias OnHide), and OnMenuClick.
+- OnCreate fires once immediately before a control's first render, after its
+  saved properties, parent relationship, script binding, and current viewport
+  dimensions are available. For a control created by DWScript, bind OnCreate
+  before the next frame.
+- Event handlers read their arguments through GuiEventControl(), GuiEventName(),
+  GuiEventX(), GuiEventY(), GuiEventValue(), GuiEventIndex(), GuiEventButton(),
+  GuiEventKey(), GuiEventModifiers(), and GuiEventText().
+- GuiEventModifiers() is a bit mask: Shift = 1, Ctrl = 2, Alt = 4.
+- Event binding example:
+  procedure HandlePlayClick;
+  var Status: TGuiControl;
+  begin
+    Status := GuiFindControl('StatusPanel');
+    Status.Visible := True;
+  end;
+
+  procedure Main;
+  var PlayButton: TGuiButton;
+  begin
+    PlayButton := GuiCreateButton('PlayButton');
+    PlayButton.Caption := 'Play';
+    PlayButton.SetEventHandler('OnButtonClick', 'HandlePlayClick');
+  end;
+
+- OnCreate viewport-positioning example for a control designed at 1920x1080:
+  procedure HandleControlCreate;
+  var Control: TGuiControl;
+  begin
+    Control := GuiEventControl();
+    Control.Left := Control.Left * ViewportWidth() / 1920.0;
+    Control.Top := Control.Top * ViewportHeight() / 1080.0;
+  end;
+
+- class TGuiControl
+  - property Handle: Integer read
+  - property Name: String read/write
+  - property Kind: String read
+  - property Parent: TGuiControl read/write
+  - property ChildCount: Integer read
+  - property Left: Float read/write
+  - property Top: Float read/write
+  - property Width: Float read/write
+  - property Height: Float read/write
+  - property Visible: Boolean read/write
+  - property Scale: Float read/write
+  - property Tint: TVector4 read/write
+  - property LayoutName: String read/write
+  - function Child(Index: Integer): TGuiControl
+  - procedure Delete()
+  - procedure SetBounds(Left: Float; Top: Float; Width: Float; Height: Float)
+  - procedure Show()
+  - procedure Hide()
+  - procedure BringToFront()
+  - procedure SendToBack()
+  - function EventHandler(EventName: String): String
+  - procedure SetEventHandler(EventName: String; HandlerName: String)
+
+- class TGuiTextControl(TGuiControl)
+  - property Caption: String read/write
+
+- class TGuiPanel(TGuiControl)
+
+- class TGuiButton(TGuiTextControl)
+  - property Pressed: Boolean read/write
+  - property AllowUp: Boolean read/write
+  - property Group: Integer read/write
+  - property PressedLayoutName: String read/write
+
+- class TGuiCheckBox(TGuiControl)
+  - property Checked: Boolean read/write
+  - property Group: Integer read/write
+  - property CheckedLayoutName: String read/write
+
+- class TGuiEdit(TGuiTextControl)
+  - property ReadOnly: Boolean read/write
+  - property SelStart: Integer read/write
+
+- class TGuiLabel(TGuiTextControl)
+  - property Alignment: Integer read/write
+  - property TextLayout: Integer read/write
+
+- class TGuiAdvancedLabel(TGuiLabel)
+
+- class TGuiWindow(TGuiTextControl)
+  - property TitleOffset: Float read/write
+  - procedure Close()
+
+- class TGuiScrollbar(TGuiTextControl)
+  - property Min: Float read/write
+  - property Max: Float read/write
+  - property Position: Float read/write
+  - property PageSize: Float read/write
+  - property Step: Float read/write
+  - property Horizontal: Boolean read/write
+  - property Locked: Boolean read/write
+  - procedure StepUp()
+  - procedure StepDown()
+  - procedure PageUp()
+  - procedure PageDown()
+
+- class TGuiPopupMenu(TGuiTextControl)
+  - property ItemsText: String read/write
+  - property SelectedIndex: Integer read/write
+  - function AddItem(Text: String): Integer
+  - procedure Clear()
+  - procedure Popup(X: Integer; Y: Integer)
+
+- class TGuiStringGrid(TGuiTextControl)
+  - property ColumnsText: String read/write
+  - property RowCount: Integer read
+  - property SelectedRow: Integer read/write
+  - property SelectedColumn: Integer read/write
+  - function AddRow(Text: String): Integer
+  - procedure Clear()
+  - procedure SetText(Value: String)
+
+- function GuiEnabled(): Boolean
+- procedure GuiSetEnabled(Enabled: Boolean)
+- function GuiLoadLayout(FileName: String): Boolean
+- function GuiLoadLayout(FileName: String; TextureFileName: String): Boolean
+- function GuiSetTexture(FileName: String): Boolean
+- procedure GuiClear()
+- function GuiRoot(): TGuiControl
+- function GuiControlCount(): Integer
+- function GuiControl(Index: Integer): TGuiControl
+- function GuiFindControl(Name: String): TGuiControl
+- function GuiControlFromHandle(Handle: Integer): TGuiControl
+- function GuiControlHandle(Control: TGuiControl): Integer
+- function GuiCreatePanel(Name: String): TGuiPanel
+- function GuiCreatePanel(Name: String; Parent: TGuiControl): TGuiPanel
+- function GuiCreateButton(Name: String): TGuiButton
+- function GuiCreateButton(Name: String; Parent: TGuiControl): TGuiButton
+- function GuiCreateCheckBox(Name: String): TGuiCheckBox
+- function GuiCreateCheckBox(Name: String; Parent: TGuiControl): TGuiCheckBox
+- function GuiCreateEdit(Name: String): TGuiEdit
+- function GuiCreateEdit(Name: String; Parent: TGuiControl): TGuiEdit
+- function GuiCreateLabel(Name: String): TGuiLabel
+- function GuiCreateLabel(Name: String; Parent: TGuiControl): TGuiLabel
+- function GuiCreateAdvancedLabel(Name: String): TGuiAdvancedLabel
+- function GuiCreateAdvancedLabel(Name: String; Parent: TGuiControl): TGuiAdvancedLabel
+- function GuiCreateWindow(Name: String): TGuiWindow
+- function GuiCreateWindow(Name: String; Parent: TGuiControl): TGuiWindow
+- function GuiCreateScrollbar(Name: String): TGuiScrollbar
+- function GuiCreateScrollbar(Name: String; Parent: TGuiControl): TGuiScrollbar
+- function GuiCreatePopupMenu(Name: String): TGuiPopupMenu
+- function GuiCreatePopupMenu(Name: String; Parent: TGuiControl): TGuiPopupMenu
+- function GuiCreateStringGrid(Name: String): TGuiStringGrid
+- function GuiCreateStringGrid(Name: String; Parent: TGuiControl): TGuiStringGrid
+- function GuiEventControl(): TGuiControl
+- function GuiEventName(): String
+- function GuiEventHandlerName(): String
+- function GuiEventX(): Float
+- function GuiEventY(): Float
+- function GuiEventValue(): Float
+- function GuiEventIndex(): Integer
+- function GuiEventButton(): Integer
+- function GuiEventKey(): Integer
+- function GuiEventModifiers(): Integer
+- function GuiEventText(): String
+
 [Engine.Scripting]
 - class TSceneObject
   - Native scene object wrapper. Scene owns object lifetime; Delete() removes it from the scene.
@@ -260,6 +430,9 @@ Generated from Engine.Scripting.pas and DWS.FastMath.pas
   - property HasBillboards: Boolean       read             - True when one or more billboards are attached.
   - property HasAudio: Boolean            read             - True when the object has an audio listener or audio emitters.
   - property HasSkeletonAnimation: Boolean read            - True when the object has a skeletal animation controller.
+  - property HasWind: Boolean             read             - True when wind animation is enabled on this object.
+  - property HasBoneWind: Boolean         read             - True when skeleton/bone wind is enabled on this object.
+  - property HasVertexWind: Boolean       read             - True when shader vertex wind is enabled on this object.
   - property AnimationCount: Integer      read             - Number of skeletal animation clips on this object.
   - property CurrentAnimationName: String read             - Name of the currently selected animation clip, or empty when none is selected.
   - property CurrentAnimationIndex: Integer read           - Index of the current animation clip, or -1 when none is selected.
@@ -297,6 +470,9 @@ Generated from Engine.Scripting.pas and DWS.FastMath.pas
   - function GetHasBillboards(): Boolean                   - Returns true if the object has attached billboards.
   - function GetHasAudio(): Boolean                        - Returns true if the object has audio listener or emitter data.
   - function GetHasSkeletonAnimation(): Boolean            - Returns true if the object has a skeletal animation controller.
+  - function GetHasWind(): Boolean                         - Returns true if wind animation is enabled.
+  - function GetHasBoneWind(): Boolean                     - Returns true if skeleton/bone wind is enabled.
+  - function GetHasVertexWind(): Boolean                   - Returns true if shader vertex wind is enabled.
   - function GetAnimationCount(): Integer                  - Returns the number of skeletal animation clips.
   - function AnimationName(Index: Integer): String         - Returns the animation clip name at Index, or empty if Index is invalid.
   - function SetAnimationName(Index: Integer; Name: String): Boolean - Renames the clip at Index. Returns false for invalid index, empty name, or duplicate name.
@@ -332,7 +508,18 @@ Generated from Engine.Scripting.pas and DWS.FastMath.pas
   - function MeshObject(Index: Integer): TMesh             - Returns the mesh at Index as an object-style wrapper.
   - function AddMeshFile(FileName: String): Integer        - Loads a mesh from FileName, attaches it to this object, and returns its handle.
   - function AddMeshFileObject(FileName: String): TMesh    - Loads a mesh from FileName, attaches it to this object, and returns it as an object-style wrapper.
+  - function AddGrassCrossPlanes(Width: Float; Height: Float; PlaneCount: Integer; Name: String): Integer - Creates upright intersecting grass planes and returns the mesh handle.
   - procedure SetMaterial(MaterialName: String)            - Applies the named material to all meshes attached directly to this object.
+  - procedure EnableTreeWind()                             - Enables the default skeleton tree wind preset.
+  - procedure EnableVertexWind()                           - Enables the default shader vertex tree wind preset.
+  - procedure EnableGrassWind()                            - Enables the default shader grass wind preset.
+  - procedure DisableWind()                                - Disables wind animation.
+  - function WindInteger(Name: String): Integer            - Reads integer wind parameters such as Kind/WindKind.
+  - procedure SetWindInteger(Name: String; Value: Integer) - Writes integer wind parameters such as Kind/WindKind.
+  - function WindFloat(Name: String): Float                - Reads float wind parameters: Strength, StrengthDegrees, Frequency, GustStrength, GustFrequency, PhaseOffset, PhaseDegrees, TrunkFlex/BaseFlex, BranchFlex/BladeFlex, LeafFlutter/BladeFlutter.
+  - procedure SetWindFloat(Name: String; Value: Float)     - Writes a float wind parameter by name.
+  - function WindVector3(Name: String): TVector3           - Reads vector wind parameters such as Direction/WindDirection.
+  - procedure SetWindVector3(Name: String; Value: TVector3)- Writes vector wind parameters such as Direction/WindDirection.
   - function ParticleSystem(Index: Integer): Integer       - Returns the handle of the particle system at Index.
   - function CreateParticleSystem(): Integer               - Creates and attaches a new particle system, then returns its handle.
   - procedure RemoveParticleSystem(Index: Integer)         - Removes the particle system at Index.
@@ -502,6 +689,7 @@ Generated from Engine.Scripting.pas and DWS.FastMath.pas
 - function ScriptTargetShader(): TShader
 - function DeltaTime(): Float
 - function TimeSeconds(): Float
+- procedure Log(aMessage: String)
 - function KeyCode(Name: String): Integer                                                              - Converts a key name such as 'W', 'Space', 'Escape', 'Left', 'F1', or 'Numpad0' into a Windows virtual-key code.
 - function KeyPressed(KeyCode: Integer): Boolean                                                       - True while the key with this virtual-key code is currently pressed.
 - function KeyPressed(KeyName: String): Boolean                                                        - True while the named key is currently pressed.
@@ -529,6 +717,8 @@ Generated from Engine.Scripting.pas and DWS.FastMath.pas
 - function ScreenHeightFieldHit(X: Float; Y: Float; HeightField: Integer): Boolean                     - True if the screen/client pixel ray intersects the height field mesh.
 - function ScreenHeightFieldPoint(X: Float; Y: Float; HeightField: Integer): TVector3                  - World-space height field intersection point for screen/client pixel X,Y, or Vector3(0) if there is no hit.
 - function ScreenHeightFieldLocalPoint(X: Float; Y: Float; HeightField: Integer): TVector3             - Local-space height field intersection point for screen/client pixel X,Y, or Vector3(0) if there is no hit.
+- function ScreenWidth(): Integer                                                                      - Full width in pixels of the monitor nearest the render window.
+- function ScreenHeight(): Integer                                                                     - Full height in pixels of the monitor nearest the render window.
 - function ViewportLeft(): Integer                                                                     - OpenGL renderer viewport left/X in client pixels.
 - function ViewportTop(): Integer                                                                      - OpenGL renderer viewport top/Y in client pixels.
 - function ViewportWidth(): Integer                                                                    - OpenGL renderer viewport width in client pixels.
@@ -560,12 +750,6 @@ Generated from Engine.Scripting.pas and DWS.FastMath.pas
 - function SceneFindObject(Name: String): TSceneObject
 - procedure SceneUpdate()
 - procedure SceneRender()
-- procedure SceneSave(FileName: String)                                                              - Saves the current scene. Relative names are saved in Data\Scenes with the .omescn extension.
-- function SceneTrySave(FileName: String): Boolean                                                   - Saves the current scene and returns False on failure; call EngineLastError() for details.
-- procedure SceneLoad(FileName: String)                                                              - Loads a scene. Relative names are loaded from Data\Scenes and .omescn is added when needed.
-- function SceneTryLoad(FileName: String): Boolean                                                   - Requests or loads a scene and returns False on immediate failure; call EngineLastError() for details.
-- procedure EngineShutdown()                                                                         - Requests a normal engine/editor window shutdown.
-- function EngineLastError(): String                                                                 - Last save/load engine error reported to scripts, or empty after success.
 - function PrefabLoad(FileName: String; Parent: Integer): Integer
 - procedure PrefabDestroy(Obj: Integer)
 - function ObjectFromHandle(Handle: Integer): TSceneObject
@@ -600,6 +784,7 @@ Generated from Engine.Scripting.pas and DWS.FastMath.pas
 - function ObjectAddMeshFile(Obj: Integer; FileName: String): Integer
 - function ObjectAddMeshFileObject(Obj: Integer; FileName: String): TMesh
 - function ObjectAddPlane(Obj: Integer; Width: Float; Depth: Float; WidthSegments: Integer; DepthSegments: Integer; Name: String): Integer
+- function ObjectAddGrassCrossPlanes(Obj: Integer; Width: Float; Height: Float; PlaneCount: Integer; Name: String): Integer
 - function ObjectAddCube(Obj: Integer; Width: Float; Height: Float; Depth: Float; WidthStacks: Integer; HeightStacks: Integer; DepthStacks: Integer; Name: String): Integer
 - function ObjectAddSphere(Obj: Integer; Radius: Float; StackCount: Integer; SliceCount: Integer; Name: String): Integer
 - function ObjectAddCylinder(Obj: Integer; Radius: Float; Height: Float; Slices: Integer; Stacks: Integer; Name: String): Integer
@@ -613,6 +798,19 @@ Generated from Engine.Scripting.pas and DWS.FastMath.pas
 - function ObjectAddArrow(Obj: Integer; ShaftLength: Float; TipLength: Float; ShaftRadius: Float; TipRadius: Float; Slices: Integer; Stacks: Integer; Name: String): Integer
 - function ObjectAddSuperEllipsoid(Obj: Integer; Radius: Float; VCurve: Float; HCurve: Float; Slices: Integer; Stacks: Integer; Name: String): Integer
 - procedure ObjectSetMaterial(Obj: Integer; MaterialName: String)
+- procedure ObjectEnableTreeWind(Obj: Integer)
+- procedure ObjectEnableVertexWind(Obj: Integer)
+- procedure ObjectEnableGrassWind(Obj: Integer)
+- procedure ObjectDisableWind(Obj: Integer)
+- function ObjectHasWind(Obj: Integer): Boolean
+- function ObjectHasBoneWind(Obj: Integer): Boolean
+- function ObjectHasVertexWind(Obj: Integer): Boolean
+- function ObjectWindInteger(Obj: Integer; Name: String): Integer
+- procedure ObjectSetWindInteger(Obj: Integer; Name: String; Value: Integer)
+- function ObjectWindFloat(Obj: Integer; Name: String): Float
+- procedure ObjectSetWindFloat(Obj: Integer; Name: String; Value: Float)
+- function ObjectWindVector3(Obj: Integer; Name: String): TVector3
+- procedure ObjectSetWindVector3(Obj: Integer; Name: String; Value: TVector3)
 - function MeshFromHandle(Handle: Integer): TMesh
 - function MeshHandle(Mesh: TMesh): Integer
 - function MeshName(Mesh: Integer): String
@@ -632,6 +830,7 @@ Generated from Engine.Scripting.pas and DWS.FastMath.pas
 - procedure MeshSetAlwaysOnTop(Mesh: Integer; Value: Boolean)
 - function MeshTag(Mesh: Integer): Integer
 - procedure MeshSetTag(Mesh: Integer; Value: Integer)
+- function MeshTypeGrass(): Integer
 - function MeshType(Mesh: Integer): Integer
 - function MeshVertexCount(Mesh: Integer): Integer
 - function MeshIndexCount(Mesh: Integer): Integer
@@ -760,12 +959,23 @@ Generated from Engine.Scripting.pas and DWS.FastMath.pas
 - function CameraViewProjectionMatrix(Camera: Integer): TMatrix4
 - function MaterialCount(): Integer
 - function MaterialName(Index: Integer): String
+- function DefaultGrassMaterialName(): String
 - function MaterialByName(Name: String): Integer
 - function MaterialByNameObject(Name: String): TMaterial
 - function MaterialFromHandle(Handle: Integer): TMaterial
 - function MaterialHandle(Material: TMaterial): Integer
+- function MaterialTypePBR(): Integer
+- function MaterialTypeShadow(): Integer
+- function MaterialTypeHeightField(): Integer
+- function MaterialTypeActor(): Integer
+- function MaterialTypeTreeLeaf(): Integer
+- function MaterialTypeTreeTrunk(): Integer
+- function MaterialTypeGrass(): Integer
 - function MaterialShaderParameter(Material: Integer; Name: String): Float
 - procedure MaterialSetShaderParameter(Material: Integer; Name: String; Value: Float)
+- function WindKindNone(): Integer
+- function WindKindTree(): Integer
+- function WindKindVertexTree(): Integer
 - function ShaderFromHandle(Handle: Integer): TShader
 - function ShaderHandle(Shader: TShader): Integer
 - function ShaderVertexPath(Shader: Integer): String
