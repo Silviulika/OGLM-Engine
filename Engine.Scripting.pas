@@ -357,6 +357,7 @@ type
     procedure DoScriptTargetShader(Info: TProgramInfo);
     procedure DoDeltaTime(Info: TProgramInfo);
     procedure DoTimeSeconds(Info: TProgramInfo);
+    procedure DoFPS(Info: TProgramInfo);
     procedure DoLog(Info: TProgramInfo);
     procedure DoKeyCode(Info: TProgramInfo);
     procedure DoKeyPressedCode(Info: TProgramInfo);
@@ -4423,6 +4424,11 @@ end;
 procedure TdwsEngineUnit.DoTimeSeconds(Info: TProgramInfo);
 begin
   Info.ResultAsFloat := FContext.TimeSeconds;
+end;
+
+procedure TdwsEngineUnit.DoFPS(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := RequireRenderer.FPS;
 end;
 
 procedure TdwsEngineUnit.DoLog(Info: TProgramInfo);
@@ -9247,6 +9253,7 @@ begin
   RegisterEngineFunction('ScriptTargetShader', 'TShader', [], [], DoScriptTargetShader);
   RegisterEngineFunction('DeltaTime', 'Float', [], [], DoDeltaTime);
   RegisterEngineFunction('TimeSeconds', 'Float', [], [], DoTimeSeconds);
+  RegisterEngineFunction('FPS', 'Integer', [], [], DoFPS);
   RegisterEngineFunction('Log', '', ['aMessage'], ['String'], DoLog);
   RegisterEngineFunction('KeyCode', 'Integer', ['Name'], ['String'], DoKeyCode);
   RegisterEngineFunction('KeyPressed', 'Boolean', ['KeyCode'], ['Integer'], DoKeyPressedCode, True);

@@ -288,7 +288,7 @@ begin
   FTimer.MaxDeltaTime := 0.1;
   FTimer.OnProgress := GameProgress;
   FTimer.Enabled := True;
-  LogLine('Game loop started.');
+  LogLine('Game loop started using ASAP updates.');
 end;
 
 procedure TGameForm.StopGameLoop;

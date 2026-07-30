@@ -18,15 +18,15 @@ type
   TProgressEvent = procedure(Sender: TObject; const deltaTime, newTime: Double) of object;
 
   // How the cadencer triggers progress:
-  //   tmManual        – you call Progress manually
-  //   tmASAP          – Windows message loop drives progress
-  //   tmApplicationIdle – hooks VCL’s Application.OnIdle
+  //   tmManual        â€“ you call Progress manually
+  //   tmASAP          â€“ Windows message loop drives progress
+  //   tmApplicationIdle â€“ hooks VCLâ€™s Application.OnIdle
   TTimerMode = (tmManual, tmASAP, tmApplicationIdle);
 
   // Which time source to use:
-  //   trRTC               – Real Time Clock (low resolution)
-  //   trPerformanceCounter – high precision performance counter
-  //   trExternal          – you supply CurrentTime manually
+  //   trRTC               â€“ Real Time Clock (low resolution)
+  //   trPerformanceCounter â€“ high precision performance counter
+  //   trExternal          â€“ you supply CurrentTime manually
   TTimerTimeReference = (trRTC, trPerformanceCounter, trExternal);
 
   TEngineTimer = class
@@ -276,6 +276,10 @@ end;
 constructor TEngineTimer.Create;
 begin
   inherited Create;
+  if vCounterFrequency = 0 then
+    if not QueryPerformanceFrequency(vCounterFrequency) then
+      vCounterFrequency := 0;
+
   fTimeReference := trPerformanceCounter;
   fDownTime := GetRawReferenceTime;
   fOriginTime := fDownTime;
@@ -283,10 +287,6 @@ begin
   fSleepLength := -1;
   fMode := tmASAP;
   fEnabled := True;
-  // Ensure performance counter frequency is read
-  if vCounterFrequency = 0 then
-    if not QueryPerformanceFrequency(vCounterFrequency) then
-      vCounterFrequency := 0;
 end;
 
 destructor TEngineTimer.Destroy;
@@ -459,12 +459,6 @@ begin
       Exit;
     end;
 
-    // Fixed timestep handling
-    if fFixedDeltaTime > 0 then
-      fixedStep := fFixedDeltaTime
-    else
-      fixedStep := deltaTime;
-
     totalDelta := deltaTime;
     fullTotalDelta := totalDelta;
     firstLastTime := fLastTime;
@@ -476,6 +470,13 @@ begin
       totalDelta := fMaxDeltaTime;
       newTime := fLastTime + totalDelta;
     end;
+
+    // Variable-step progression must use the clamped delta. Otherwise a large
+    // tick can be clamped below fixedStep and never advance fLastTime.
+    if fFixedDeltaTime > 0 then
+      fixedStep := fFixedDeltaTime
+    else
+      fixedStep := totalDelta;
 
     // Process steps (one or more if fixed timestep is used)
     while totalDelta >= fixedStep do

@@ -42,6 +42,16 @@ type
     TexCoord: TVector2;
   end;
 
+  TGuiTransform = record
+    M11: Single;
+    M12: Single;
+    M21: Single;
+    M22: Single;
+    DX: Single;
+    DY: Single;
+    class function Identity: TGuiTransform; static;
+  end;
+
   TGuiTexture = class
   private
     FFileName: string;
@@ -151,6 +161,7 @@ type
     FColorKeyEnabled: Boolean;
     FColorKey: TVector3;
     FColorKeyTolerance: Single;
+    FTransforms: TList<TGuiTransform>;
     procedure CreateBuffers;
     procedure DestroyBuffers;
     procedure CreateWhiteTexture;
@@ -163,6 +174,8 @@ type
     destructor Destroy; override;
     procedure RenderSolidRect(AX, AY, AWidth, AHeight: Single;
       AViewportWidth, AViewportHeight: Integer; const AColor: TVector4);
+    procedure RenderSolidVertices(const AVertices: TArray<TGuiVertex>;
+      AViewportWidth, AViewportHeight: Integer; const AColor: TVector4);
     procedure RenderVertices(const AVertices: TArray<TGuiVertex>; ATextureID: GLuint;
       AViewportWidth, AViewportHeight: Integer; const ATint: TVector4);
     procedure RenderComponent(AComponent: TGuiComponent; ATexture: TGuiTexture;
@@ -171,6 +184,8 @@ type
     procedure RenderLayout(ALayout: TGuiLayout; const AComponentName: string;
       AX, AY, AWidth, AHeight: Single; AViewportWidth, AViewportHeight: Integer;
       const ATint: TVector4; AScale: Single = 1.0);
+    procedure PushRotation(AAngleDegrees, ACenterX, ACenterY: Single);
+    procedure PopTransform;
     property Shader: TShader read FShader;
     property Opacity: Single read FOpacity write SetOpacity;
     property ColorKeyEnabled: Boolean read FColorKeyEnabled write FColorKeyEnabled;
@@ -246,6 +261,28 @@ begin
     Result.X2 := Result.X1;
   if Result.Y2 < Result.Y1 then
     Result.Y2 := Result.Y1;
+end;
+
+function MultiplyTransform(const ALeft, ARight: TGuiTransform): TGuiTransform;
+begin
+  Result.M11 := (ALeft.M11 * ARight.M11) + (ALeft.M21 * ARight.M12);
+  Result.M12 := (ALeft.M12 * ARight.M11) + (ALeft.M22 * ARight.M12);
+  Result.M21 := (ALeft.M11 * ARight.M21) + (ALeft.M21 * ARight.M22);
+  Result.M22 := (ALeft.M12 * ARight.M21) + (ALeft.M22 * ARight.M22);
+  Result.DX := (ALeft.M11 * ARight.DX) + (ALeft.M21 * ARight.DY) + ALeft.DX;
+  Result.DY := (ALeft.M12 * ARight.DX) + (ALeft.M22 * ARight.DY) + ALeft.DY;
+end;
+
+{ TGuiTransform }
+
+class function TGuiTransform.Identity: TGuiTransform;
+begin
+  Result.M11 := 1.0;
+  Result.M12 := 0.0;
+  Result.M21 := 0.0;
+  Result.M22 := 1.0;
+  Result.DX := 0.0;
+  Result.DY := 0.0;
 end;
 
 function SourceRectFromElement(AElement: TGuiElement): TGuiRect;
@@ -755,6 +792,54 @@ var
     ARect.YTiles := System.Math.Max(1.0, SafeDiv(ARect.Height, LSourceHeight * AElement.Scale.Y * AScale));
   end;
 
+  procedure FitHorizontalPair(var ALeftRect, ARightRect: TGuiRect);
+  var
+    LAvailable: Single;
+    LLeftWidth: Single;
+    LRightWidth: Single;
+    LScaleFactor: Single;
+  begin
+    LAvailable := System.Math.Max(0.0, AX2 - AX1);
+    LLeftWidth := System.Math.Max(0.0, ALeftRect.Width);
+    LRightWidth := System.Math.Max(0.0, ARightRect.Width);
+    if (LLeftWidth + LRightWidth > LAvailable) and
+       (LLeftWidth + LRightWidth > 0.0) then
+    begin
+      LScaleFactor := LAvailable / (LLeftWidth + LRightWidth);
+      LLeftWidth := LLeftWidth * LScaleFactor;
+      LRightWidth := LRightWidth * LScaleFactor;
+    end;
+
+    ALeftRect.X1 := AX1;
+    ALeftRect.X2 := AX1 + LLeftWidth;
+    ARightRect.X1 := AX2 - LRightWidth;
+    ARightRect.X2 := AX2;
+  end;
+
+  procedure FitVerticalPair(var ATopRect, ABottomRect: TGuiRect);
+  var
+    LAvailable: Single;
+    LTopHeight: Single;
+    LBottomHeight: Single;
+    LScaleFactor: Single;
+  begin
+    LAvailable := System.Math.Max(0.0, AY2 - AY1);
+    LTopHeight := System.Math.Max(0.0, ATopRect.Height);
+    LBottomHeight := System.Math.Max(0.0, ABottomRect.Height);
+    if (LTopHeight + LBottomHeight > LAvailable) and
+       (LTopHeight + LBottomHeight > 0.0) then
+    begin
+      LScaleFactor := LAvailable / (LTopHeight + LBottomHeight);
+      LTopHeight := LTopHeight * LScaleFactor;
+      LBottomHeight := LBottomHeight * LScaleFactor;
+    end;
+
+    ATopRect.Y1 := AY1;
+    ATopRect.Y2 := AY1 + LTopHeight;
+    ABottomRect.Y1 := AY2 - LBottomHeight;
+    ABottomRect.Y2 := AY2;
+  end;
+
 begin
   for LAlignment := Low(TGuiAlignment) to High(TGuiAlignment) do
     AResult[LAlignment] := GuiNullRect;
@@ -803,6 +888,11 @@ begin
       end;
     end;
 
+    FitHorizontalPair(AResult[gaTopLeft], AResult[gaTopRight]);
+    FitHorizontalPair(AResult[gaBottomLeft], AResult[gaBottomRight]);
+    FitVerticalPair(AResult[gaTopLeft], AResult[gaBottomLeft]);
+    FitVerticalPair(AResult[gaTopRight], AResult[gaBottomRight]);
+
     AResult[gaTop] := TGuiRect.Create(AResult[gaTopLeft].X2, AY1, AResult[gaTopRight].X1,
       System.Math.Max(AResult[gaTopLeft].Y2, AResult[gaTopRight].Y2));
     AResult[gaBottom] := TGuiRect.Create(AResult[gaBottomLeft].X2,
@@ -830,6 +920,9 @@ begin
           AResult[gaRight].X1 := AX2 - LWidth;
       end;
     end;
+
+    FitVerticalPair(AResult[gaTop], AResult[gaBottom]);
+    FitHorizontalPair(AResult[gaLeft], AResult[gaRight]);
 
     AResult[gaCenter] := TGuiRect.Create(AResult[gaLeft].X2, AResult[gaTop].Y2,
       AResult[gaRight].X1, AResult[gaBottom].Y1);
@@ -1042,6 +1135,7 @@ end;
 constructor TGuiRenderer.Create(const AVertexShaderFile, AFragmentShaderFile: string);
 begin
   inherited Create;
+  FTransforms := TList<TGuiTransform>.Create;
   FOwnsShader := True;
   FOpacity := 1.0;
   FColorKeyEnabled := False;
@@ -1055,6 +1149,7 @@ end;
 constructor TGuiRenderer.Create(AShader: TShader; AOwnsShader: Boolean);
 begin
   inherited Create;
+  FTransforms := TList<TGuiTransform>.Create;
   FShader := AShader;
   FOwnsShader := AOwnsShader;
   FOpacity := 1.0;
@@ -1071,6 +1166,7 @@ begin
   DestroyBuffers;
   if FOwnsShader then
     FShader.Free;
+  FTransforms.Free;
   inherited;
 end;
 
@@ -1183,12 +1279,40 @@ begin
   RenderVertices(LVertices, FWhiteTextureID, AViewportWidth, AViewportHeight, AColor);
 end;
 
+procedure TGuiRenderer.RenderSolidVertices(const AVertices: TArray<TGuiVertex>;
+  AViewportWidth, AViewportHeight: Integer; const AColor: TVector4);
+begin
+  RenderVertices(AVertices, FWhiteTextureID, AViewportWidth, AViewportHeight,
+    AColor);
+end;
+
 procedure TGuiRenderer.RenderVertices(const AVertices: TArray<TGuiVertex>; ATextureID: GLuint;
   AViewportWidth, AViewportHeight: Integer; const ATint: TVector4);
+var
+  LVertices: TArray<TGuiVertex>;
+  LTransform: TGuiTransform;
+  LIndex: Integer;
+  LX: Single;
+  LY: Single;
 begin
   if (Length(AVertices) = 0) or (ATextureID = 0) or (FShader = nil) or
     (AViewportWidth <= 0) or (AViewportHeight <= 0) then
     Exit;
+
+  LVertices := Copy(AVertices);
+  if FTransforms.Count > 0 then
+  begin
+    LTransform := FTransforms.Last;
+    for LIndex := 0 to High(LVertices) do
+    begin
+      LX := LVertices[LIndex].Position.X;
+      LY := LVertices[LIndex].Position.Y;
+      LVertices[LIndex].Position.X :=
+        (LTransform.M11 * LX) + (LTransform.M21 * LY) + LTransform.DX;
+      LVertices[LIndex].Position.Y :=
+        (LTransform.M12 * LX) + (LTransform.M22 * LY) + LTransform.DY;
+    end;
+  end;
 
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_CULL_FACE);
@@ -1209,12 +1333,46 @@ begin
 
   glBindVertexArray(FVAO);
   glBindBuffer(GL_ARRAY_BUFFER, FVBO);
-  glBufferData(GL_ARRAY_BUFFER, Length(AVertices) * SizeOf(TGuiVertex), @AVertices[0], GL_DYNAMIC_DRAW);
-  glDrawArrays(GL_TRIANGLES, 0, Length(AVertices));
+  glBufferData(GL_ARRAY_BUFFER, Length(LVertices) * SizeOf(TGuiVertex),
+    @LVertices[0], GL_DYNAMIC_DRAW);
+  glDrawArrays(GL_TRIANGLES, 0, Length(LVertices));
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
   glBindTexture(GL_TEXTURE_2D, 0);
+end;
+
+procedure TGuiRenderer.PushRotation(AAngleDegrees, ACenterX,
+  ACenterY: Single);
+var
+  LRadians: Single;
+  LCos: Single;
+  LSin: Single;
+  LRotation: TGuiTransform;
+begin
+  if SameValue(AAngleDegrees, 0.0) then
+    LRotation := TGuiTransform.Identity
+  else
+  begin
+    LRadians := DegToRad(AAngleDegrees);
+    System.Math.SinCos(LRadians, LSin, LCos);
+    LRotation.M11 := LCos;
+    LRotation.M12 := LSin;
+    LRotation.M21 := -LSin;
+    LRotation.M22 := LCos;
+    LRotation.DX := ACenterX - (LCos * ACenterX) + (LSin * ACenterY);
+    LRotation.DY := ACenterY - (LSin * ACenterX) - (LCos * ACenterY);
+  end;
+
+  if FTransforms.Count > 0 then
+    LRotation := MultiplyTransform(FTransforms.Last, LRotation);
+  FTransforms.Add(LRotation);
+end;
+
+procedure TGuiRenderer.PopTransform;
+begin
+  if FTransforms.Count > 0 then
+    FTransforms.Delete(FTransforms.Count - 1);
 end;
 
 procedure TGuiRenderer.SetColorKeyTolerance(const Value: Single);

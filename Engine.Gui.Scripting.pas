@@ -7,6 +7,7 @@ uses
   System.SysUtils,
   System.IOUtils,
   System.Math,
+  Vcl.Graphics,
   Vcl.StdCtrls,
   dwsComp,
   dwsExprs,
@@ -62,6 +63,9 @@ type
     procedure DoControlSetVisible(Info: TProgramInfo; ExtObject: TObject);
     procedure DoControlGetScale(Info: TProgramInfo; ExtObject: TObject);
     procedure DoControlSetScale(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoControlGetRotation(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoControlSetRotation(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoControlGetHovered(Info: TProgramInfo; ExtObject: TObject);
     procedure DoControlGetTint(Info: TProgramInfo; ExtObject: TObject);
     procedure DoControlSetTint(Info: TProgramInfo; ExtObject: TObject);
     procedure DoControlGetLayoutName(Info: TProgramInfo; ExtObject: TObject);
@@ -104,8 +108,32 @@ type
     procedure DoLabelSetTextLayout(Info: TProgramInfo; ExtObject: TObject);
 
     procedure DoWindowClose(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowMinimize(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowMaximize(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowRestore(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowToggleMaximize(Info: TProgramInfo; ExtObject: TObject);
     procedure DoWindowGetTitleOffset(Info: TProgramInfo; ExtObject: TObject);
     procedure DoWindowSetTitleOffset(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowGetTitleBarHeight(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowSetTitleBarHeight(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowGetButtonSize(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowSetButtonSize(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowGetState(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowSetState(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowGetShowMinimizeButton(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowSetShowMinimizeButton(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowGetShowMaximizeButton(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowSetShowMaximizeButton(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowGetShowCloseButton(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowSetShowCloseButton(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowGetMinimizeLayoutName(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowSetMinimizeLayoutName(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowGetMaximizeLayoutName(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowSetMaximizeLayoutName(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowGetRestoreLayoutName(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowSetRestoreLayoutName(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowGetCloseLayoutName(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoWindowSetCloseLayoutName(Info: TProgramInfo; ExtObject: TObject);
 
     procedure DoScrollbarGetMin(Info: TProgramInfo; ExtObject: TObject);
     procedure DoScrollbarSetMin(Info: TProgramInfo; ExtObject: TObject);
@@ -145,6 +173,100 @@ type
     procedure DoGridClear(Info: TProgramInfo; ExtObject: TObject);
     procedure DoGridSetText(Info: TProgramInfo; ExtObject: TObject);
 
+    procedure DoProgressGetMin(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressSetMin(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressGetMax(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressSetMax(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressGetValue(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressSetValue(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressGetHorizontal(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressSetHorizontal(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressGetReverse(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressSetReverse(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressGetShowText(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressSetShowText(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressGetFillLayoutName(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressSetFillLayoutName(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressGetFillColor(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressSetFillColor(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressGetTrackColor(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoProgressSetTrackColor(Info: TProgramInfo; ExtObject: TObject);
+
+    procedure DoShapeGetShape(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoShapeSetShape(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoShapeGetStartAngle(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoShapeSetStartAngle(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoShapeGetInnerRadius(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoShapeSetInnerRadius(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoShapeGetSegments(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoShapeSetSegments(Info: TProgramInfo; ExtObject: TObject);
+
+    procedure DoAnimatedProgressGetAtlasTexturePath(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressSetAtlasTexturePath(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressGetGridColumns(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressSetGridColumns(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressGetGridRows(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressSetGridRows(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressGetFirstFrame(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressSetFirstFrame(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressGetFrameCount(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressSetFrameCount(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressGetCurrentFrame(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressSetCurrentFrame(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressGetCurrentSheetFrame(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressGetGridFrameCapacity(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressGetFrameRate(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressSetFrameRate(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressGetLoop(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressSetLoop(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressGetPlaying(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressSetPlaying(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressGetOverlayLayoutName(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressSetOverlayLayoutName(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressLoadAtlas(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressRestart(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoAnimatedProgressUpdate(Info: TProgramInfo; ExtObject: TObject);
+
+    procedure DoSpinnerGetAngle(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSpinnerSetAngle(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSpinnerGetAutoSpin(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSpinnerSetAutoSpin(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSpinnerGetSpeed(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSpinnerSetSpeed(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSpinnerGetThickness(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSpinnerSetThickness(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSpinnerGetSegments(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSpinnerSetSegments(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSpinnerGetColor(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSpinnerSetColor(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSpinnerGetTrackColor(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSpinnerSetTrackColor(Info: TProgramInfo; ExtObject: TObject);
+
+    procedure DoListGetItemsText(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoListSetItemsText(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoListGetItemCount(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoListItem(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoListAddItem(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoListDeleteItem(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoListClear(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoListGetSelectedIndex(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoListSetSelectedIndex(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoListGetTopIndex(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoListSetTopIndex(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoListGetItemHeight(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoListSetItemHeight(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoListGetSelectionColor(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoListSetSelectionColor(Info: TProgramInfo; ExtObject: TObject);
+
+    procedure DoComboGetDroppedDown(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoComboSetDroppedDown(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoComboGetDropDownCount(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoComboSetDropDownCount(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoComboGetArrowLayoutName(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoComboSetArrowLayoutName(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoComboGetDropDownLayoutName(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoComboSetDropDownLayoutName(Info: TProgramInfo; ExtObject: TObject);
+
     procedure DoGuiEnabled(Info: TProgramInfo);
     procedure DoGuiSetEnabled(Info: TProgramInfo);
     procedure DoGuiLoadLayout(Info: TProgramInfo);
@@ -166,6 +288,12 @@ type
     procedure DoGuiCreateScrollbar(Info: TProgramInfo);
     procedure DoGuiCreatePopupMenu(Info: TProgramInfo);
     procedure DoGuiCreateStringGrid(Info: TProgramInfo);
+    procedure DoGuiCreateProgressBar(Info: TProgramInfo);
+    procedure DoGuiCreateShapeProgress(Info: TProgramInfo);
+    procedure DoGuiCreateAnimatedProgress(Info: TProgramInfo);
+    procedure DoGuiCreateSpinner(Info: TProgramInfo);
+    procedure DoGuiCreateListBox(Info: TProgramInfo);
+    procedure DoGuiCreateComboBox(Info: TProgramInfo);
     procedure DoGuiEventControl(Info: TProgramInfo);
     procedure DoGuiEventName(Info: TProgramInfo);
     procedure DoGuiEventHandlerName(Info: TProgramInfo);
@@ -285,6 +413,10 @@ begin
   AddMethod(GuiClass, 'SetVisible', '', ['Value'], ['Boolean'], DoControlSetVisible);
   AddMethod(GuiClass, 'GetScale', 'Float', [], [], DoControlGetScale);
   AddMethod(GuiClass, 'SetScale', '', ['Value'], ['Float'], DoControlSetScale);
+  AddMethod(GuiClass, 'GetRotation', 'Float', [], [], DoControlGetRotation);
+  AddMethod(GuiClass, 'SetRotation', '', ['Value'], ['Float'],
+    DoControlSetRotation);
+  AddMethod(GuiClass, 'GetHovered', 'Boolean', [], [], DoControlGetHovered);
   AddMethod(GuiClass, 'GetTint', 'TVector4', [], [], DoControlGetTint);
   AddMethod(GuiClass, 'SetTint', '', ['Value'], ['TVector4'], DoControlSetTint);
   AddMethod(GuiClass, 'GetLayoutName', 'String', [], [], DoControlGetLayoutName);
@@ -310,6 +442,8 @@ begin
   AddProperty(GuiClass, 'Height', 'Float', 'GetHeight', 'SetHeight');
   AddProperty(GuiClass, 'Visible', 'Boolean', 'GetVisible', 'SetVisible');
   AddProperty(GuiClass, 'Scale', 'Float', 'GetScale', 'SetScale');
+  AddProperty(GuiClass, 'Rotation', 'Float', 'GetRotation', 'SetRotation');
+  AddProperty(GuiClass, 'Hovered', 'Boolean', 'GetHovered', '');
   AddProperty(GuiClass, 'Tint', 'TVector4', 'GetTint', 'SetTint');
   AddProperty(GuiClass, 'LayoutName', 'String', 'GetLayoutName', 'SetLayoutName');
 
@@ -370,11 +504,76 @@ begin
 
   GuiClass := AddClass('TGuiWindow', 'TGuiTextControl');
   AddMethod(GuiClass, 'Close', '', [], [], DoWindowClose);
+  AddMethod(GuiClass, 'Minimize', '', [], [], DoWindowMinimize);
+  AddMethod(GuiClass, 'Maximize', '', [], [], DoWindowMaximize);
+  AddMethod(GuiClass, 'Restore', '', [], [], DoWindowRestore);
+  AddMethod(GuiClass, 'ToggleMaximize', '', [], [],
+    DoWindowToggleMaximize);
   AddMethod(GuiClass, 'GetTitleOffset', 'Float', [], [], DoWindowGetTitleOffset);
   AddMethod(GuiClass, 'SetTitleOffset', '', ['Value'], ['Float'],
     DoWindowSetTitleOffset);
+  AddMethod(GuiClass, 'GetTitleBarHeight', 'Float', [], [],
+    DoWindowGetTitleBarHeight);
+  AddMethod(GuiClass, 'SetTitleBarHeight', '', ['Value'], ['Float'],
+    DoWindowSetTitleBarHeight);
+  AddMethod(GuiClass, 'GetButtonSize', 'Float', [], [],
+    DoWindowGetButtonSize);
+  AddMethod(GuiClass, 'SetButtonSize', '', ['Value'], ['Float'],
+    DoWindowSetButtonSize);
+  AddMethod(GuiClass, 'GetWindowState', 'Integer', [], [],
+    DoWindowGetState);
+  AddMethod(GuiClass, 'SetWindowState', '', ['Value'], ['Integer'],
+    DoWindowSetState);
+  AddMethod(GuiClass, 'GetShowMinimizeButton', 'Boolean', [], [],
+    DoWindowGetShowMinimizeButton);
+  AddMethod(GuiClass, 'SetShowMinimizeButton', '', ['Value'], ['Boolean'],
+    DoWindowSetShowMinimizeButton);
+  AddMethod(GuiClass, 'GetShowMaximizeButton', 'Boolean', [], [],
+    DoWindowGetShowMaximizeButton);
+  AddMethod(GuiClass, 'SetShowMaximizeButton', '', ['Value'], ['Boolean'],
+    DoWindowSetShowMaximizeButton);
+  AddMethod(GuiClass, 'GetShowCloseButton', 'Boolean', [], [],
+    DoWindowGetShowCloseButton);
+  AddMethod(GuiClass, 'SetShowCloseButton', '', ['Value'], ['Boolean'],
+    DoWindowSetShowCloseButton);
+  AddMethod(GuiClass, 'GetMinimizeButtonLayoutName', 'String', [], [],
+    DoWindowGetMinimizeLayoutName);
+  AddMethod(GuiClass, 'SetMinimizeButtonLayoutName', '',
+    ['Value'], ['String'], DoWindowSetMinimizeLayoutName);
+  AddMethod(GuiClass, 'GetMaximizeButtonLayoutName', 'String', [], [],
+    DoWindowGetMaximizeLayoutName);
+  AddMethod(GuiClass, 'SetMaximizeButtonLayoutName', '',
+    ['Value'], ['String'], DoWindowSetMaximizeLayoutName);
+  AddMethod(GuiClass, 'GetRestoreButtonLayoutName', 'String', [], [],
+    DoWindowGetRestoreLayoutName);
+  AddMethod(GuiClass, 'SetRestoreButtonLayoutName', '',
+    ['Value'], ['String'], DoWindowSetRestoreLayoutName);
+  AddMethod(GuiClass, 'GetCloseButtonLayoutName', 'String', [], [],
+    DoWindowGetCloseLayoutName);
+  AddMethod(GuiClass, 'SetCloseButtonLayoutName', '',
+    ['Value'], ['String'], DoWindowSetCloseLayoutName);
   AddProperty(GuiClass, 'TitleOffset', 'Float',
     'GetTitleOffset', 'SetTitleOffset');
+  AddProperty(GuiClass, 'TitleBarHeight', 'Float',
+    'GetTitleBarHeight', 'SetTitleBarHeight');
+  AddProperty(GuiClass, 'ButtonSize', 'Float',
+    'GetButtonSize', 'SetButtonSize');
+  AddProperty(GuiClass, 'WindowState', 'Integer',
+    'GetWindowState', 'SetWindowState');
+  AddProperty(GuiClass, 'ShowMinimizeButton', 'Boolean',
+    'GetShowMinimizeButton', 'SetShowMinimizeButton');
+  AddProperty(GuiClass, 'ShowMaximizeButton', 'Boolean',
+    'GetShowMaximizeButton', 'SetShowMaximizeButton');
+  AddProperty(GuiClass, 'ShowCloseButton', 'Boolean',
+    'GetShowCloseButton', 'SetShowCloseButton');
+  AddProperty(GuiClass, 'MinimizeButtonLayoutName', 'String',
+    'GetMinimizeButtonLayoutName', 'SetMinimizeButtonLayoutName');
+  AddProperty(GuiClass, 'MaximizeButtonLayoutName', 'String',
+    'GetMaximizeButtonLayoutName', 'SetMaximizeButtonLayoutName');
+  AddProperty(GuiClass, 'RestoreButtonLayoutName', 'String',
+    'GetRestoreButtonLayoutName', 'SetRestoreButtonLayoutName');
+  AddProperty(GuiClass, 'CloseButtonLayoutName', 'String',
+    'GetCloseButtonLayoutName', 'SetCloseButtonLayoutName');
 
   GuiClass := AddClass('TGuiScrollbar', 'TGuiTextControl');
   AddMethod(GuiClass, 'GetMin', 'Float', [], [], DoScrollbarGetMin);
@@ -443,6 +642,237 @@ begin
     'GetSelectedRow', 'SetSelectedRow');
   AddProperty(GuiClass, 'SelectedColumn', 'Integer',
     'GetSelectedColumn', 'SetSelectedColumn');
+
+  GuiClass := AddClass('TGuiProgressBar', 'TGuiTextControl');
+  AddMethod(GuiClass, 'GetMin', 'Float', [], [], DoProgressGetMin);
+  AddMethod(GuiClass, 'SetMin', '', ['Value'], ['Float'], DoProgressSetMin);
+  AddMethod(GuiClass, 'GetMax', 'Float', [], [], DoProgressGetMax);
+  AddMethod(GuiClass, 'SetMax', '', ['Value'], ['Float'], DoProgressSetMax);
+  AddMethod(GuiClass, 'GetValue', 'Float', [], [], DoProgressGetValue);
+  AddMethod(GuiClass, 'SetValue', '', ['Value'], ['Float'],
+    DoProgressSetValue);
+  AddMethod(GuiClass, 'GetHorizontal', 'Boolean', [], [],
+    DoProgressGetHorizontal);
+  AddMethod(GuiClass, 'SetHorizontal', '', ['Value'], ['Boolean'],
+    DoProgressSetHorizontal);
+  AddMethod(GuiClass, 'GetReverse', 'Boolean', [], [], DoProgressGetReverse);
+  AddMethod(GuiClass, 'SetReverse', '', ['Value'], ['Boolean'],
+    DoProgressSetReverse);
+  AddMethod(GuiClass, 'GetShowText', 'Boolean', [], [], DoProgressGetShowText);
+  AddMethod(GuiClass, 'SetShowText', '', ['Value'], ['Boolean'],
+    DoProgressSetShowText);
+  AddMethod(GuiClass, 'GetFillLayoutName', 'String', [], [],
+    DoProgressGetFillLayoutName);
+  AddMethod(GuiClass, 'SetFillLayoutName', '', ['Value'], ['String'],
+    DoProgressSetFillLayoutName);
+  AddMethod(GuiClass, 'GetFillColor', 'Integer', [], [],
+    DoProgressGetFillColor);
+  AddMethod(GuiClass, 'SetFillColor', '', ['Value'], ['Integer'],
+    DoProgressSetFillColor);
+  AddMethod(GuiClass, 'GetTrackColor', 'Integer', [], [],
+    DoProgressGetTrackColor);
+  AddMethod(GuiClass, 'SetTrackColor', '', ['Value'], ['Integer'],
+    DoProgressSetTrackColor);
+  AddProperty(GuiClass, 'Min', 'Float', 'GetMin', 'SetMin');
+  AddProperty(GuiClass, 'Max', 'Float', 'GetMax', 'SetMax');
+  AddProperty(GuiClass, 'Value', 'Float', 'GetValue', 'SetValue');
+  AddProperty(GuiClass, 'Position', 'Float', 'GetValue', 'SetValue');
+  AddProperty(GuiClass, 'Horizontal', 'Boolean',
+    'GetHorizontal', 'SetHorizontal');
+  AddProperty(GuiClass, 'Reverse', 'Boolean', 'GetReverse', 'SetReverse');
+  AddProperty(GuiClass, 'ShowText', 'Boolean', 'GetShowText', 'SetShowText');
+  AddProperty(GuiClass, 'FillLayoutName', 'String',
+    'GetFillLayoutName', 'SetFillLayoutName');
+  AddProperty(GuiClass, 'FillColor', 'Integer',
+    'GetFillColor', 'SetFillColor');
+  AddProperty(GuiClass, 'TrackColor', 'Integer',
+    'GetTrackColor', 'SetTrackColor');
+
+  GuiClass := AddClass('TGuiShapeProgress', 'TGuiProgressBar');
+  AddMethod(GuiClass, 'GetShape', 'Integer', [], [], DoShapeGetShape);
+  AddMethod(GuiClass, 'SetShape', '', ['Value'], ['Integer'], DoShapeSetShape);
+  AddMethod(GuiClass, 'GetStartAngle', 'Float', [], [], DoShapeGetStartAngle);
+  AddMethod(GuiClass, 'SetStartAngle', '', ['Value'], ['Float'],
+    DoShapeSetStartAngle);
+  AddMethod(GuiClass, 'GetInnerRadius', 'Float', [], [], DoShapeGetInnerRadius);
+  AddMethod(GuiClass, 'SetInnerRadius', '', ['Value'], ['Float'],
+    DoShapeSetInnerRadius);
+  AddMethod(GuiClass, 'GetSegments', 'Integer', [], [], DoShapeGetSegments);
+  AddMethod(GuiClass, 'SetSegments', '', ['Value'], ['Integer'],
+    DoShapeSetSegments);
+  AddProperty(GuiClass, 'Shape', 'Integer', 'GetShape', 'SetShape');
+  AddProperty(GuiClass, 'StartAngle', 'Float',
+    'GetStartAngle', 'SetStartAngle');
+  AddProperty(GuiClass, 'InnerRadius', 'Float',
+    'GetInnerRadius', 'SetInnerRadius');
+  AddProperty(GuiClass, 'Segments', 'Integer', 'GetSegments', 'SetSegments');
+
+  GuiClass := AddClass('TGuiAnimatedProgress', 'TGuiProgressBar');
+  AddMethod(GuiClass, 'GetAtlasTexturePath', 'String', [], [],
+    DoAnimatedProgressGetAtlasTexturePath);
+  AddMethod(GuiClass, 'SetAtlasTexturePath', '', ['Value'], ['String'],
+    DoAnimatedProgressSetAtlasTexturePath);
+  AddMethod(GuiClass, 'GetGridColumns', 'Integer', [], [],
+    DoAnimatedProgressGetGridColumns);
+  AddMethod(GuiClass, 'SetGridColumns', '', ['Value'], ['Integer'],
+    DoAnimatedProgressSetGridColumns);
+  AddMethod(GuiClass, 'GetGridRows', 'Integer', [], [],
+    DoAnimatedProgressGetGridRows);
+  AddMethod(GuiClass, 'SetGridRows', '', ['Value'], ['Integer'],
+    DoAnimatedProgressSetGridRows);
+  AddMethod(GuiClass, 'GetFirstFrame', 'Integer', [], [],
+    DoAnimatedProgressGetFirstFrame);
+  AddMethod(GuiClass, 'SetFirstFrame', '', ['Value'], ['Integer'],
+    DoAnimatedProgressSetFirstFrame);
+  AddMethod(GuiClass, 'GetFrameCount', 'Integer', [], [],
+    DoAnimatedProgressGetFrameCount);
+  AddMethod(GuiClass, 'SetFrameCount', '', ['Value'], ['Integer'],
+    DoAnimatedProgressSetFrameCount);
+  AddMethod(GuiClass, 'GetCurrentFrameIndex', 'Integer', [], [],
+    DoAnimatedProgressGetCurrentFrame);
+  AddMethod(GuiClass, 'SetCurrentFrameIndex', '', ['Value'], ['Integer'],
+    DoAnimatedProgressSetCurrentFrame);
+  AddMethod(GuiClass, 'GetCurrentSheetFrameIndex', 'Integer', [], [],
+    DoAnimatedProgressGetCurrentSheetFrame);
+  AddMethod(GuiClass, 'GetGridFrameCapacity', 'Integer', [], [],
+    DoAnimatedProgressGetGridFrameCapacity);
+  AddMethod(GuiClass, 'GetFrameRate', 'Float', [], [],
+    DoAnimatedProgressGetFrameRate);
+  AddMethod(GuiClass, 'SetFrameRate', '', ['Value'], ['Float'],
+    DoAnimatedProgressSetFrameRate);
+  AddMethod(GuiClass, 'GetLoop', 'Boolean', [], [],
+    DoAnimatedProgressGetLoop);
+  AddMethod(GuiClass, 'SetLoop', '', ['Value'], ['Boolean'],
+    DoAnimatedProgressSetLoop);
+  AddMethod(GuiClass, 'GetPlaying', 'Boolean', [], [],
+    DoAnimatedProgressGetPlaying);
+  AddMethod(GuiClass, 'SetPlaying', '', ['Value'], ['Boolean'],
+    DoAnimatedProgressSetPlaying);
+  AddMethod(GuiClass, 'GetOverlayLayoutName', 'String', [], [],
+    DoAnimatedProgressGetOverlayLayoutName);
+  AddMethod(GuiClass, 'SetOverlayLayoutName', '', ['Value'], ['String'],
+    DoAnimatedProgressSetOverlayLayoutName);
+  AddMethod(GuiClass, 'LoadAtlas', 'Boolean', ['Path'], ['String'],
+    DoAnimatedProgressLoadAtlas);
+  AddMethod(GuiClass, 'RestartAnimation', '', [], [],
+    DoAnimatedProgressRestart);
+  AddMethod(GuiClass, 'UpdateAnimation', '', ['DeltaTime'], ['Float'],
+    DoAnimatedProgressUpdate);
+  AddProperty(GuiClass, 'AtlasTexturePath', 'String',
+    'GetAtlasTexturePath', 'SetAtlasTexturePath');
+  AddProperty(GuiClass, 'GridColumns', 'Integer',
+    'GetGridColumns', 'SetGridColumns');
+  AddProperty(GuiClass, 'GridRows', 'Integer',
+    'GetGridRows', 'SetGridRows');
+  AddProperty(GuiClass, 'FirstFrame', 'Integer',
+    'GetFirstFrame', 'SetFirstFrame');
+  AddProperty(GuiClass, 'FrameCount', 'Integer',
+    'GetFrameCount', 'SetFrameCount');
+  AddProperty(GuiClass, 'CurrentFrameIndex', 'Integer',
+    'GetCurrentFrameIndex', 'SetCurrentFrameIndex');
+  AddProperty(GuiClass, 'CurrentSheetFrameIndex', 'Integer',
+    'GetCurrentSheetFrameIndex', '');
+  AddProperty(GuiClass, 'GridFrameCapacity', 'Integer',
+    'GetGridFrameCapacity', '');
+  AddProperty(GuiClass, 'FrameRate', 'Float',
+    'GetFrameRate', 'SetFrameRate');
+  AddProperty(GuiClass, 'Loop', 'Boolean', 'GetLoop', 'SetLoop');
+  AddProperty(GuiClass, 'Playing', 'Boolean',
+    'GetPlaying', 'SetPlaying');
+  AddProperty(GuiClass, 'OverlayLayoutName', 'String',
+    'GetOverlayLayoutName', 'SetOverlayLayoutName');
+
+  GuiClass := AddClass('TGuiSpinner', 'TGuiControl');
+  AddMethod(GuiClass, 'GetAngle', 'Float', [], [], DoSpinnerGetAngle);
+  AddMethod(GuiClass, 'SetAngle', '', ['Value'], ['Float'], DoSpinnerSetAngle);
+  AddMethod(GuiClass, 'GetAutoSpin', 'Boolean', [], [], DoSpinnerGetAutoSpin);
+  AddMethod(GuiClass, 'SetAutoSpin', '', ['Value'], ['Boolean'],
+    DoSpinnerSetAutoSpin);
+  AddMethod(GuiClass, 'GetSpeed', 'Float', [], [], DoSpinnerGetSpeed);
+  AddMethod(GuiClass, 'SetSpeed', '', ['Value'], ['Float'], DoSpinnerSetSpeed);
+  AddMethod(GuiClass, 'GetThickness', 'Float', [], [], DoSpinnerGetThickness);
+  AddMethod(GuiClass, 'SetThickness', '', ['Value'], ['Float'],
+    DoSpinnerSetThickness);
+  AddMethod(GuiClass, 'GetSegments', 'Integer', [], [], DoSpinnerGetSegments);
+  AddMethod(GuiClass, 'SetSegments', '', ['Value'], ['Integer'],
+    DoSpinnerSetSegments);
+  AddMethod(GuiClass, 'GetColor', 'Integer', [], [], DoSpinnerGetColor);
+  AddMethod(GuiClass, 'SetColor', '', ['Value'], ['Integer'],
+    DoSpinnerSetColor);
+  AddMethod(GuiClass, 'GetTrackColor', 'Integer', [], [],
+    DoSpinnerGetTrackColor);
+  AddMethod(GuiClass, 'SetTrackColor', '', ['Value'], ['Integer'],
+    DoSpinnerSetTrackColor);
+  AddProperty(GuiClass, 'Angle', 'Float', 'GetAngle', 'SetAngle');
+  AddProperty(GuiClass, 'AutoSpin', 'Boolean', 'GetAutoSpin', 'SetAutoSpin');
+  AddProperty(GuiClass, 'Speed', 'Float', 'GetSpeed', 'SetSpeed');
+  AddProperty(GuiClass, 'Thickness', 'Float', 'GetThickness', 'SetThickness');
+  AddProperty(GuiClass, 'Segments', 'Integer', 'GetSegments', 'SetSegments');
+  AddProperty(GuiClass, 'Color', 'Integer', 'GetColor', 'SetColor');
+  AddProperty(GuiClass, 'TrackColor', 'Integer',
+    'GetTrackColor', 'SetTrackColor');
+
+  GuiClass := AddClass('TGuiListBox', 'TGuiTextControl');
+  AddMethod(GuiClass, 'GetItemsText', 'String', [], [], DoListGetItemsText);
+  AddMethod(GuiClass, 'SetItemsText', '', ['Value'], ['String'],
+    DoListSetItemsText);
+  AddMethod(GuiClass, 'GetItemCount', 'Integer', [], [], DoListGetItemCount);
+  AddMethod(GuiClass, 'Item', 'String', ['Index'], ['Integer'], DoListItem);
+  AddMethod(GuiClass, 'AddItem', 'Integer', ['Text'], ['String'],
+    DoListAddItem);
+  AddMethod(GuiClass, 'DeleteItem', '', ['Index'], ['Integer'],
+    DoListDeleteItem);
+  AddMethod(GuiClass, 'Clear', '', [], [], DoListClear);
+  AddMethod(GuiClass, 'GetSelectedIndex', 'Integer', [], [],
+    DoListGetSelectedIndex);
+  AddMethod(GuiClass, 'SetSelectedIndex', '', ['Value'], ['Integer'],
+    DoListSetSelectedIndex);
+  AddMethod(GuiClass, 'GetTopIndex', 'Integer', [], [], DoListGetTopIndex);
+  AddMethod(GuiClass, 'SetTopIndex', '', ['Value'], ['Integer'],
+    DoListSetTopIndex);
+  AddMethod(GuiClass, 'GetItemHeight', 'Float', [], [], DoListGetItemHeight);
+  AddMethod(GuiClass, 'SetItemHeight', '', ['Value'], ['Float'],
+    DoListSetItemHeight);
+  AddMethod(GuiClass, 'GetSelectionColor', 'Integer', [], [],
+    DoListGetSelectionColor);
+  AddMethod(GuiClass, 'SetSelectionColor', '', ['Value'], ['Integer'],
+    DoListSetSelectionColor);
+  AddProperty(GuiClass, 'ItemsText', 'String',
+    'GetItemsText', 'SetItemsText');
+  AddProperty(GuiClass, 'ItemCount', 'Integer', 'GetItemCount', '');
+  AddProperty(GuiClass, 'SelectedIndex', 'Integer',
+    'GetSelectedIndex', 'SetSelectedIndex');
+  AddProperty(GuiClass, 'TopIndex', 'Integer', 'GetTopIndex', 'SetTopIndex');
+  AddProperty(GuiClass, 'ItemHeight', 'Float',
+    'GetItemHeight', 'SetItemHeight');
+  AddProperty(GuiClass, 'SelectionColor', 'Integer',
+    'GetSelectionColor', 'SetSelectionColor');
+
+  GuiClass := AddClass('TGuiComboBox', 'TGuiListBox');
+  AddMethod(GuiClass, 'GetDroppedDown', 'Boolean', [], [],
+    DoComboGetDroppedDown);
+  AddMethod(GuiClass, 'SetDroppedDown', '', ['Value'], ['Boolean'],
+    DoComboSetDroppedDown);
+  AddMethod(GuiClass, 'GetDropDownCount', 'Integer', [], [],
+    DoComboGetDropDownCount);
+  AddMethod(GuiClass, 'SetDropDownCount', '', ['Value'], ['Integer'],
+    DoComboSetDropDownCount);
+  AddMethod(GuiClass, 'GetArrowLayoutName', 'String', [], [],
+    DoComboGetArrowLayoutName);
+  AddMethod(GuiClass, 'SetArrowLayoutName', '', ['Value'], ['String'],
+    DoComboSetArrowLayoutName);
+  AddMethod(GuiClass, 'GetDropDownLayoutName', 'String', [], [],
+    DoComboGetDropDownLayoutName);
+  AddMethod(GuiClass, 'SetDropDownLayoutName', '', ['Value'], ['String'],
+    DoComboSetDropDownLayoutName);
+  AddProperty(GuiClass, 'DroppedDown', 'Boolean',
+    'GetDroppedDown', 'SetDroppedDown');
+  AddProperty(GuiClass, 'DropDownCount', 'Integer',
+    'GetDropDownCount', 'SetDropDownCount');
+  AddProperty(GuiClass, 'ArrowLayoutName', 'String',
+    'GetArrowLayoutName', 'SetArrowLayoutName');
+  AddProperty(GuiClass, 'DropDownLayoutName', 'String',
+    'GetDropDownLayoutName', 'SetDropDownLayoutName');
 end;
 
 procedure TdwsGuiUnit.RequireManager;
@@ -624,6 +1054,30 @@ end;
 procedure TdwsGuiUnit.DoControlSetScale(Info: TProgramInfo; ExtObject: TObject);
 begin
   RequireControl(ExtObject).Scale := Max(0.0, Info.ParamAsFloat[0]);
+end;
+
+procedure TdwsGuiUnit.DoControlGetRotation(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsFloat :=
+    TGuiBaseComponent(RequireControl(ExtObject)).Rotation;
+end;
+
+procedure TdwsGuiUnit.DoControlSetRotation(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiBaseComponent(RequireControl(ExtObject)).Rotation :=
+    Info.ParamAsFloat[0];
+end;
+
+procedure TdwsGuiUnit.DoControlGetHovered(Info: TProgramInfo;
+  ExtObject: TObject);
+var
+  Control: TGuiControl;
+begin
+  Control := RequireControl(ExtObject);
+  Info.ResultAsBoolean := (Control is TGuiFocusControl) and
+    TGuiFocusControl(Control).Hovered;
 end;
 
 procedure TdwsGuiUnit.DoControlGetTint(Info: TProgramInfo; ExtObject: TObject);
@@ -841,6 +1295,30 @@ begin
   TGuiForm(RequireControl(ExtObject)).Close;
 end;
 
+procedure TdwsGuiUnit.DoWindowMinimize(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiForm(RequireControl(ExtObject)).Minimize;
+end;
+
+procedure TdwsGuiUnit.DoWindowMaximize(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiForm(RequireControl(ExtObject)).Maximize;
+end;
+
+procedure TdwsGuiUnit.DoWindowRestore(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiForm(RequireControl(ExtObject)).Restore;
+end;
+
+procedure TdwsGuiUnit.DoWindowToggleMaximize(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiForm(RequireControl(ExtObject)).ToggleMaximize;
+end;
+
 procedure TdwsGuiUnit.DoWindowGetTitleOffset(Info: TProgramInfo;
   ExtObject: TObject);
 begin
@@ -851,6 +1329,145 @@ procedure TdwsGuiUnit.DoWindowSetTitleOffset(Info: TProgramInfo;
   ExtObject: TObject);
 begin
   TGuiForm(RequireControl(ExtObject)).TitleOffset := Info.ParamAsFloat[0];
+end;
+
+procedure TdwsGuiUnit.DoWindowGetTitleBarHeight(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsFloat :=
+    TGuiForm(RequireControl(ExtObject)).TitleBarHeight;
+end;
+
+procedure TdwsGuiUnit.DoWindowSetTitleBarHeight(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiForm(RequireControl(ExtObject)).TitleBarHeight :=
+    Info.ParamAsFloat[0];
+end;
+
+procedure TdwsGuiUnit.DoWindowGetButtonSize(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsFloat := TGuiForm(RequireControl(ExtObject)).ButtonSize;
+end;
+
+procedure TdwsGuiUnit.DoWindowSetButtonSize(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiForm(RequireControl(ExtObject)).ButtonSize := Info.ParamAsFloat[0];
+end;
+
+procedure TdwsGuiUnit.DoWindowGetState(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    Ord(TGuiForm(RequireControl(ExtObject)).WindowState);
+end;
+
+procedure TdwsGuiUnit.DoWindowSetState(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiForm(RequireControl(ExtObject)).WindowState :=
+    TGuiWindowState(EnsureRange(Info.ParamAsInteger[0],
+      Ord(Low(TGuiWindowState)), Ord(High(TGuiWindowState))));
+end;
+
+procedure TdwsGuiUnit.DoWindowGetShowMinimizeButton(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsBoolean :=
+    TGuiForm(RequireControl(ExtObject)).ShowMinimizeButton;
+end;
+
+procedure TdwsGuiUnit.DoWindowSetShowMinimizeButton(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiForm(RequireControl(ExtObject)).ShowMinimizeButton :=
+    Info.ParamAsBoolean[0];
+end;
+
+procedure TdwsGuiUnit.DoWindowGetShowMaximizeButton(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsBoolean :=
+    TGuiForm(RequireControl(ExtObject)).ShowMaximizeButton;
+end;
+
+procedure TdwsGuiUnit.DoWindowSetShowMaximizeButton(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiForm(RequireControl(ExtObject)).ShowMaximizeButton :=
+    Info.ParamAsBoolean[0];
+end;
+
+procedure TdwsGuiUnit.DoWindowGetShowCloseButton(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsBoolean :=
+    TGuiForm(RequireControl(ExtObject)).ShowCloseButton;
+end;
+
+procedure TdwsGuiUnit.DoWindowSetShowCloseButton(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiForm(RequireControl(ExtObject)).ShowCloseButton :=
+    Info.ParamAsBoolean[0];
+end;
+
+procedure TdwsGuiUnit.DoWindowGetMinimizeLayoutName(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsString :=
+    TGuiForm(RequireControl(ExtObject)).MinimizeButtonLayoutName;
+end;
+
+procedure TdwsGuiUnit.DoWindowSetMinimizeLayoutName(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiForm(RequireControl(ExtObject)).MinimizeButtonLayoutName :=
+    Info.ParamAsString[0];
+end;
+
+procedure TdwsGuiUnit.DoWindowGetMaximizeLayoutName(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsString :=
+    TGuiForm(RequireControl(ExtObject)).MaximizeButtonLayoutName;
+end;
+
+procedure TdwsGuiUnit.DoWindowSetMaximizeLayoutName(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiForm(RequireControl(ExtObject)).MaximizeButtonLayoutName :=
+    Info.ParamAsString[0];
+end;
+
+procedure TdwsGuiUnit.DoWindowGetRestoreLayoutName(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsString :=
+    TGuiForm(RequireControl(ExtObject)).RestoreButtonLayoutName;
+end;
+
+procedure TdwsGuiUnit.DoWindowSetRestoreLayoutName(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiForm(RequireControl(ExtObject)).RestoreButtonLayoutName :=
+    Info.ParamAsString[0];
+end;
+
+procedure TdwsGuiUnit.DoWindowGetCloseLayoutName(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsString :=
+    TGuiForm(RequireControl(ExtObject)).CloseButtonLayoutName;
+end;
+
+procedure TdwsGuiUnit.DoWindowSetCloseLayoutName(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiForm(RequireControl(ExtObject)).CloseButtonLayoutName :=
+    Info.ParamAsString[0];
 end;
 
 procedure TdwsGuiUnit.DoScrollbarGetMin(Info: TProgramInfo; ExtObject: TObject);
@@ -1056,6 +1673,591 @@ begin
   TGuiStringGrid(RequireControl(ExtObject)).SetText(Info.ParamAsString[0]);
 end;
 
+procedure TdwsGuiUnit.DoProgressGetMin(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsFloat := TGuiProgressBar(RequireControl(ExtObject)).Min;
+end;
+
+procedure TdwsGuiUnit.DoProgressSetMin(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiProgressBar(RequireControl(ExtObject)).Min := Info.ParamAsFloat[0];
+end;
+
+procedure TdwsGuiUnit.DoProgressGetMax(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsFloat := TGuiProgressBar(RequireControl(ExtObject)).Max;
+end;
+
+procedure TdwsGuiUnit.DoProgressSetMax(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiProgressBar(RequireControl(ExtObject)).Max := Info.ParamAsFloat[0];
+end;
+
+procedure TdwsGuiUnit.DoProgressGetValue(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsFloat := TGuiProgressBar(RequireControl(ExtObject)).Value;
+end;
+
+procedure TdwsGuiUnit.DoProgressSetValue(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiProgressBar(RequireControl(ExtObject)).Value := Info.ParamAsFloat[0];
+end;
+
+procedure TdwsGuiUnit.DoProgressGetHorizontal(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsBoolean :=
+    TGuiProgressBar(RequireControl(ExtObject)).Horizontal;
+end;
+
+procedure TdwsGuiUnit.DoProgressSetHorizontal(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiProgressBar(RequireControl(ExtObject)).Horizontal :=
+    Info.ParamAsBoolean[0];
+end;
+
+procedure TdwsGuiUnit.DoProgressGetReverse(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsBoolean := TGuiProgressBar(RequireControl(ExtObject)).Reverse;
+end;
+
+procedure TdwsGuiUnit.DoProgressSetReverse(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiProgressBar(RequireControl(ExtObject)).Reverse :=
+    Info.ParamAsBoolean[0];
+end;
+
+procedure TdwsGuiUnit.DoProgressGetShowText(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsBoolean := TGuiProgressBar(RequireControl(ExtObject)).ShowText;
+end;
+
+procedure TdwsGuiUnit.DoProgressSetShowText(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiProgressBar(RequireControl(ExtObject)).ShowText :=
+    Info.ParamAsBoolean[0];
+end;
+
+procedure TdwsGuiUnit.DoProgressGetFillLayoutName(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsString :=
+    TGuiProgressBar(RequireControl(ExtObject)).FillLayoutName;
+end;
+
+procedure TdwsGuiUnit.DoProgressSetFillLayoutName(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiProgressBar(RequireControl(ExtObject)).FillLayoutName :=
+    Info.ParamAsString[0];
+end;
+
+procedure TdwsGuiUnit.DoProgressGetFillColor(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    TGuiProgressBar(RequireControl(ExtObject)).FillColor;
+end;
+
+procedure TdwsGuiUnit.DoProgressSetFillColor(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiProgressBar(RequireControl(ExtObject)).FillColor :=
+    TColor(Info.ParamAsInteger[0]);
+end;
+
+procedure TdwsGuiUnit.DoProgressGetTrackColor(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    TGuiProgressBar(RequireControl(ExtObject)).TrackColor;
+end;
+
+procedure TdwsGuiUnit.DoProgressSetTrackColor(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiProgressBar(RequireControl(ExtObject)).TrackColor :=
+    TColor(Info.ParamAsInteger[0]);
+end;
+
+procedure TdwsGuiUnit.DoShapeGetShape(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    Ord(TGuiShapeProgress(RequireControl(ExtObject)).Shape);
+end;
+
+procedure TdwsGuiUnit.DoShapeSetShape(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiShapeProgress(RequireControl(ExtObject)).Shape :=
+    TGuiProgressShape(EnsureRange(Info.ParamAsInteger[0],
+      Ord(Low(TGuiProgressShape)), Ord(High(TGuiProgressShape))));
+end;
+
+procedure TdwsGuiUnit.DoShapeGetStartAngle(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsFloat :=
+    TGuiShapeProgress(RequireControl(ExtObject)).StartAngle;
+end;
+
+procedure TdwsGuiUnit.DoShapeSetStartAngle(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiShapeProgress(RequireControl(ExtObject)).StartAngle :=
+    Info.ParamAsFloat[0];
+end;
+
+procedure TdwsGuiUnit.DoShapeGetInnerRadius(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsFloat :=
+    TGuiShapeProgress(RequireControl(ExtObject)).InnerRadius;
+end;
+
+procedure TdwsGuiUnit.DoShapeSetInnerRadius(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiShapeProgress(RequireControl(ExtObject)).InnerRadius :=
+    Info.ParamAsFloat[0];
+end;
+
+procedure TdwsGuiUnit.DoShapeGetSegments(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    TGuiShapeProgress(RequireControl(ExtObject)).Segments;
+end;
+
+procedure TdwsGuiUnit.DoShapeSetSegments(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiShapeProgress(RequireControl(ExtObject)).Segments :=
+    Info.ParamAsInteger[0];
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressGetAtlasTexturePath(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsString :=
+    TGuiAnimatedProgress(RequireControl(ExtObject)).AtlasTexturePath;
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressSetAtlasTexturePath(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  TGuiAnimatedProgress(RequireControl(ExtObject)).AtlasTexturePath :=
+    Info.ParamAsString[0];
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressGetGridColumns(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    TGuiAnimatedProgress(RequireControl(ExtObject)).GridColumns;
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressSetGridColumns(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  TGuiAnimatedProgress(RequireControl(ExtObject)).GridColumns :=
+    Info.ParamAsInteger[0];
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressGetGridRows(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    TGuiAnimatedProgress(RequireControl(ExtObject)).GridRows;
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressSetGridRows(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  TGuiAnimatedProgress(RequireControl(ExtObject)).GridRows :=
+    Info.ParamAsInteger[0];
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressGetFirstFrame(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    TGuiAnimatedProgress(RequireControl(ExtObject)).FirstFrame;
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressSetFirstFrame(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  TGuiAnimatedProgress(RequireControl(ExtObject)).FirstFrame :=
+    Info.ParamAsInteger[0];
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressGetFrameCount(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    TGuiAnimatedProgress(RequireControl(ExtObject)).FrameCount;
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressSetFrameCount(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  TGuiAnimatedProgress(RequireControl(ExtObject)).FrameCount :=
+    Info.ParamAsInteger[0];
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressGetCurrentFrame(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    TGuiAnimatedProgress(RequireControl(ExtObject)).CurrentFrameIndex;
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressSetCurrentFrame(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  TGuiAnimatedProgress(RequireControl(ExtObject)).CurrentFrameIndex :=
+    Info.ParamAsInteger[0];
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressGetCurrentSheetFrame(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    TGuiAnimatedProgress(RequireControl(ExtObject)).
+      CurrentSheetFrameIndex;
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressGetGridFrameCapacity(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    TGuiAnimatedProgress(RequireControl(ExtObject)).GridFrameCapacity;
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressGetFrameRate(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsFloat :=
+    TGuiAnimatedProgress(RequireControl(ExtObject)).FrameRate;
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressSetFrameRate(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  TGuiAnimatedProgress(RequireControl(ExtObject)).FrameRate :=
+    Info.ParamAsFloat[0];
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressGetLoop(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsBoolean :=
+    TGuiAnimatedProgress(RequireControl(ExtObject)).Loop;
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressSetLoop(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  TGuiAnimatedProgress(RequireControl(ExtObject)).Loop :=
+    Info.ParamAsBoolean[0];
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressGetPlaying(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsBoolean :=
+    TGuiAnimatedProgress(RequireControl(ExtObject)).Playing;
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressSetPlaying(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  TGuiAnimatedProgress(RequireControl(ExtObject)).Playing :=
+    Info.ParamAsBoolean[0];
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressGetOverlayLayoutName(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsString :=
+    TGuiAnimatedProgress(RequireControl(ExtObject)).OverlayLayoutName;
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressSetOverlayLayoutName(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  TGuiAnimatedProgress(RequireControl(ExtObject)).OverlayLayoutName :=
+    Info.ParamAsString[0];
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressLoadAtlas(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsBoolean :=
+    TGuiAnimatedProgress(RequireControl(ExtObject)).LoadAtlas(
+      Info.ParamAsString[0]);
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressRestart(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  TGuiAnimatedProgress(RequireControl(ExtObject)).RestartAnimation;
+end;
+
+procedure TdwsGuiUnit.DoAnimatedProgressUpdate(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  TGuiAnimatedProgress(RequireControl(ExtObject)).UpdateAnimation(
+    Info.ParamAsFloat[0]);
+end;
+
+procedure TdwsGuiUnit.DoSpinnerGetAngle(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsFloat := TGuiSpinner(RequireControl(ExtObject)).Angle;
+end;
+
+procedure TdwsGuiUnit.DoSpinnerSetAngle(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiSpinner(RequireControl(ExtObject)).Angle := Info.ParamAsFloat[0];
+end;
+
+procedure TdwsGuiUnit.DoSpinnerGetAutoSpin(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsBoolean := TGuiSpinner(RequireControl(ExtObject)).AutoSpin;
+end;
+
+procedure TdwsGuiUnit.DoSpinnerSetAutoSpin(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiSpinner(RequireControl(ExtObject)).AutoSpin := Info.ParamAsBoolean[0];
+end;
+
+procedure TdwsGuiUnit.DoSpinnerGetSpeed(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsFloat := TGuiSpinner(RequireControl(ExtObject)).Speed;
+end;
+
+procedure TdwsGuiUnit.DoSpinnerSetSpeed(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiSpinner(RequireControl(ExtObject)).Speed := Info.ParamAsFloat[0];
+end;
+
+procedure TdwsGuiUnit.DoSpinnerGetThickness(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsFloat := TGuiSpinner(RequireControl(ExtObject)).Thickness;
+end;
+
+procedure TdwsGuiUnit.DoSpinnerSetThickness(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiSpinner(RequireControl(ExtObject)).Thickness := Info.ParamAsFloat[0];
+end;
+
+procedure TdwsGuiUnit.DoSpinnerGetSegments(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsInteger := TGuiSpinner(RequireControl(ExtObject)).Segments;
+end;
+
+procedure TdwsGuiUnit.DoSpinnerSetSegments(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiSpinner(RequireControl(ExtObject)).Segments := Info.ParamAsInteger[0];
+end;
+
+procedure TdwsGuiUnit.DoSpinnerGetColor(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsInteger := TGuiSpinner(RequireControl(ExtObject)).Color;
+end;
+
+procedure TdwsGuiUnit.DoSpinnerSetColor(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiSpinner(RequireControl(ExtObject)).Color :=
+    TColor(Info.ParamAsInteger[0]);
+end;
+
+procedure TdwsGuiUnit.DoSpinnerGetTrackColor(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsInteger := TGuiSpinner(RequireControl(ExtObject)).TrackColor;
+end;
+
+procedure TdwsGuiUnit.DoSpinnerSetTrackColor(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiSpinner(RequireControl(ExtObject)).TrackColor :=
+    TColor(Info.ParamAsInteger[0]);
+end;
+
+procedure TdwsGuiUnit.DoListGetItemsText(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsString := TGuiListBox(RequireControl(ExtObject)).Items.Text;
+end;
+
+procedure TdwsGuiUnit.DoListSetItemsText(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiListBox(RequireControl(ExtObject)).Items.Text := Info.ParamAsString[0];
+end;
+
+procedure TdwsGuiUnit.DoListGetItemCount(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsInteger := TGuiListBox(RequireControl(ExtObject)).ItemCount;
+end;
+
+procedure TdwsGuiUnit.DoListItem(Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsString := TGuiListBox(RequireControl(ExtObject)).Item(
+    Info.ParamAsInteger[0]);
+end;
+
+procedure TdwsGuiUnit.DoListAddItem(Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsInteger := TGuiListBox(RequireControl(ExtObject)).AddItem(
+    Info.ParamAsString[0]);
+end;
+
+procedure TdwsGuiUnit.DoListDeleteItem(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiListBox(RequireControl(ExtObject)).DeleteItem(Info.ParamAsInteger[0]);
+end;
+
+procedure TdwsGuiUnit.DoListClear(Info: TProgramInfo; ExtObject: TObject);
+begin
+  TGuiListBox(RequireControl(ExtObject)).Clear;
+end;
+
+procedure TdwsGuiUnit.DoListGetSelectedIndex(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    TGuiListBox(RequireControl(ExtObject)).SelectedIndex;
+end;
+
+procedure TdwsGuiUnit.DoListSetSelectedIndex(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiListBox(RequireControl(ExtObject)).SelectedIndex :=
+    Info.ParamAsInteger[0];
+end;
+
+procedure TdwsGuiUnit.DoListGetTopIndex(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsInteger := TGuiListBox(RequireControl(ExtObject)).TopIndex;
+end;
+
+procedure TdwsGuiUnit.DoListSetTopIndex(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiListBox(RequireControl(ExtObject)).TopIndex := Info.ParamAsInteger[0];
+end;
+
+procedure TdwsGuiUnit.DoListGetItemHeight(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsFloat := TGuiListBox(RequireControl(ExtObject)).ItemHeight;
+end;
+
+procedure TdwsGuiUnit.DoListSetItemHeight(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiListBox(RequireControl(ExtObject)).ItemHeight := Info.ParamAsFloat[0];
+end;
+
+procedure TdwsGuiUnit.DoListGetSelectionColor(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    TGuiListBox(RequireControl(ExtObject)).SelectionColor;
+end;
+
+procedure TdwsGuiUnit.DoListSetSelectionColor(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiListBox(RequireControl(ExtObject)).SelectionColor :=
+    TColor(Info.ParamAsInteger[0]);
+end;
+
+procedure TdwsGuiUnit.DoComboGetDroppedDown(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsBoolean := TGuiComboBox(RequireControl(ExtObject)).DroppedDown;
+end;
+
+procedure TdwsGuiUnit.DoComboSetDroppedDown(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiComboBox(RequireControl(ExtObject)).DroppedDown :=
+    Info.ParamAsBoolean[0];
+end;
+
+procedure TdwsGuiUnit.DoComboGetDropDownCount(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsInteger :=
+    TGuiComboBox(RequireControl(ExtObject)).DropDownCount;
+end;
+
+procedure TdwsGuiUnit.DoComboSetDropDownCount(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiComboBox(RequireControl(ExtObject)).DropDownCount :=
+    Info.ParamAsInteger[0];
+end;
+
+procedure TdwsGuiUnit.DoComboGetArrowLayoutName(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsString :=
+    TGuiComboBox(RequireControl(ExtObject)).ArrowLayoutName;
+end;
+
+procedure TdwsGuiUnit.DoComboSetArrowLayoutName(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiComboBox(RequireControl(ExtObject)).ArrowLayoutName :=
+    Info.ParamAsString[0];
+end;
+
+procedure TdwsGuiUnit.DoComboGetDropDownLayoutName(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  Info.ResultAsString :=
+    TGuiComboBox(RequireControl(ExtObject)).DropDownLayoutName;
+end;
+
+procedure TdwsGuiUnit.DoComboSetDropDownLayoutName(Info: TProgramInfo;
+  ExtObject: TObject);
+begin
+  TGuiComboBox(RequireControl(ExtObject)).DropDownLayoutName :=
+    Info.ParamAsString[0];
+end;
+
 procedure TdwsGuiUnit.DoGuiEnabled(Info: TProgramInfo);
 begin
   RequireManager;
@@ -1208,6 +2410,48 @@ begin
     GuiParentFromInfo(Self, Info)));
 end;
 
+procedure TdwsGuiUnit.DoGuiCreateProgressBar(Info: TProgramInfo);
+begin
+  RequireManager;
+  SetResultControl(Info, FManager.CreateProgressBar(Info.ParamAsString[0],
+    GuiParentFromInfo(Self, Info)));
+end;
+
+procedure TdwsGuiUnit.DoGuiCreateShapeProgress(Info: TProgramInfo);
+begin
+  RequireManager;
+  SetResultControl(Info, FManager.CreateShapeProgress(Info.ParamAsString[0],
+    GuiParentFromInfo(Self, Info)));
+end;
+
+procedure TdwsGuiUnit.DoGuiCreateAnimatedProgress(Info: TProgramInfo);
+begin
+  RequireManager;
+  SetResultControl(Info, FManager.CreateAnimatedProgress(
+    Info.ParamAsString[0], GuiParentFromInfo(Self, Info)));
+end;
+
+procedure TdwsGuiUnit.DoGuiCreateSpinner(Info: TProgramInfo);
+begin
+  RequireManager;
+  SetResultControl(Info, FManager.CreateSpinner(Info.ParamAsString[0],
+    GuiParentFromInfo(Self, Info)));
+end;
+
+procedure TdwsGuiUnit.DoGuiCreateListBox(Info: TProgramInfo);
+begin
+  RequireManager;
+  SetResultControl(Info, FManager.CreateListBox(Info.ParamAsString[0],
+    GuiParentFromInfo(Self, Info)));
+end;
+
+procedure TdwsGuiUnit.DoGuiCreateComboBox(Info: TProgramInfo);
+begin
+  RequireManager;
+  SetResultControl(Info, FManager.CreateComboBox(Info.ParamAsString[0],
+    GuiParentFromInfo(Self, Info)));
+end;
+
 procedure TdwsGuiUnit.DoGuiEventControl(Info: TProgramInfo);
 begin
   SetResultControl(Info, FEventControl);
@@ -1323,6 +2567,18 @@ begin
     DoGuiCreatePopupMenu);
   RegisterCreateFunction('GuiCreateStringGrid', 'TGuiStringGrid',
     DoGuiCreateStringGrid);
+  RegisterCreateFunction('GuiCreateProgressBar', 'TGuiProgressBar',
+    DoGuiCreateProgressBar);
+  RegisterCreateFunction('GuiCreateShapeProgress', 'TGuiShapeProgress',
+    DoGuiCreateShapeProgress);
+  RegisterCreateFunction('GuiCreateAnimatedProgress',
+    'TGuiAnimatedProgress', DoGuiCreateAnimatedProgress);
+  RegisterCreateFunction('GuiCreateSpinner', 'TGuiSpinner',
+    DoGuiCreateSpinner);
+  RegisterCreateFunction('GuiCreateListBox', 'TGuiListBox',
+    DoGuiCreateListBox);
+  RegisterCreateFunction('GuiCreateComboBox', 'TGuiComboBox',
+    DoGuiCreateComboBox);
 
   RegisterGuiFunction('GuiEventControl', 'TGuiControl', [], [],
     DoGuiEventControl);

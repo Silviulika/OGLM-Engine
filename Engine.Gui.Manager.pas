@@ -28,7 +28,13 @@ type
     gckWindow,
     gckScrollbar,
     gckPopupMenu,
-    gckStringGrid
+    gckStringGrid,
+    gckProgressBar,
+    gckShapeProgress,
+    gckSpinner,
+    gckListBox,
+    gckComboBox,
+    gckAnimatedProgress
   );
 
   TGuiEventData = record
@@ -107,6 +113,9 @@ type
     procedure ControlButtonClick(Sender: TObject);
     procedure ControlChanged(Sender: TObject);
     procedure ControlFormMoving(Sender: TGuiForm; var Left, Top: Single);
+    procedure ControlFormMaximize(Sender: TGuiForm);
+    procedure ControlFormMinimize(Sender: TGuiForm);
+    procedure ControlFormRestore(Sender: TGuiForm);
     procedure ControlFormShow(Sender: TGuiForm);
     procedure ControlFormHide(Sender: TGuiForm);
     procedure ControlPopupClick(Sender: TGuiPopupMenu; Index: Integer;
@@ -148,6 +157,18 @@ type
       AParent: TGuiControl = nil): TGuiPopupMenu;
     function CreateStringGrid(const AName: string;
       AParent: TGuiControl = nil): TGuiStringGrid;
+    function CreateProgressBar(const AName: string;
+      AParent: TGuiControl = nil): TGuiProgressBar;
+    function CreateShapeProgress(const AName: string;
+      AParent: TGuiControl = nil): TGuiShapeProgress;
+    function CreateAnimatedProgress(const AName: string;
+      AParent: TGuiControl = nil): TGuiAnimatedProgress;
+    function CreateSpinner(const AName: string;
+      AParent: TGuiControl = nil): TGuiSpinner;
+    function CreateListBox(const AName: string;
+      AParent: TGuiControl = nil): TGuiListBox;
+    function CreateComboBox(const AName: string;
+      AParent: TGuiControl = nil): TGuiComboBox;
 
     procedure DeleteControl(AControl: TGuiControl);
     procedure SetParent(AControl, AParent: TGuiControl);
@@ -200,7 +221,7 @@ const
   GUI_MODIFIER_SHIFT = 1;
   GUI_MODIFIER_CTRL = 2;
   GUI_MODIFIER_ALT = 4;
-  GUI_MANAGER_STREAM_VERSION = 1;
+  GUI_MANAGER_STREAM_VERSION = 3;
   GUI_MANAGER_MAX_CONTROLS = 100000;
   GUI_MANAGER_MAX_STRING_LENGTH = 1024 * 1024;
 
@@ -432,6 +453,15 @@ begin
     Exit('OnWindowShow');
   if SameText(Value, 'OnHide') or SameText(Value, 'OnWindowHide') then
     Exit('OnWindowHide');
+  if SameText(Value, 'OnMinimize') or
+     SameText(Value, 'OnWindowMinimize') then
+    Exit('OnWindowMinimize');
+  if SameText(Value, 'OnMaximize') or
+     SameText(Value, 'OnWindowMaximize') then
+    Exit('OnWindowMaximize');
+  if SameText(Value, 'OnRestore') or
+     SameText(Value, 'OnWindowRestore') then
+    Exit('OnWindowRestore');
   if SameText(Value, 'OnMenuClick') then
     Exit('OnMenuClick');
   if SameText(Value, 'OnChange') then
@@ -491,11 +521,16 @@ begin
   Result := nil;
   if (AControl = nil) or not AControl.RecursiveVisible then
     Exit;
-  if (X < AControl.AbsoluteLeft) or
-     (Y < AControl.AbsoluteTop) or
-     (X >= AControl.AbsoluteLeft + AControl.Width) or
-     (Y >= AControl.AbsoluteTop + AControl.Height) then
-    Exit;
+  if AControl is TGuiBaseControl then
+  begin
+    if not TGuiBaseControl(AControl).ContainsPoint(X, Y) then
+      Exit;
+  end
+  else if (X < AControl.AbsoluteLeft) or
+          (Y < AControl.AbsoluteTop) or
+          (X >= AControl.AbsoluteLeft + AControl.Width) or
+          (Y >= AControl.AbsoluteTop + AControl.Height) then
+      Exit;
 
   for I := AControl.ChildCount - 1 downto 0 do
   begin
@@ -516,11 +551,16 @@ begin
   Result := False;
   if (AControl = nil) or not AControl.RecursiveVisible then
     Exit;
-  if (X < AControl.AbsoluteLeft) or
-     (Y < AControl.AbsoluteTop) or
-     (X >= AControl.AbsoluteLeft + AControl.Width) or
-     (Y >= AControl.AbsoluteTop + AControl.Height) then
-    Exit;
+  if AControl is TGuiBaseControl then
+  begin
+    if not TGuiBaseControl(AControl).ContainsPoint(X, Y) then
+      Exit;
+  end
+  else if (X < AControl.AbsoluteLeft) or
+          (Y < AControl.AbsoluteTop) or
+          (X >= AControl.AbsoluteLeft + AControl.Width) or
+          (Y >= AControl.AbsoluteTop + AControl.Height) then
+      Exit;
 
   for I := AControl.ChildCount - 1 downto 0 do
     if PointOverControl(AControl.Children[I], X, Y) then
@@ -576,9 +616,16 @@ begin
     TGuiEdit(AControl).OnChange := ControlChanged
   else if AControl is TGuiScrollbar then
     TGuiScrollbar(AControl).OnChange := ControlChanged
+  else if AControl is TGuiProgressBar then
+    TGuiProgressBar(AControl).OnChange := ControlChanged
+  else if AControl is TGuiListBox then
+    TGuiListBox(AControl).OnChange := ControlChanged
   else if AControl is TGuiForm then
   begin
     TGuiForm(AControl).OnMoving := ControlFormMoving;
+    TGuiForm(AControl).OnMinimize := ControlFormMinimize;
+    TGuiForm(AControl).OnMaximize := ControlFormMaximize;
+    TGuiForm(AControl).OnRestore := ControlFormRestore;
     TGuiForm(AControl).OnShow := ControlFormShow;
     TGuiForm(AControl).OnHide := ControlFormHide;
   end
@@ -779,7 +826,15 @@ begin
   else if Sender is TGuiEdit then
     Data.Text := TGuiEdit(Sender).Caption
   else if Sender is TGuiScrollbar then
-    Data.Value := TGuiScrollbar(Sender).Pos;
+    Data.Value := TGuiScrollbar(Sender).Pos
+  else if Sender is TGuiProgressBar then
+    Data.Value := TGuiProgressBar(Sender).Value
+  else if Sender is TGuiListBox then
+  begin
+    Data.Index := TGuiListBox(Sender).SelectedIndex;
+    Data.Value := Data.Index;
+    Data.Text := TGuiListBox(Sender).Item(Data.Index);
+  end;
   DispatchEvent(TGuiControl(Sender), 'OnChange', Data);
 end;
 
@@ -792,6 +847,21 @@ begin
   Data.X := Left;
   Data.Y := Top;
   DispatchEvent(Sender, 'OnWindowMove', Data);
+end;
+
+procedure TGuiManager.ControlFormMaximize(Sender: TGuiForm);
+begin
+  DispatchEvent(Sender, 'OnWindowMaximize', TGuiEventData.Empty);
+end;
+
+procedure TGuiManager.ControlFormMinimize(Sender: TGuiForm);
+begin
+  DispatchEvent(Sender, 'OnWindowMinimize', TGuiEventData.Empty);
+end;
+
+procedure TGuiManager.ControlFormRestore(Sender: TGuiForm);
+begin
+  DispatchEvent(Sender, 'OnWindowRestore', TGuiEventData.Empty);
 end;
 
 procedure TGuiManager.ControlFormShow(Sender: TGuiForm);
@@ -850,6 +920,8 @@ begin
 end;
 
 procedure TGuiManager.Resize(AWidth, AHeight: Integer);
+var
+  LControl: TGuiControl;
 begin
   if FRoot = nil then
     Exit;
@@ -857,6 +929,9 @@ begin
   FRoot.Top := 0;
   FRoot.Width := Max(1, AWidth);
   FRoot.Height := Max(1, AHeight);
+  for LControl in FControls do
+    if LControl is TGuiForm then
+      TGuiForm(LControl).RefreshWindowStateBounds;
 end;
 
 function TGuiManager.LoadLayout(const ALayoutFileName,
@@ -925,8 +1000,18 @@ var
   Scrollbar: TGuiScrollbar;
   PopupMenu: TGuiPopupMenu;
   StringGrid: TGuiStringGrid;
+  ProgressBar: TGuiProgressBar;
+  ShapeProgress: TGuiShapeProgress;
+  AnimatedProgress: TGuiAnimatedProgress;
+  Spinner: TGuiSpinner;
+  ListBox: TGuiListBox;
+  ComboBox: TGuiComboBox;
   EventMap: TGuiEventBindingMap;
   EventPair: TPair<string, TGuiEventBinding>;
+  RestoreLeft: Single;
+  RestoreTop: Single;
+  RestoreWidth: Single;
+  RestoreHeight: Single;
 
   procedure AddControlTree(AParent: TGuiControl);
   var
@@ -1051,6 +1136,22 @@ begin
             GuiForm := TGuiForm(Control);
             WriteGuiColor(AStream, GuiForm.TitleColor);
             WriteGuiSingle(AStream, GuiForm.TitleOffset);
+            WriteGuiSingle(AStream, GuiForm.TitleBarHeight);
+            WriteGuiSingle(AStream, GuiForm.ButtonSize);
+            WriteGuiBoolean(AStream, GuiForm.ShowMinimizeButton);
+            WriteGuiBoolean(AStream, GuiForm.ShowMaximizeButton);
+            WriteGuiBoolean(AStream, GuiForm.ShowCloseButton);
+            WriteGuiString(AStream, GuiForm.MinimizeButtonLayoutName);
+            WriteGuiString(AStream, GuiForm.MaximizeButtonLayoutName);
+            WriteGuiString(AStream, GuiForm.RestoreButtonLayoutName);
+            WriteGuiString(AStream, GuiForm.CloseButtonLayoutName);
+            WriteGuiInteger(AStream, Ord(GuiForm.WindowState));
+            GuiForm.GetRestoreBounds(RestoreLeft, RestoreTop, RestoreWidth,
+              RestoreHeight);
+            WriteGuiSingle(AStream, RestoreLeft);
+            WriteGuiSingle(AStream, RestoreTop);
+            WriteGuiSingle(AStream, RestoreWidth);
+            WriteGuiSingle(AStream, RestoreHeight);
           end;
         gckScrollbar:
           begin
@@ -1086,6 +1187,72 @@ begin
             AStream.WriteBuffer(CountValue, SizeOf(CountValue));
             for J := 0 to CountValue - 1 do
               WriteGuiStrings(AStream, StringGrid.Row[J]);
+          end;
+        gckProgressBar, gckShapeProgress, gckAnimatedProgress:
+          begin
+            ProgressBar := TGuiProgressBar(Control);
+            WriteGuiSingle(AStream, ProgressBar.Min);
+            WriteGuiSingle(AStream, ProgressBar.Max);
+            WriteGuiSingle(AStream, ProgressBar.Value);
+            WriteGuiString(AStream, ProgressBar.FillLayoutName);
+            WriteGuiBoolean(AStream, ProgressBar.Horizontal);
+            WriteGuiBoolean(AStream, ProgressBar.Reverse);
+            WriteGuiBoolean(AStream, ProgressBar.ShowText);
+            WriteGuiColor(AStream, ProgressBar.FillColor);
+            WriteGuiColor(AStream, ProgressBar.TrackColor);
+            if Control is TGuiAnimatedProgress then
+            begin
+              AnimatedProgress := TGuiAnimatedProgress(Control);
+              WriteGuiString(AStream, AnimatedProgress.AtlasTexturePath);
+              WriteGuiInteger(AStream, AnimatedProgress.GridColumns);
+              WriteGuiInteger(AStream, AnimatedProgress.GridRows);
+              WriteGuiInteger(AStream, AnimatedProgress.FirstFrame);
+              WriteGuiInteger(AStream, AnimatedProgress.FrameCount);
+              WriteGuiInteger(AStream,
+                AnimatedProgress.CurrentFrameIndex);
+              WriteGuiSingle(AStream, AnimatedProgress.FrameRate);
+              WriteGuiBoolean(AStream, AnimatedProgress.Loop);
+              WriteGuiBoolean(AStream, AnimatedProgress.Playing);
+              WriteGuiString(AStream,
+                AnimatedProgress.OverlayLayoutName);
+            end
+            else if Control is TGuiShapeProgress then
+            begin
+              ShapeProgress := TGuiShapeProgress(Control);
+              WriteGuiInteger(AStream, Ord(ShapeProgress.Shape));
+              WriteGuiSingle(AStream, ShapeProgress.StartAngle);
+              WriteGuiSingle(AStream, ShapeProgress.InnerRadius);
+              WriteGuiInteger(AStream, ShapeProgress.Segments);
+            end;
+          end;
+        gckSpinner:
+          begin
+            Spinner := TGuiSpinner(Control);
+            WriteGuiSingle(AStream, Spinner.Angle);
+            WriteGuiBoolean(AStream, Spinner.AutoSpin);
+            WriteGuiColor(AStream, Spinner.Color);
+            WriteGuiInteger(AStream, Spinner.Segments);
+            WriteGuiSingle(AStream, Spinner.Speed);
+            WriteGuiSingle(AStream, Spinner.Thickness);
+            WriteGuiColor(AStream, Spinner.TrackColor);
+          end;
+        gckListBox, gckComboBox:
+          begin
+            ListBox := TGuiListBox(Control);
+            WriteGuiStrings(AStream, ListBox.Items);
+            WriteGuiSingle(AStream, ListBox.ItemHeight);
+            WriteGuiSingle(AStream, ListBox.MarginSize);
+            WriteGuiInteger(AStream, ListBox.SelectedIndex);
+            WriteGuiColor(AStream, ListBox.SelectionColor);
+            WriteGuiInteger(AStream, ListBox.TopIndex);
+            if Control is TGuiComboBox then
+            begin
+              ComboBox := TGuiComboBox(Control);
+              WriteGuiString(AStream, ComboBox.ArrowLayoutName);
+              WriteGuiInteger(AStream, ComboBox.DropDownCount);
+              WriteGuiString(AStream, ComboBox.DropDownLayoutName);
+              WriteGuiBoolean(AStream, ComboBox.DroppedDown);
+            end;
           end;
       end;
 
@@ -1138,15 +1305,27 @@ var
   Scrollbar: TGuiScrollbar;
   PopupMenu: TGuiPopupMenu;
   StringGrid: TGuiStringGrid;
+  ProgressBar: TGuiProgressBar;
+  ShapeProgress: TGuiShapeProgress;
+  AnimatedProgress: TGuiAnimatedProgress;
+  Spinner: TGuiSpinner;
+  ListBox: TGuiListBox;
+  ComboBox: TGuiComboBox;
   EventName: string;
   HandlerName: string;
   ScriptName: string;
+  WindowStates: TArray<Integer>;
+  WindowRestoreLeft: TArray<Single>;
+  WindowRestoreTop: TArray<Single>;
+  WindowRestoreWidth: TArray<Single>;
+  WindowRestoreHeight: TArray<Single>;
+  PreviousEventDispatchEnabled: Boolean;
 begin
   if AStream = nil then
     raise EArgumentNilException.Create('AStream');
 
   Version := ReadGuiInteger(AStream);
-  if Version <> GUI_MANAGER_STREAM_VERSION then
+  if (Version < 1) or (Version > GUI_MANAGER_STREAM_VERSION) then
     raise EReadError.CreateFmt('Unsupported engine GUI version: %d.',
       [Version]);
 
@@ -1180,12 +1359,21 @@ begin
 
       SetLength(Controls, ControlCount);
       SetLength(ParentIndices, ControlCount);
+      SetLength(WindowStates, ControlCount);
+      SetLength(WindowRestoreLeft, ControlCount);
+      SetLength(WindowRestoreTop, ControlCount);
+      SetLength(WindowRestoreWidth, ControlCount);
+      SetLength(WindowRestoreHeight, ControlCount);
       for I := 0 to ControlCount - 1 do
       begin
         KindValue := ReadGuiInteger(AStream);
         if (KindValue < Ord(Low(TGuiControlKind))) or
            (KindValue > Ord(High(TGuiControlKind))) then
           raise EReadError.Create('Invalid engine GUI control kind.');
+        if (Version < 3) and
+           (KindValue = Ord(gckAnimatedProgress)) then
+          raise EReadError.Create(
+            'Animated GUI progress requires engine GUI version 3.');
 
         Control := CreateControl(TGuiControlKind(KindValue),
           ReadGuiString(AStream));
@@ -1282,6 +1470,36 @@ begin
               GuiForm := TGuiForm(Control);
               GuiForm.TitleColor := ReadGuiColor(AStream);
               GuiForm.TitleOffset := ReadGuiSingle(AStream);
+              WindowStates[I] := Ord(gwsNormal);
+              WindowRestoreLeft[I] := Control.Left;
+              WindowRestoreTop[I] := Control.Top;
+              WindowRestoreWidth[I] := Control.Width;
+              WindowRestoreHeight[I] := Control.Height;
+              if Version >= 3 then
+              begin
+                GuiForm.TitleBarHeight := ReadGuiSingle(AStream);
+                GuiForm.ButtonSize := ReadGuiSingle(AStream);
+                GuiForm.ShowMinimizeButton := ReadGuiBoolean(AStream);
+                GuiForm.ShowMaximizeButton := ReadGuiBoolean(AStream);
+                GuiForm.ShowCloseButton := ReadGuiBoolean(AStream);
+                GuiForm.MinimizeButtonLayoutName :=
+                  ReadGuiString(AStream);
+                GuiForm.MaximizeButtonLayoutName :=
+                  ReadGuiString(AStream);
+                GuiForm.RestoreButtonLayoutName :=
+                  ReadGuiString(AStream);
+                GuiForm.CloseButtonLayoutName := ReadGuiString(AStream);
+                IntValue := ReadGuiInteger(AStream);
+                if (IntValue < Ord(Low(TGuiWindowState))) or
+                   (IntValue > Ord(High(TGuiWindowState))) then
+                  raise EReadError.Create(
+                    'Invalid engine GUI window state.');
+                WindowStates[I] := IntValue;
+                WindowRestoreLeft[I] := ReadGuiSingle(AStream);
+                WindowRestoreTop[I] := ReadGuiSingle(AStream);
+                WindowRestoreWidth[I] := ReadGuiSingle(AStream);
+                WindowRestoreHeight[I] := ReadGuiSingle(AStream);
+              end;
             end;
           gckScrollbar:
             begin
@@ -1322,6 +1540,78 @@ begin
               for J := 0 to RowCount - 1 do
                 ReadGuiStrings(AStream, StringGrid.Row[J]);
             end;
+          gckProgressBar, gckShapeProgress, gckAnimatedProgress:
+            begin
+              ProgressBar := TGuiProgressBar(Control);
+              ProgressBar.Min := ReadGuiSingle(AStream);
+              ProgressBar.Max := ReadGuiSingle(AStream);
+              ProgressBar.Value := ReadGuiSingle(AStream);
+              ProgressBar.FillLayoutName := ReadGuiString(AStream);
+              ProgressBar.Horizontal := ReadGuiBoolean(AStream);
+              ProgressBar.Reverse := ReadGuiBoolean(AStream);
+              ProgressBar.ShowText := ReadGuiBoolean(AStream);
+              ProgressBar.FillColor := ReadGuiColor(AStream);
+              ProgressBar.TrackColor := ReadGuiColor(AStream);
+              if Control is TGuiAnimatedProgress then
+              begin
+                AnimatedProgress := TGuiAnimatedProgress(Control);
+                AnimatedProgress.AtlasTexturePath :=
+                  ReadGuiString(AStream);
+                AnimatedProgress.GridColumns := ReadGuiInteger(AStream);
+                AnimatedProgress.GridRows := ReadGuiInteger(AStream);
+                AnimatedProgress.FirstFrame := ReadGuiInteger(AStream);
+                AnimatedProgress.FrameCount := ReadGuiInteger(AStream);
+                AnimatedProgress.CurrentFrameIndex :=
+                  ReadGuiInteger(AStream);
+                AnimatedProgress.FrameRate := ReadGuiSingle(AStream);
+                AnimatedProgress.Loop := ReadGuiBoolean(AStream);
+                AnimatedProgress.Playing := ReadGuiBoolean(AStream);
+                AnimatedProgress.OverlayLayoutName :=
+                  ReadGuiString(AStream);
+              end
+              else if Control is TGuiShapeProgress then
+              begin
+                ShapeProgress := TGuiShapeProgress(Control);
+                IntValue := ReadGuiInteger(AStream);
+                if (IntValue < Ord(Low(TGuiProgressShape))) or
+                   (IntValue > Ord(High(TGuiProgressShape))) then
+                  raise EReadError.Create(
+                    'Invalid engine GUI progress shape.');
+                ShapeProgress.Shape := TGuiProgressShape(IntValue);
+                ShapeProgress.StartAngle := ReadGuiSingle(AStream);
+                ShapeProgress.InnerRadius := ReadGuiSingle(AStream);
+                ShapeProgress.Segments := ReadGuiInteger(AStream);
+              end;
+            end;
+          gckSpinner:
+            begin
+              Spinner := TGuiSpinner(Control);
+              Spinner.Angle := ReadGuiSingle(AStream);
+              Spinner.AutoSpin := ReadGuiBoolean(AStream);
+              Spinner.Color := ReadGuiColor(AStream);
+              Spinner.Segments := ReadGuiInteger(AStream);
+              Spinner.Speed := ReadGuiSingle(AStream);
+              Spinner.Thickness := ReadGuiSingle(AStream);
+              Spinner.TrackColor := ReadGuiColor(AStream);
+            end;
+          gckListBox, gckComboBox:
+            begin
+              ListBox := TGuiListBox(Control);
+              ReadGuiStrings(AStream, ListBox.Items);
+              ListBox.ItemHeight := ReadGuiSingle(AStream);
+              ListBox.MarginSize := ReadGuiSingle(AStream);
+              ListBox.SelectedIndex := ReadGuiInteger(AStream);
+              ListBox.SelectionColor := ReadGuiColor(AStream);
+              ListBox.TopIndex := ReadGuiInteger(AStream);
+              if Control is TGuiComboBox then
+              begin
+                ComboBox := TGuiComboBox(Control);
+                ComboBox.ArrowLayoutName := ReadGuiString(AStream);
+                ComboBox.DropDownCount := ReadGuiInteger(AStream);
+                ComboBox.DropDownLayoutName := ReadGuiString(AStream);
+                ComboBox.DroppedDown := ReadGuiBoolean(AStream);
+              end;
+            end;
         end;
 
         EventCount := ReadGuiInteger(AStream);
@@ -1336,18 +1626,37 @@ begin
         end;
       end;
 
-      for I := 0 to Length(Controls) - 1 do
-      begin
-        ParentIndex := ParentIndices[I];
-        if ParentIndex < 0 then
-          SetParent(Controls[I], FRoot)
-        else
+      PreviousEventDispatchEnabled := FEventDispatchEnabled;
+      FEventDispatchEnabled := False;
+      try
+        for I := 0 to Length(Controls) - 1 do
         begin
-          if ParentIndex >= I then
-            raise EReadError.Create(
-              'Engine GUI parents must precede their children.');
-          SetParent(Controls[I], Controls[ParentIndex]);
+          ParentIndex := ParentIndices[I];
+          if ParentIndex < 0 then
+            SetParent(Controls[I], FRoot)
+          else
+          begin
+            if ParentIndex >= I then
+              raise EReadError.Create(
+                'Engine GUI parents must precede their children.');
+            SetParent(Controls[I], Controls[ParentIndex]);
+          end;
+
+          if Controls[I] is TGuiForm then
+          begin
+            GuiForm := TGuiForm(Controls[I]);
+            GuiForm.Left := WindowRestoreLeft[I];
+            GuiForm.Top := WindowRestoreTop[I];
+            GuiForm.Width := WindowRestoreWidth[I];
+            GuiForm.Height := WindowRestoreHeight[I];
+            GuiForm.SetRestoreBounds(WindowRestoreLeft[I],
+              WindowRestoreTop[I], WindowRestoreWidth[I],
+              WindowRestoreHeight[I]);
+            GuiForm.WindowState := TGuiWindowState(WindowStates[I]);
+          end;
         end;
+      finally
+        FEventDispatchEnabled := PreviousEventDispatchEnabled;
       end;
     except
       Clear;
@@ -1374,6 +1683,12 @@ begin
     gckScrollbar: Result := TGuiScrollbar.Create(Self);
     gckPopupMenu: Result := TGuiPopupMenu.Create(Self);
     gckStringGrid: Result := TGuiStringGrid.Create(Self);
+    gckProgressBar: Result := TGuiProgressBar.Create(Self);
+    gckShapeProgress: Result := TGuiShapeProgress.Create(Self);
+    gckAnimatedProgress: Result := TGuiAnimatedProgress.Create(Self);
+    gckSpinner: Result := TGuiSpinner.Create(Self);
+    gckListBox: Result := TGuiListBox.Create(Self);
+    gckComboBox: Result := TGuiComboBox.Create(Self);
   else
     raise EArgumentOutOfRangeException.Create('AKind');
   end;
@@ -1414,6 +1729,36 @@ begin
         begin
           Result.Width := 320;
           Result.Height := 180;
+        end;
+      gckProgressBar:
+        begin
+          Result.Width := 220;
+          Result.Height := 24;
+        end;
+      gckShapeProgress:
+        begin
+          Result.Width := 96;
+          Result.Height := 96;
+        end;
+      gckAnimatedProgress:
+        begin
+          Result.Width := 128;
+          Result.Height := 128;
+        end;
+      gckSpinner:
+        begin
+          Result.Width := 64;
+          Result.Height := 64;
+        end;
+      gckListBox:
+        begin
+          Result.Width := 220;
+          Result.Height := 160;
+        end;
+      gckComboBox:
+        begin
+          Result.Width := 220;
+          Result.Height := 32;
         end;
     end;
 
@@ -1488,6 +1833,43 @@ function TGuiManager.CreateStringGrid(const AName: string;
   AParent: TGuiControl): TGuiStringGrid;
 begin
   Result := TGuiStringGrid(CreateControl(gckStringGrid, AName, AParent));
+end;
+
+function TGuiManager.CreateProgressBar(const AName: string;
+  AParent: TGuiControl): TGuiProgressBar;
+begin
+  Result := TGuiProgressBar(CreateControl(gckProgressBar, AName, AParent));
+end;
+
+function TGuiManager.CreateShapeProgress(const AName: string;
+  AParent: TGuiControl): TGuiShapeProgress;
+begin
+  Result := TGuiShapeProgress(CreateControl(gckShapeProgress, AName, AParent));
+end;
+
+function TGuiManager.CreateAnimatedProgress(const AName: string;
+  AParent: TGuiControl): TGuiAnimatedProgress;
+begin
+  Result := TGuiAnimatedProgress(CreateControl(gckAnimatedProgress, AName,
+    AParent));
+end;
+
+function TGuiManager.CreateSpinner(const AName: string;
+  AParent: TGuiControl): TGuiSpinner;
+begin
+  Result := TGuiSpinner(CreateControl(gckSpinner, AName, AParent));
+end;
+
+function TGuiManager.CreateListBox(const AName: string;
+  AParent: TGuiControl): TGuiListBox;
+begin
+  Result := TGuiListBox(CreateControl(gckListBox, AName, AParent));
+end;
+
+function TGuiManager.CreateComboBox(const AName: string;
+  AParent: TGuiControl): TGuiComboBox;
+begin
+  Result := TGuiComboBox(CreateControl(gckComboBox, AName, AParent));
 end;
 
 procedure TGuiManager.DeleteControl(AControl: TGuiControl);
@@ -1644,7 +2026,19 @@ end;
 
 function TGuiManager.KindOf(AControl: TGuiControl): TGuiControlKind;
 begin
-  if AControl is TGuiButton then
+  if AControl is TGuiAnimatedProgress then
+    Result := gckAnimatedProgress
+  else if AControl is TGuiShapeProgress then
+    Result := gckShapeProgress
+  else if AControl is TGuiProgressBar then
+    Result := gckProgressBar
+  else if AControl is TGuiSpinner then
+    Result := gckSpinner
+  else if AControl is TGuiComboBox then
+    Result := gckComboBox
+  else if AControl is TGuiListBox then
+    Result := gckListBox
+  else if AControl is TGuiButton then
     Result := gckButton
   else if AControl is TGuiCheckBox then
     Result := gckCheckBox
@@ -1679,6 +2073,12 @@ begin
     gckScrollbar: Result := 'Scrollbar';
     gckPopupMenu: Result := 'PopupMenu';
     gckStringGrid: Result := 'StringGrid';
+    gckProgressBar: Result := 'ProgressBar';
+    gckShapeProgress: Result := 'ShapeProgress';
+    gckSpinner: Result := 'Spinner';
+    gckListBox: Result := 'ListBox';
+    gckComboBox: Result := 'ComboBox';
+    gckAnimatedProgress: Result := 'AnimatedProgress';
   else
     Result := 'Control';
   end;

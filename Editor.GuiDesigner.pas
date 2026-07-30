@@ -97,7 +97,7 @@ function GuiDesignerBackgroundDrawList(
 const
   GUI_DESIGNER_ADD_POPUP = 'Add engine GUI control###EngineGuiAddControl';
   GUI_DESIGNER_RESIZE_HANDLE = 9.0;
-  GUI_DESIGNER_EVENT_NAMES: array[0..14] of string = (
+  GUI_DESIGNER_EVENT_NAMES: array[0..17] of string = (
     'OnCreate',
     'OnButtonClick',
     'OnChange',
@@ -112,7 +112,10 @@ const
     'OnMenuClick',
     'OnWindowMove',
     'OnWindowShow',
-    'OnWindowHide'
+    'OnWindowHide',
+    'OnWindowMinimize',
+    'OnWindowMaximize',
+    'OnWindowRestore'
   );
 
 function ClampByte(AValue: Single): Byte;
@@ -232,6 +235,10 @@ begin
     gckScrollbar: KindName := 'Scrollbar';
     gckPopupMenu: KindName := 'PopupMenu';
     gckStringGrid: KindName := 'StringGrid';
+    gckProgressBar: KindName := 'ProgressBar';
+    gckAnimatedProgress: KindName := 'AnimatedProgress';
+    gckListBox: KindName := 'ListBox';
+    gckComboBox: KindName := 'ComboBox';
   else
     KindName := '';
   end;
@@ -289,6 +296,12 @@ begin
     gckScrollbar: BaseName := 'Scrollbar';
     gckPopupMenu: BaseName := 'PopupMenu';
     gckStringGrid: BaseName := 'StringGrid';
+    gckProgressBar: BaseName := 'ProgressBar';
+    gckShapeProgress: BaseName := 'ShapeProgress';
+    gckSpinner: BaseName := 'Spinner';
+    gckListBox: BaseName := 'ListBox';
+    gckComboBox: BaseName := 'ComboBox';
+    gckAnimatedProgress: BaseName := 'AnimatedProgress';
   else
     BaseName := 'Control';
   end;
@@ -299,6 +312,11 @@ begin
   Control.ComponentName := DefaultSkinName(AKind);
   if Control is TGuiBaseTextControl then
     TGuiBaseTextControl(Control).Caption := Control.Name;
+  if Control is TGuiProgressBar then
+  begin
+    TGuiProgressBar(Control).Caption := '';
+    TGuiProgressBar(Control).Value := 35;
+  end;
   FSelected := Control;
   Changed;
 end;
@@ -444,6 +462,13 @@ begin
     if ImGui.MenuItem('Label') then AddControl(gckLabel);
     if ImGui.MenuItem('Advanced label') then AddControl(gckAdvancedLabel);
     if ImGui.MenuItem('Scrollbar') then AddControl(gckScrollbar);
+    if ImGui.MenuItem('Progress bar') then AddControl(gckProgressBar);
+    if ImGui.MenuItem('Shaped progress') then AddControl(gckShapeProgress);
+    if ImGui.MenuItem('Animated progress / orb') then
+      AddControl(gckAnimatedProgress);
+    if ImGui.MenuItem('Spinner') then AddControl(gckSpinner);
+    if ImGui.MenuItem('List box') then AddControl(gckListBox);
+    if ImGui.MenuItem('Combo box') then AddControl(gckComboBox);
     if ImGui.MenuItem('Popup menu') then AddControl(gckPopupMenu);
     if ImGui.MenuItem('String grid') then AddControl(gckStringGrid);
     ImGui.EndPopup;
@@ -733,6 +758,12 @@ var
   Scrollbar: TGuiScrollbar;
   PopupMenu: TGuiPopupMenu;
   StringGrid: TGuiStringGrid;
+  ProgressBar: TGuiProgressBar;
+  ShapeProgress: TGuiShapeProgress;
+  AnimatedProgress: TGuiAnimatedProgress;
+  Spinner: TGuiSpinner;
+  ListBox: TGuiListBox;
+  ComboBox: TGuiComboBox;
   NewText: string;
   NewColor: TColor;
   BoolValue: Boolean;
@@ -743,7 +774,406 @@ begin
     ImGuiTreeNodeFlags_DefaultOpen) then
     Exit;
 
-  if AControl is TGuiButton then
+  if AControl is TGuiAnimatedProgress then
+  begin
+    AnimatedProgress := TGuiAnimatedProgress(AControl);
+    ProgressBar := AnimatedProgress;
+    FloatValue := ProgressBar.Min;
+    if ImGui.DragFloat('Minimum', @FloatValue, 0.1, -100000, 100000,
+      '%.2f') then
+    begin
+      ProgressBar.Min := FloatValue;
+      Changed;
+    end;
+    FloatValue := ProgressBar.Max;
+    if ImGui.DragFloat('Maximum', @FloatValue, 0.1, -100000, 100000,
+      '%.2f') then
+    begin
+      ProgressBar.Max := FloatValue;
+      Changed;
+    end;
+    FloatValue := ProgressBar.Value;
+    if ImGui.DragFloat('Value', @FloatValue, 0.1, ProgressBar.Min,
+      ProgressBar.Max, '%.2f') then
+    begin
+      ProgressBar.Value := FloatValue;
+      Changed;
+    end;
+    BoolValue := ProgressBar.Horizontal;
+    if ImGui.Checkbox('Horizontal fill', @BoolValue) then
+    begin
+      ProgressBar.Horizontal := BoolValue;
+      Changed;
+    end;
+    BoolValue := ProgressBar.Reverse;
+    if ImGui.Checkbox('Reverse fill', @BoolValue) then
+    begin
+      ProgressBar.Reverse := BoolValue;
+      Changed;
+    end;
+    BoolValue := ProgressBar.ShowText;
+    if ImGui.Checkbox('Show text', @BoolValue) then
+    begin
+      ProgressBar.ShowText := BoolValue;
+      Changed;
+    end;
+    if DrawSkinCombo('Fill skin', ProgressBar.FillLayoutName,
+      NewText) then
+    begin
+      ProgressBar.FillLayoutName := NewText;
+      Changed;
+    end;
+    if DrawSkinCombo('Overlay skin', AnimatedProgress.OverlayLayoutName,
+      NewText) then
+    begin
+      AnimatedProgress.OverlayLayoutName := NewText;
+      Changed;
+    end;
+    if DrawString('Atlas texture path',
+      AnimatedProgress.AtlasTexturePath, NewText, 1024) then
+    begin
+      AnimatedProgress.AtlasTexturePath := NewText;
+      Changed;
+    end;
+    IntValue := AnimatedProgress.GridColumns;
+    if ImGui.DragInt('Atlas columns', @IntValue, 1, 1, 1024, '%d',
+      ImGuiSliderFlags_None) then
+    begin
+      AnimatedProgress.GridColumns := IntValue;
+      Changed;
+    end;
+    IntValue := AnimatedProgress.GridRows;
+    if ImGui.DragInt('Atlas rows', @IntValue, 1, 1, 1024, '%d',
+      ImGuiSliderFlags_None) then
+    begin
+      AnimatedProgress.GridRows := IntValue;
+      Changed;
+    end;
+    IntValue := AnimatedProgress.FirstFrame;
+    if ImGui.DragInt('First frame', @IntValue, 1, 0,
+      Max(0, AnimatedProgress.GridFrameCapacity - 1), '%d',
+      ImGuiSliderFlags_None) then
+    begin
+      AnimatedProgress.FirstFrame := IntValue;
+      Changed;
+    end;
+    IntValue := AnimatedProgress.FrameCount;
+    if ImGui.DragInt('Frame count', @IntValue, 1, 1,
+      Max(1, AnimatedProgress.GridFrameCapacity -
+      AnimatedProgress.FirstFrame), '%d', ImGuiSliderFlags_None) then
+    begin
+      AnimatedProgress.FrameCount := IntValue;
+      Changed;
+    end;
+    IntValue := AnimatedProgress.CurrentFrameIndex;
+    if ImGui.DragInt('Current frame', @IntValue, 1, 0,
+      Max(0, AnimatedProgress.FrameCount - 1), '%d',
+      ImGuiSliderFlags_None) then
+    begin
+      AnimatedProgress.CurrentFrameIndex := IntValue;
+      Changed;
+    end;
+    FloatValue := AnimatedProgress.FrameRate;
+    if ImGui.DragFloat('Frame rate', @FloatValue, 0.1, 0.001, 240,
+      '%.2f fps') then
+    begin
+      AnimatedProgress.FrameRate := FloatValue;
+      Changed;
+    end;
+    BoolValue := AnimatedProgress.Playing;
+    if ImGui.Checkbox('Playing', @BoolValue) then
+    begin
+      AnimatedProgress.Playing := BoolValue;
+      Changed;
+    end;
+    BoolValue := AnimatedProgress.Loop;
+    if ImGui.Checkbox('Loop', @BoolValue) then
+    begin
+      AnimatedProgress.Loop := BoolValue;
+      Changed;
+    end;
+    if DrawColor('Atlas / fill tint', ProgressBar.FillColor,
+      NewColor) then
+    begin
+      ProgressBar.FillColor := NewColor;
+      Changed;
+    end;
+    if DrawColor('Track color', ProgressBar.TrackColor, NewColor) then
+    begin
+      ProgressBar.TrackColor := NewColor;
+      Changed;
+    end;
+  end
+  else if AControl is TGuiShapeProgress then
+  begin
+    ShapeProgress := TGuiShapeProgress(AControl);
+    ProgressBar := ShapeProgress;
+    FloatValue := ProgressBar.Min;
+    if ImGui.DragFloat('Minimum', @FloatValue, 0.1, -100000, 100000,
+      '%.2f') then
+    begin
+      ProgressBar.Min := FloatValue;
+      Changed;
+    end;
+    FloatValue := ProgressBar.Max;
+    if ImGui.DragFloat('Maximum', @FloatValue, 0.1, -100000, 100000,
+      '%.2f') then
+    begin
+      ProgressBar.Max := FloatValue;
+      Changed;
+    end;
+    FloatValue := ProgressBar.Value;
+    if ImGui.DragFloat('Value', @FloatValue, 0.1, ProgressBar.Min,
+      ProgressBar.Max, '%.2f') then
+    begin
+      ProgressBar.Value := FloatValue;
+      Changed;
+    end;
+    IntValue := Ord(ShapeProgress.Shape);
+    ImGui.RadioButton('Circle', @IntValue, Ord(gpsCircle));
+    ImGui.SameLine;
+    ImGui.RadioButton('Triangle', @IntValue, Ord(gpsTriangle));
+    if IntValue <> Ord(ShapeProgress.Shape) then
+    begin
+      ShapeProgress.Shape := TGuiProgressShape(IntValue);
+      Changed;
+    end;
+    FloatValue := ShapeProgress.StartAngle;
+    if ImGui.DragFloat('Start angle', @FloatValue, 0.5, -360, 360,
+      '%.1f deg') then
+    begin
+      ShapeProgress.StartAngle := FloatValue;
+      Changed;
+    end;
+    FloatValue := ShapeProgress.InnerRadius;
+    if ImGui.DragFloat('Inner radius', @FloatValue, 0.01, 0, 0.95,
+      '%.2f') then
+    begin
+      ShapeProgress.InnerRadius := FloatValue;
+      Changed;
+    end;
+    IntValue := ShapeProgress.Segments;
+    if ImGui.DragInt('Segments', @IntValue, 1, 3, 512, '%d',
+      ImGuiSliderFlags_None) then
+    begin
+      ShapeProgress.Segments := IntValue;
+      Changed;
+    end;
+    BoolValue := ProgressBar.ShowText;
+    if ImGui.Checkbox('Show text', @BoolValue) then
+    begin
+      ProgressBar.ShowText := BoolValue;
+      Changed;
+    end;
+    if DrawColor('Fill color', ProgressBar.FillColor, NewColor) then
+    begin
+      ProgressBar.FillColor := NewColor;
+      Changed;
+    end;
+    if DrawColor('Track color', ProgressBar.TrackColor, NewColor) then
+    begin
+      ProgressBar.TrackColor := NewColor;
+      Changed;
+    end;
+  end
+  else if AControl is TGuiProgressBar then
+  begin
+    ProgressBar := TGuiProgressBar(AControl);
+    FloatValue := ProgressBar.Min;
+    if ImGui.DragFloat('Minimum', @FloatValue, 0.1, -100000, 100000,
+      '%.2f') then
+    begin
+      ProgressBar.Min := FloatValue;
+      Changed;
+    end;
+    FloatValue := ProgressBar.Max;
+    if ImGui.DragFloat('Maximum', @FloatValue, 0.1, -100000, 100000,
+      '%.2f') then
+    begin
+      ProgressBar.Max := FloatValue;
+      Changed;
+    end;
+    FloatValue := ProgressBar.Value;
+    if ImGui.DragFloat('Value', @FloatValue, 0.1, ProgressBar.Min,
+      ProgressBar.Max, '%.2f') then
+    begin
+      ProgressBar.Value := FloatValue;
+      Changed;
+    end;
+    BoolValue := ProgressBar.Horizontal;
+    if ImGui.Checkbox('Horizontal', @BoolValue) then
+    begin
+      ProgressBar.Horizontal := BoolValue;
+      Changed;
+    end;
+    BoolValue := ProgressBar.Reverse;
+    if ImGui.Checkbox('Reverse', @BoolValue) then
+    begin
+      ProgressBar.Reverse := BoolValue;
+      Changed;
+    end;
+    BoolValue := ProgressBar.ShowText;
+    if ImGui.Checkbox('Show text', @BoolValue) then
+    begin
+      ProgressBar.ShowText := BoolValue;
+      Changed;
+    end;
+    if DrawSkinCombo('Fill skin', ProgressBar.FillLayoutName,
+      NewText) then
+    begin
+      ProgressBar.FillLayoutName := NewText;
+      Changed;
+    end;
+    if DrawColor('Fill color', ProgressBar.FillColor, NewColor) then
+    begin
+      ProgressBar.FillColor := NewColor;
+      Changed;
+    end;
+    if DrawColor('Track color', ProgressBar.TrackColor, NewColor) then
+    begin
+      ProgressBar.TrackColor := NewColor;
+      Changed;
+    end;
+  end
+  else if AControl is TGuiSpinner then
+  begin
+    Spinner := TGuiSpinner(AControl);
+    BoolValue := Spinner.AutoSpin;
+    if ImGui.Checkbox('Auto spin', @BoolValue) then
+    begin
+      Spinner.AutoSpin := BoolValue;
+      Changed;
+    end;
+    FloatValue := Spinner.Angle;
+    if ImGui.DragFloat('Angle', @FloatValue, 0.5, -360, 360,
+      '%.1f deg') then
+    begin
+      Spinner.Angle := FloatValue;
+      Changed;
+    end;
+    FloatValue := Spinner.Speed;
+    if ImGui.DragFloat('Speed', @FloatValue, 1, -10000, 10000,
+      '%.1f deg/s') then
+    begin
+      Spinner.Speed := FloatValue;
+      Changed;
+    end;
+    FloatValue := Spinner.Thickness;
+    if ImGui.DragFloat('Thickness', @FloatValue, 0.01, 0.02, 1,
+      '%.2f') then
+    begin
+      Spinner.Thickness := FloatValue;
+      Changed;
+    end;
+    IntValue := Spinner.Segments;
+    if ImGui.DragInt('Segments', @IntValue, 1, 3, 128, '%d',
+      ImGuiSliderFlags_None) then
+    begin
+      Spinner.Segments := IntValue;
+      Changed;
+    end;
+    if DrawColor('Spinner color', Spinner.Color, NewColor) then
+    begin
+      Spinner.Color := NewColor;
+      Changed;
+    end;
+    if DrawColor('Track color', Spinner.TrackColor, NewColor) then
+    begin
+      Spinner.TrackColor := NewColor;
+      Changed;
+    end;
+  end
+  else if AControl is TGuiComboBox then
+  begin
+    ComboBox := TGuiComboBox(AControl);
+    if DrawStringList('Items', ComboBox.Items) then
+      Changed;
+    IntValue := ComboBox.SelectedIndex;
+    if ImGui.DragInt('Selected index', @IntValue, 1, -1,
+      Max(-1, ComboBox.ItemCount - 1), '%d', ImGuiSliderFlags_None) then
+    begin
+      ComboBox.SelectedIndex := IntValue;
+      Changed;
+    end;
+    FloatValue := ComboBox.ItemHeight;
+    if ImGui.DragFloat('Item height', @FloatValue, 1, 1, 1000,
+      '%.1f') then
+    begin
+      ComboBox.ItemHeight := FloatValue;
+      Changed;
+    end;
+    IntValue := ComboBox.DropDownCount;
+    if ImGui.DragInt('Drop-down rows', @IntValue, 1, 1, 1000, '%d',
+      ImGuiSliderFlags_None) then
+    begin
+      ComboBox.DropDownCount := IntValue;
+      Changed;
+    end;
+    BoolValue := ComboBox.DroppedDown;
+    if ImGui.Checkbox('Dropped down', @BoolValue) then
+    begin
+      ComboBox.DroppedDown := BoolValue;
+      Changed;
+    end;
+    if DrawSkinCombo('Arrow skin', ComboBox.ArrowLayoutName,
+      NewText) then
+    begin
+      ComboBox.ArrowLayoutName := NewText;
+      Changed;
+    end;
+    if DrawSkinCombo('Drop-down skin', ComboBox.DropDownLayoutName,
+      NewText) then
+    begin
+      ComboBox.DropDownLayoutName := NewText;
+      Changed;
+    end;
+    if DrawColor('Selection color', ComboBox.SelectionColor,
+      NewColor) then
+    begin
+      ComboBox.SelectionColor := NewColor;
+      Changed;
+    end;
+  end
+  else if AControl is TGuiListBox then
+  begin
+    ListBox := TGuiListBox(AControl);
+    if DrawStringList('Items', ListBox.Items) then
+      Changed;
+    IntValue := ListBox.SelectedIndex;
+    if ImGui.DragInt('Selected index', @IntValue, 1, -1,
+      Max(-1, ListBox.ItemCount - 1), '%d', ImGuiSliderFlags_None) then
+    begin
+      ListBox.SelectedIndex := IntValue;
+      Changed;
+    end;
+    IntValue := ListBox.TopIndex;
+    if ImGui.DragInt('Top index', @IntValue, 1, 0,
+      Max(0, ListBox.ItemCount - 1), '%d', ImGuiSliderFlags_None) then
+    begin
+      ListBox.TopIndex := IntValue;
+      Changed;
+    end;
+    FloatValue := ListBox.ItemHeight;
+    if ImGui.DragFloat('Item height', @FloatValue, 1, 1, 1000,
+      '%.1f') then
+    begin
+      ListBox.ItemHeight := FloatValue;
+      Changed;
+    end;
+    FloatValue := ListBox.MarginSize;
+    if ImGui.DragFloat('Margin', @FloatValue, 1, 0, 1000, '%.1f') then
+    begin
+      ListBox.MarginSize := Max(0.0, FloatValue);
+      Changed;
+    end;
+    if DrawColor('Selection color', ListBox.SelectionColor,
+      NewColor) then
+    begin
+      ListBox.SelectionColor := NewColor;
+      Changed;
+    end;
+  end
+  else if AControl is TGuiButton then
   begin
     Button := TGuiButton(AControl);
     BoolValue := Button.Pressed;
@@ -850,6 +1280,62 @@ begin
     if DrawColor('Title color', GuiForm.TitleColor, NewColor) then
     begin
       GuiForm.TitleColor := NewColor;
+      Changed;
+    end;
+    FloatValue := GuiForm.TitleBarHeight;
+    if ImGui.DragFloat('Title bar height', @FloatValue, 1, 14, 256,
+      '%.1f') then
+    begin
+      GuiForm.TitleBarHeight := FloatValue;
+      Changed;
+    end;
+    FloatValue := GuiForm.ButtonSize;
+    if ImGui.DragFloat('Title button size', @FloatValue, 1, 10, 128,
+      '%.1f') then
+    begin
+      GuiForm.ButtonSize := FloatValue;
+      Changed;
+    end;
+    BoolValue := GuiForm.ShowMinimizeButton;
+    if ImGui.Checkbox('Minimize button', @BoolValue) then
+    begin
+      GuiForm.ShowMinimizeButton := BoolValue;
+      Changed;
+    end;
+    BoolValue := GuiForm.ShowMaximizeButton;
+    if ImGui.Checkbox('Maximize button', @BoolValue) then
+    begin
+      GuiForm.ShowMaximizeButton := BoolValue;
+      Changed;
+    end;
+    BoolValue := GuiForm.ShowCloseButton;
+    if ImGui.Checkbox('Close button', @BoolValue) then
+    begin
+      GuiForm.ShowCloseButton := BoolValue;
+      Changed;
+    end;
+    if DrawSkinCombo('Minimize button skin',
+      GuiForm.MinimizeButtonLayoutName, NewText) then
+    begin
+      GuiForm.MinimizeButtonLayoutName := NewText;
+      Changed;
+    end;
+    if DrawSkinCombo('Maximize button skin',
+      GuiForm.MaximizeButtonLayoutName, NewText) then
+    begin
+      GuiForm.MaximizeButtonLayoutName := NewText;
+      Changed;
+    end;
+    if DrawSkinCombo('Restore button skin',
+      GuiForm.RestoreButtonLayoutName, NewText) then
+    begin
+      GuiForm.RestoreButtonLayoutName := NewText;
+      Changed;
+    end;
+    if DrawSkinCombo('Close button skin',
+      GuiForm.CloseButtonLayoutName, NewText) then
+    begin
+      GuiForm.CloseButtonLayoutName := NewText;
       Changed;
     end;
   end
