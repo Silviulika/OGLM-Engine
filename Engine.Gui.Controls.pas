@@ -2060,7 +2060,10 @@ function TGuiForm.ButtonLayoutName(AButton: TGuiTitleButton): string;
 begin
   case AButton of
     gtbMinimize:
-      Result := FMinimizeButtonLayoutName;
+      if FWindowState = gwsMinimized then
+        Result := FRestoreButtonLayoutName
+      else
+        Result := FMinimizeButtonLayoutName;
     gtbMaximize:
       if FWindowState = gwsMaximized then
         Result := FRestoreButtonLayoutName
@@ -2214,7 +2217,10 @@ begin
     Exit;
   case LPressedButton of
     gtbMinimize:
-      Minimize;
+      if FWindowState = gwsMinimized then
+        Restore
+      else
+        Minimize;
     gtbMaximize:
       ToggleMaximize;
     gtbClose:
@@ -2386,9 +2392,25 @@ begin
     LColor := ColorToVec4(FTitleColor, AlphaChannel);
     case AButton of
       gtbMinimize:
-        ARenderer.RenderSolidRect(LCenterX - (LGlyphSize * 0.5),
-          LCenterY + (LGlyphSize * 0.25), LGlyphSize, 2,
-          AViewportWidth, AViewportHeight, LColor);
+        if FWindowState = gwsMinimized then
+        begin
+          ARenderer.RenderSolidRect(LCenterX - (LGlyphSize * 0.5),
+            LCenterY - (LGlyphSize * 0.5), LGlyphSize, 2,
+            AViewportWidth, AViewportHeight, LColor);
+          ARenderer.RenderSolidRect(LCenterX - (LGlyphSize * 0.5),
+            LCenterY + (LGlyphSize * 0.5) - 2, LGlyphSize, 2,
+            AViewportWidth, AViewportHeight, LColor);
+          ARenderer.RenderSolidRect(LCenterX - (LGlyphSize * 0.5),
+            LCenterY - (LGlyphSize * 0.5), 2, LGlyphSize,
+            AViewportWidth, AViewportHeight, LColor);
+          ARenderer.RenderSolidRect(LCenterX + (LGlyphSize * 0.5) - 2,
+            LCenterY - (LGlyphSize * 0.5), 2, LGlyphSize,
+            AViewportWidth, AViewportHeight, LColor);
+        end
+        else
+          ARenderer.RenderSolidRect(LCenterX - (LGlyphSize * 0.5),
+            LCenterY + (LGlyphSize * 0.25), LGlyphSize, 2,
+            AViewportWidth, AViewportHeight, LColor);
       gtbMaximize:
         if FWindowState = gwsMaximized then
         begin
