@@ -239,7 +239,13 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
   OnCreate, OnMouseDown, OnMouseMove, OnMouseUp, OnMouseEnter, OnMouseLeave,
   OnKeyDown, OnKeyPress, OnKeyUp, OnButtonClick (alias OnClick), OnChange,
   OnWindowMove (aliases OnMove and OnMoving), OnWindowShow (alias OnShow),
-  OnWindowHide (alias OnHide), and OnMenuClick.
+  OnWindowHide (alias OnHide), OnWindowMinimize (alias OnMinimize),
+  OnWindowMaximize (alias OnMaximize), OnWindowRestore (alias OnRestore),
+  and OnMenuClick.
+- Focused text color is used while a focus-capable control is hovered or has
+  keyboard focus. TGuiControl.Hovered reports the current hover state.
+- OnChange returns the current progress value in GuiEventValue(), or the
+  selected list/combo item in GuiEventIndex() and GuiEventText().
 - OnCreate fires once immediately before a control's first render, after its
   saved properties, parent relationship, script binding, and current viewport
   dimensions are available. For a control created by DWScript, bind OnCreate
@@ -285,6 +291,8 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
   - property Height: Float read/write
   - property Visible: Boolean read/write
   - property Scale: Float read/write
+  - property Rotation: Float read/write
+  - property Hovered: Boolean read
   - property Tint: TVector4 read/write
   - property LayoutName: String read/write
   - function Child(Index: Integer): TGuiControl
@@ -325,7 +333,21 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
 
 - class TGuiWindow(TGuiTextControl)
   - property TitleOffset: Float read/write
+  - property TitleBarHeight: Float read/write
+  - property ButtonSize: Float read/write
+  - property WindowState: Integer read/write (0 = normal, 1 = minimized, 2 = maximized)
+  - property ShowMinimizeButton: Boolean read/write
+  - property ShowMaximizeButton: Boolean read/write
+  - property ShowCloseButton: Boolean read/write
+  - property MinimizeButtonLayoutName: String read/write
+  - property MaximizeButtonLayoutName: String read/write
+  - property RestoreButtonLayoutName: String read/write
+  - property CloseButtonLayoutName: String read/write
   - procedure Close()
+  - procedure Minimize()
+  - procedure Maximize()
+  - procedure Restore()
+  - procedure ToggleMaximize()
 
 - class TGuiScrollbar(TGuiTextControl)
   - property Min: Float read/write
@@ -355,6 +377,77 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
   - function AddRow(Text: String): Integer
   - procedure Clear()
   - procedure SetText(Value: String)
+
+- class TGuiProgressBar(TGuiTextControl)
+  - property Min: Float read/write
+  - property Max: Float read/write
+  - property Value: Float read/write
+  - property Position: Float read/write (alias of Value)
+  - property Horizontal: Boolean read/write
+  - property Reverse: Boolean read/write
+  - property ShowText: Boolean read/write
+  - property FillLayoutName: String read/write
+  - property FillColor: Integer read/write (VCL TColor value)
+  - property TrackColor: Integer read/write (VCL TColor value)
+  - FillLayoutName is source-clipped at the current value, so the skin keeps
+    its original proportions instead of being stretched as the value changes.
+
+- class TGuiShapeProgress(TGuiProgressBar)
+  - property Shape: Integer read/write (0 = circle, 1 = triangle)
+  - property StartAngle: Float read/write (degrees; used by circle)
+  - property InnerRadius: Float read/write (0.0 to 0.95)
+  - property Segments: Integer read/write
+
+- class TGuiAnimatedProgress(TGuiProgressBar)
+  - HUD/loading-bar control intended for animated HP, mana, stamina, and
+    similar orbs. The base LayoutName is the empty/track skin,
+    FillLayoutName is clipped to the value, the current atlas frame is
+    clipped over the fill, and OverlayLayoutName is drawn last as a bezel.
+  - property AtlasTexturePath: String read/write
+  - property GridColumns: Integer read/write
+  - property GridRows: Integer read/write
+  - property FirstFrame: Integer read/write
+  - property FrameCount: Integer read/write
+  - property CurrentFrameIndex: Integer read/write (relative to FirstFrame)
+  - property CurrentSheetFrameIndex: Integer read
+  - property GridFrameCapacity: Integer read
+  - property FrameRate: Float read/write (frames per second)
+  - property Loop: Boolean read/write
+  - property Playing: Boolean read/write
+  - property OverlayLayoutName: String read/write
+  - function LoadAtlas(Path: String): Boolean
+  - procedure RestartAnimation()
+  - procedure UpdateAnimation(DeltaTime: Float)
+  - Vertical bottom-up fill is the default. Set Horizontal and Reverse,
+    inherited from TGuiProgressBar, for other fill directions. FillColor
+    tints the atlas; use white for the atlas's original colors.
+
+- class TGuiSpinner(TGuiControl)
+  - property Angle: Float read/write
+  - property AutoSpin: Boolean read/write
+  - property Speed: Float read/write (degrees per second)
+  - property Thickness: Float read/write (0.02 to 1.0)
+  - property Segments: Integer read/write
+  - property Color: Integer read/write (VCL TColor value)
+  - property TrackColor: Integer read/write (VCL TColor value)
+
+- class TGuiListBox(TGuiTextControl)
+  - property ItemsText: String read/write (one item per line)
+  - property ItemCount: Integer read
+  - property SelectedIndex: Integer read/write (-1 means no selection)
+  - property TopIndex: Integer read/write
+  - property ItemHeight: Float read/write
+  - property SelectionColor: Integer read/write (VCL TColor value)
+  - function Item(Index: Integer): String
+  - function AddItem(Text: String): Integer
+  - procedure DeleteItem(Index: Integer)
+  - procedure Clear()
+
+- class TGuiComboBox(TGuiListBox)
+  - property DroppedDown: Boolean read/write
+  - property DropDownCount: Integer read/write
+  - property ArrowLayoutName: String read/write
+  - property DropDownLayoutName: String read/write
 
 - function GuiEnabled(): Boolean
 - procedure GuiSetEnabled(Enabled: Boolean)
@@ -388,6 +481,18 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
 - function GuiCreatePopupMenu(Name: String; Parent: TGuiControl): TGuiPopupMenu
 - function GuiCreateStringGrid(Name: String): TGuiStringGrid
 - function GuiCreateStringGrid(Name: String; Parent: TGuiControl): TGuiStringGrid
+- function GuiCreateProgressBar(Name: String): TGuiProgressBar
+- function GuiCreateProgressBar(Name: String; Parent: TGuiControl): TGuiProgressBar
+- function GuiCreateShapeProgress(Name: String): TGuiShapeProgress
+- function GuiCreateShapeProgress(Name: String; Parent: TGuiControl): TGuiShapeProgress
+- function GuiCreateAnimatedProgress(Name: String): TGuiAnimatedProgress
+- function GuiCreateAnimatedProgress(Name: String; Parent: TGuiControl): TGuiAnimatedProgress
+- function GuiCreateSpinner(Name: String): TGuiSpinner
+- function GuiCreateSpinner(Name: String; Parent: TGuiControl): TGuiSpinner
+- function GuiCreateListBox(Name: String): TGuiListBox
+- function GuiCreateListBox(Name: String; Parent: TGuiControl): TGuiListBox
+- function GuiCreateComboBox(Name: String): TGuiComboBox
+- function GuiCreateComboBox(Name: String; Parent: TGuiControl): TGuiComboBox
 - function GuiEventControl(): TGuiControl
 - function GuiEventName(): String
 - function GuiEventHandlerName(): String
@@ -689,6 +794,7 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
 - function ScriptTargetShader(): TShader
 - function DeltaTime(): Float
 - function TimeSeconds(): Float
+- function FPS(): Integer                                                                          - Current renderer frames per second, updated once per second.
 - procedure Log(aMessage: String)
 - function KeyCode(Name: String): Integer                                                              - Converts a key name such as 'W', 'Space', 'Escape', 'Left', 'F1', or 'Numpad0' into a Windows virtual-key code.
 - function KeyPressed(KeyCode: Integer): Boolean                                                       - True while the key with this virtual-key code is currently pressed.
