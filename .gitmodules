@@ -14,3 +14,7 @@
 	path = External/GraphEx
 	url = https://github.com/mike-lischke/GraphicEx.git
 	branch = master
+[submodule "External/ImGui-Pascal"]
+	path = External/ImGui-Pascal
+	url = https://github.com/Coldzer0/ImGui-Pascal.git
+	branch = main
