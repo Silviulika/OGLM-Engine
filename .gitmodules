@@ -26,3 +26,7 @@
 	path = External/dglOpenGL
 	url = https://github.com/SaschaWillems/dglOpenGL.git
 	branch = master
+[submodule "External/pasjson"]
+	path = External/pasjson
+	url = https://github.com/BeRo1985/pasjson.git
+	branch = master
