@@ -1,0 +1,367 @@
+{
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5123,
+      "count": 32640,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 21760,
+      "max": [
+        1227.14599609375,
+        3321.688232421875,
+        1448.6483154296875
+      ],
+      "min": [
+        -1206.8721923828125,
+        451.8746643066406,
+        -1067.2852783203125
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 21760,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 21760,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5126,
+      "count": 21760,
+      "max": [
+        1.0,
+        1.0
+      ],
+      "min": [
+        0.0,
+        0.0
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5123,
+      "count": 27360,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 6639,
+      "max": [
+        1102.70068359375,
+        3158.77001953125,
+        1288.7601318359375
+      ],
+      "min": [
+        -1096.407470703125,
+        0.0,
+        -930.9635009765625
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 6639,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 6639,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5126,
+      "count": 6639,
+      "max": [
+        1.0,
+        1.0
+      ],
+      "min": [
+        0.0,
+        0.0
+      ],
+      "type": "VEC2"
+    }
+  ],
+  "asset": {
+    "generator": "Khronos glTF exporter for 3dsmax 2.00 (C)Khronos Group Inc.",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 65280,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 261120,
+      "byteOffset": 65280,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 261120,
+      "byteOffset": 326400,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 348160,
+      "byteOffset": 587520,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 174080,
+      "byteOffset": 935680,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 54720,
+      "byteOffset": 1109760,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 79668,
+      "byteOffset": 1164480,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 79668,
+      "byteOffset": 1244148,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 106224,
+      "byteOffset": 1323816,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 53112,
+      "byteOffset": 1430040,
+      "target": 34962
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 1483152,
+      "uri": "Test_Tree_03.bin"
+    }
+  ],
+  "extensionsUsed": [
+    "KHR_texture_transform"
+  ],
+  "images": [
+    {
+      "uri": "texture_1.png"
+    },
+    {
+      "uri": "texture_2.png"
+    },
+    {
+      "uri": "Imagestexture_0_G_ORM.png"
+    },
+    {
+      "uri": "texture_3.png"
+    }
+  ],
+  "materials": [
+    {
+      "name": "branches",
+      "normalTexture": {
+        "extensions": {
+          "KHR_texture_transform": {
+            "scale": [
+              1.0,
+              0.2
+            ]
+          }
+        },
+        "index": 1
+      },
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.6172065734863281,
+          0.6038273572921753,
+          0.5149176716804504,
+          1.0
+        ],
+        "baseColorTexture": {
+          "extensions": {
+            "KHR_texture_transform": {
+              "scale": [
+                1.0,
+                0.2
+              ]
+            }
+          },
+          "index": 0
+        },
+        "metallicFactor": 0.0,
+        "metallicRoughnessTexture": {
+          "extensions": {
+            "KHR_texture_transform": {
+              "scale": [
+                1.0,
+                0.2
+              ]
+            }
+          },
+          "index": 2
+        }
+      }
+    },
+    {
+      "alphaMode": "MASK",
+      "doubleSided": true,
+      "name": "leaves",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 3
+        },
+        "metallicFactor": 0.0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Leafs",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 2,
+            "POSITION": 1,
+            "TANGENT": 3,
+            "TEXCOORD_0": 4
+          },
+          "indices": 0,
+          "material": 1,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "Trunk",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 7,
+            "POSITION": 6,
+            "TANGENT": 8,
+            "TEXCOORD_0": 9
+          },
+          "indices": 5,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "Leafs",
+      "rotation": [
+        -2.0066963202225452e-07,
+        -0.0,
+        -0.0,
+        -1.0
+      ],
+      "scale": [
+        0.027454325929284096,
+        0.027454325929284096,
+        0.027454325929284096
+      ],
+      "translation": [
+        -0.24814991652965546,
+        0.042058512568473816,
+        -0.08694519102573395
+      ]
+    },
+    {
+      "mesh": 1,
+      "name": "Trunk",
+      "rotation": [
+        -2.0066963202225452e-07,
+        -0.0,
+        -0.0,
+        -1.0
+      ],
+      "scale": [
+        0.027454325929284096,
+        0.027454325929284096,
+        0.027454325929284096
+      ],
+      "translation": [
+        -0.24814991652965546,
+        0.042058512568473816,
+        -0.08694519102573395
+      ]
+    }
+  ],
+  "samplers": [
+    {
+      "wrapS": 10497,
+      "wrapT": 10497
+    },
+    {
+      "wrapS": 10497,
+      "wrapT": 10497
+    },
+    {
+      "wrapS": 10497,
+      "wrapT": 10497
+    },
+    {
+      "wrapS": 33071,
+      "wrapT": 33071
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0,
+        1
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 1,
+      "source": 1
+    },
+    {
+      "sampler": 2,
+      "source": 2
+    },
+    {
+      "sampler": 3,
+      "source": 3
+    }
+  ]
+}
