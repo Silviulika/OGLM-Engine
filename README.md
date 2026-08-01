@@ -268,6 +268,28 @@ Old or surprising compile errors after dependency changes:
 clean the project and remove stale DCUs under `Win64\Debug`, `Win64\Release`,
 `Win32\Debug`, or `Win32\Release` before rebuilding.
 
+## Tools Used
+
+Textures are created with Materialize:
+https://www.boundingboxsoftware.com/materialize/
+
+Explosion atlas images are created with explotexgen:
+https://www.saschawillems.de/creations/explosion-texture-generator/
+
+Trees are generated with eztree:
+https://www.eztree.dev/
+
+Animations are created with Mixamo and/or mesh2motion:
+https://www.mixamo.com/
+https://app.mesh2motion.org/
+
+Particles thanks to Kenney:
+https://www.kenney.nl/
+
+Some height maps are generated with L3DT standard. There are some issues with
+their website, but downloading the software is manageable:
+https://www.bundysoft.com/L3DT/downloads/standard.php
+
 ## Licensing
 
 Original engine source is covered by `LICENSE`. Third-party submodules,
