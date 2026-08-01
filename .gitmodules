@@ -18,3 +18,7 @@
 	path = External/ImGui-Pascal
 	url = https://github.com/Coldzer0/ImGui-Pascal.git
 	branch = main
+[submodule "External/pasmp"]
+	path = External/pasmp
+	url = https://git.rosseaux.net/BeRo1985/pasmp.git
+	branch = master
