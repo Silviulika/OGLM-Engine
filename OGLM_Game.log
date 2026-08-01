@@ -1,0 +1,11 @@
+[2026-08-01 14:15:35] Starting OGLM_Game.
+[2026-08-01 14:15:35] Window mode: fullscreen.
+[2026-08-01 14:15:35] Requested resolution: 1600x1024.
+[2026-08-01 14:15:35] Fullscreen display mode: 1600x1024.
+[2026-08-01 14:15:36] Active client size: 1600x1024.
+[2026-08-01 14:15:37] Engine and renderer initialized.
+[2026-08-01 14:15:37] Loaded startup scene: GUI_Scene_2.omescn
+[2026-08-01 14:15:39] Game loop started using ASAP updates.
+[2026-08-01 14:15:39] Mouse cursor nudged after fullscreen startup.
+[2026-08-01 14:15:50] Game loop stopped.
+[2026-08-01 14:15:50] Display mode restored.
