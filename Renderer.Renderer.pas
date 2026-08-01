@@ -1890,6 +1890,8 @@ end;
 function TRenderer.AddShadowMapLight(ALight: TLight; ALightIndex: Integer): Boolean;
 var
   I: Integer;
+  Direction: TVector3;
+  HorizonVisibility: Single;
 begin
   Result := False;
 
@@ -1901,6 +1903,18 @@ begin
      (not (ALight.LightType in [ltDirectional, ltSpot])) then
     Exit;
 
+  HorizonVisibility := 1.0;
+  if ALight.LightType = ltDirectional then
+  begin
+    Direction := ALight.Direction;
+    if ALight.UseTarget then
+      ALight.ResolveTargetDirection(Direction);
+
+    HorizonVisibility := DirectionalLightHorizonVisibility(Direction);
+    if HorizonVisibility <= 0.0 then
+      Exit;
+  end;
+
   for I := 0 to fShadowMapCount - 1 do
     if fShadowMaps[I].Light = ALight then
       Exit;
@@ -1908,7 +1922,8 @@ begin
   fShadowMaps[fShadowMapCount].Light := ALight;
   fShadowMaps[fShadowMapCount].LightIndex := ALightIndex;
   fShadowMaps[fShadowMapCount].Matrix := TMatrix4.Identity;
-  fShadowMaps[fShadowMapCount].Strength := ALight.ShadowStrength;
+  fShadowMaps[fShadowMapCount].Strength := ALight.ShadowStrength *
+    HorizonVisibility;
   Inc(fShadowMapCount);
   Result := True;
 end;
@@ -2083,6 +2098,9 @@ begin
     else
       Direction.Normalize;
 
+    if DirectionalLightHorizonVisibility(Direction) <= 0.0 then
+      Exit;
+
     WorldPosition := fActiveCamera.Camera.Position - Direction * 1000.0;
   end
   else
@@ -2215,6 +2233,7 @@ begin
 
   fShadowShader.SetUniform('useAlphaCutout', GLint(0));
   fShadowShader.SetUniform('flipAlphaCutoutV', GLint(1));
+  fShadowShader.SetUniform('shadowWindMode', GLint(0));
   if (AMesh = nil) or (AMesh.MaterialLibrary = nil) then
     Exit;
 
@@ -2243,6 +2262,8 @@ begin
         GLfloat(Mat.ShaderParameters.AlphaCutoff));
       fShadowShader.SetUniform('flipAlphaCutoutV',
         GLint(Ord(Mat.Materialtype <> Managers.Material.mtGrass)));
+      fShadowShader.SetUniform('shadowWindMode',
+        GLint(Ord(Mat.Materialtype = Managers.Material.mtGrass)));
       fShadowShader.SetUniform('useAlphaCutout', GLint(1));
       Exit;
     end;
@@ -2259,7 +2280,10 @@ begin
   if (aObject = nil) or aObject.IsGizmo then
     Exit;
 
-  Meshes := aObject.EffectiveMeshList;
+  if Assigned(fActiveCamera) and Assigned(fActiveCamera.Camera) then
+    Meshes := aObject.EffectiveMeshListForCamera(fActiveCamera.Camera.Position)
+  else
+    Meshes := aObject.EffectiveMeshList;
   if Assigned(Meshes) then
   for i := 0 to Meshes.Count - 1 do
   begin
@@ -2283,7 +2307,8 @@ begin
         ApplyShadowMaterial(Mesh);
         Mesh.DrawGeometryOnlyCulled(fShadowFrustumPlanes,
           fFrustumCullingEnabled and fShadowFrustumValid and
-          (not aObject.HasVertexWindAnimation));
+          (not (aObject.HasVertexWindAnimation and
+          aObject.CurrentVegetationLODWindEnabled)));
         Inc(fShadowDrawCount);
       finally
         fCurrentSceneObject := nil;
@@ -2934,43 +2959,46 @@ begin
     Exit;
 
   HasObjectGeometry := aObject.HasGeometry;
+  if HasObjectGeometry and (not IsSceneObjectGeometryVisible(aObject)) then
+    Exit;
 
-  if (not HasObjectGeometry) or IsSceneObjectGeometryVisible(aObject) then
-  begin
-    {if aObject.Mesh <> nil then
-      aObject.Mesh.Draw;}
+  {if aObject.Mesh <> nil then
+    aObject.Mesh.Draw;}
+  if Assigned(fActiveCamera) and Assigned(fActiveCamera.Camera) then
+    Meshes := aObject.EffectiveMeshListForCamera(fActiveCamera.Camera.Position)
+  else
     Meshes := aObject.EffectiveMeshList;
-    if Assigned(Meshes) then
-    for i := 0 to Meshes.Count -1 do
-      begin
-        Mesh := Meshes.Item[i];
-        if Mesh = nil then
-          Continue;
+  if Assigned(Meshes) then
+  for i := 0 to Meshes.Count -1 do
+    begin
+      Mesh := Meshes.Item[i];
+      if Mesh = nil then
+        Continue;
 
-        // Gizmo meshes are rendered later in MainUnit after clearing only depth.
-        // Do not draw them during normal scene rendering, because TMesh.Draw
-        // currently uses GL_ALWAYS for AlwaysOnTop meshes.
-        if Mesh.AlwaysOnTop then
-          Continue;
+      // Gizmo meshes are rendered later in MainUnit after clearing only depth.
+      // Do not draw them during normal scene rendering, because TMesh.Draw
+      // currently uses GL_ALWAYS for AlwaysOnTop meshes.
+      if Mesh.AlwaysOnTop then
+        Continue;
 
-        if Mesh is TWaterPlaneMesh then
-          Continue;
+      if Mesh is TWaterPlaneMesh then
+        Continue;
 
-        if (Mesh is THeightFieldMesh) and Assigned(fActiveCamera) and
-           Assigned(fActiveCamera.Camera) then
-          THeightFieldMesh(Mesh).LODCameraPosition := fActiveCamera.Camera.Position;
+      if (Mesh is THeightFieldMesh) and Assigned(fActiveCamera) and
+         Assigned(fActiveCamera.Camera) then
+        THeightFieldMesh(Mesh).LODCameraPosition := fActiveCamera.Camera.Position;
 
-        Mesh.ParentModelMatrix := aObject.WorldMatrix;
-        fCurrentSceneObject := aObject;
-        try
-          Mesh.DrawCulled(fViewFrustumPlanes,
-            fFrustumCullingEnabled and fViewFrustumValid and
-            (not aObject.HasVertexWindAnimation));
-        finally
-          fCurrentSceneObject := nil;
-        end;
+      Mesh.ParentModelMatrix := aObject.WorldMatrix;
+      fCurrentSceneObject := aObject;
+      try
+        Mesh.DrawCulled(fViewFrustumPlanes,
+          fFrustumCullingEnabled and fViewFrustumValid and
+          (not (aObject.HasVertexWindAnimation and
+          aObject.CurrentVegetationLODWindEnabled)));
+      finally
+        fCurrentSceneObject := nil;
       end;
-  end;
+    end;
 
   for i := 0 to aObject.Count - 1 do
     RenderSceneObject(aObject.ObjectList[i]);
@@ -2986,6 +3014,8 @@ var
 begin
   if (aObject = nil) or (fActiveCamera = nil) or
      (fActiveCamera.Camera = nil) then
+    Exit;
+  if aObject.HasGeometry and (not IsSceneObjectGeometryVisible(aObject)) then
     Exit;
 
   if aObject.ParticleSystemCount > 0 then
@@ -3025,6 +3055,8 @@ var
 begin
   if (aObject = nil) or (fActiveCamera = nil) or
      (fActiveCamera.Camera = nil) then
+    Exit;
+  if aObject.HasGeometry and (not IsSceneObjectGeometryVisible(aObject)) then
     Exit;
 
   for B := 0 to aObject.BillboardCount - 1 do

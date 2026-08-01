@@ -1,4 +1,4 @@
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{F331DBA4-10CD-4638-A993-A925F65A95AA}</ProjectGuid>
         <ProjectVersion>20.3</ProjectVersion>
@@ -67,7 +67,8 @@
         <DCC_F>false</DCC_F>
         <DCC_K>false</DCC_K>
         <DCC_Namespace>Winapi;System;System.Win;Xml;Xml.Win;Data;Data.Win;Datasnap;Datasnap.Win;Web;Web.Win;Soap;Soap.Win;Vcl;Vcl.Imaging;Vcl.Touch;Vcl.Samples;Vcl.Shell;$(DCC_Namespace)</DCC_Namespace>
-        <DCC_UnitSearchPath>External\DWScript\Source;..\..\FastMath\FastMath;..\..\pasvulkan\externals\pasdblstrutils\src;External\kraft\src;External\pasmp\src;External\GraphicEx;External\GraphicEx\3rd party\DelphiZlib;External\bass24\delphi;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_Define>KraftPasMP;DYNAMIC_LINK;FM_COLUMN_MAJOR;$(DCC_Define)</DCC_Define>
+        <DCC_UnitSearchPath>$(OGLMDependencySearchPath);$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
         <Icon_MainIcon>SceneEditorIcon.ico</Icon_MainIcon>
         <UWP_DelphiLogo44>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_44.png</UWP_DelphiLogo44>
         <UWP_DelphiLogo150>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_150.png</UWP_DelphiLogo150>
@@ -88,7 +89,7 @@
         <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1)'!=''">
-        <DCC_Define>DEBUG;KraftPasMP;DYNAMIC_LINK;$(DCC_Define)</DCC_Define>
+        <DCC_Define>DEBUG;$(DCC_Define)</DCC_Define>
         <DCC_DebugDCUs>true</DCC_DebugDCUs>
         <DCC_Optimize>false</DCC_Optimize>
         <DCC_GenerateStackFrames>true</DCC_GenerateStackFrames>
@@ -107,7 +108,7 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2)'!=''">
         <DCC_LocalDebugSymbols>false</DCC_LocalDebugSymbols>
-        <DCC_Define>RELEASE;KraftPasMP;$(DCC_Define)</DCC_Define>
+        <DCC_Define>RELEASE;$(DCC_Define)</DCC_Define>
         <DCC_SymbolReferenceInfo>0</DCC_SymbolReferenceInfo>
         <DCC_DebugInformation>0</DCC_DebugInformation>
     </PropertyGroup>
@@ -119,54 +120,14 @@
         <DCC_ExeOutput>.\</DCC_ExeOutput>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
     </PropertyGroup>
+    <Import Project="Build.Dependencies.props" Condition="Exists('Build.Dependencies.props')"/>
     <ItemGroup>
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
-        <DCCReference Include="OGLM_GameForm.pas"/>
-        <DCCReference Include="Engine.pas"/>
-        <DCCReference Include="dglOpenGL.pas"/>
-        <DCCReference Include="Renderer.Mesh.pas"/>
-        <DCCReference Include="Renderer.Particles.pas"/>
-        <DCCReference Include="Renderer.Billboards.pas"/>
-        <DCCReference Include="Renderer.AnimatedSprites.pas"/>
-        <DCCReference Include="Renderer.SkyDome.pas"/>
-        <DCCReference Include="Renderer.Shader.pas"/>
-        <DCCReference Include="Engine.Generators.pas"/>
-        <DCCReference Include="Renderer.Camera.pas"/>
-        <DCCReference Include="Renderer.Light.pas"/>
-        <DCCReference Include="Managers.Scene.pas"/>
-        <DCCReference Include="Managers.Material.pas"/>
-        <DCCReference Include="Renderer.Renderer.pas"/>
-        <DCCReference Include="Renderer.RenderTechnique.pas"/>
-        <DCCReference Include="Renderer.Mesh.Factory.pas"/>
-        <DCCReference Include="Renderer.Mesh.List.pas"/>
-        <DCCReference Include="Utility.Functions.pas"/>
-        <DCCReference Include="Loader.OBJ.pas"/>
-        <DCCReference Include="Loader.GLTF.pas"/>
-        <DCCReference Include="PasGLTF.pas"/>
-        <DCCReference Include="PasJSON.pas"/>
-        <DCCReference Include="Engine.Time.pas"/>
-        <DCCReference Include="Engine.Keyboard.pas"/>
-        <DCCReference Include="Engine.Mouse.pas"/>
-        <DCCReference Include="Engine.Wind.pas"/>
-        <DCCReference Include="Engine.Animation.pas"/>
-        <DCCReference Include="Engine.Gui.pas"/>
-        <DCCReference Include="Engine.Gui.BitmapFont.pas"/>
-        <DCCReference Include="Engine.Gui.Controls.pas"/>
-        <DCCReference Include="Engine.Gui.Manager.pas"/>
-        <DCCReference Include="Engine.Gui.Scripting.pas"/>
-        <DCCReference Include="Engine.Scripting.pas"/>
-        <DCCReference Include="Engine.Paths.pas"/>
-        <DCCReference Include="Engine.Types.pas"/>
-        <DCCReference Include="Engine.Physics.pas"/>
-        <DCCReference Include="Engine.Audio.pas"/>
-        <DCCReference Include="DWS.FastMath.pas"/>
-        <DCCReference Include="Physics.Geometry.pas"/>
-        <DCCReference Include="Physics.Engine.pas"/>
-        <DCCReference Include="Physics.Math.pas"/>
-        <DCCReference Include="Physics.Settings.pas"/>
-        <DCCReference Include="bass.pas"/>
+        <DCCReference Include="OGLM_GameForm.pas">
+            <Form>GameForm</Form>
+        </DCCReference>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -187,17 +148,22 @@
                 <Source>
                     <Source Name="MainSource">OGLM_Game.dpr</Source>
                 </Source>
+                <Excluded_Packages>
+                    <Excluded_Packages Name="C:\Users\Public\Documents\Embarcadero\Studio\23.0\Bpl\SynEditDD290.bpl">File C:\Users\Public\Documents\Embarcadero\Studio\23.0\Bpl\SynEditDD290.bpl not found</Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\bcboffice2k290.bpl">Embarcadero C++Builder Office 2000 Servers Package</Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\bcbofficexp290.bpl">Embarcadero C++Builder Office XP Servers Package</Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\dcloffice2k290.bpl">Microsoft Office 2000 Sample Automation Server Wrapper Components</Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\dclofficexp290.bpl">Microsoft Office XP Sample Automation Server Wrapper Components</Excluded_Packages>
+                </Excluded_Packages>
             </Delphi.Personality>
-            <Deployment Version="5">
-                <ProjectRoot Platform="Win32" Name="$(PROJECTNAME)"/>
-                <ProjectRoot Platform="Win64" Name="$(PROJECTNAME)"/>
-            </Deployment>
+            <Deployment Version="5"/>
             <Platforms>
                 <Platform value="Win32">True</Platform>
                 <Platform value="Win64">True</Platform>
             </Platforms>
             <ModelSupport>False</ModelSupport>
         </BorlandProject>
+        <ProjectFileVersion>12</ProjectFileVersion>
     </ProjectExtensions>
     <Import Project="$(BDS)\Bin\CodeGear.Delphi.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Delphi.Targets')"/>
     <Import Project="$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj" Condition="Exists('$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj')"/>

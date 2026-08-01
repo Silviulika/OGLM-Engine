@@ -1583,6 +1583,7 @@ var
   TypeInt: Integer;
   CosCutoff: Single;
   Direction: TVector3;
+  DirectVisibility: Single;
 begin
   if Shader = nil then
     Exit;
@@ -1609,8 +1610,6 @@ begin
   Shader.SetUniform(Prefix + 'enabled', Ord(Light.Enabled));
   Shader.SetUniform(Prefix + 'type', TypeInt);
   Shader.SetUniform(Prefix + 'ambient', Light.Ambient);
-  Shader.SetUniform(Prefix + 'diffuse', Light.Diffuse);
-  Shader.SetUniform(Prefix + 'specular', Light.Specular);
   Shader.SetUniform(Prefix + 'position', Light.Position);
 
   Direction := Light.Direction;
@@ -1628,6 +1627,12 @@ begin
   if Direction.LengthSquared > 1e-6 then
     Direction.Normalize;
 
+  DirectVisibility := 1.0;
+  if Light.LightType = ltDirectional then
+    DirectVisibility := DirectionalLightHorizonVisibility(Direction);
+
+  Shader.SetUniform(Prefix + 'diffuse', Light.Diffuse * DirectVisibility);
+  Shader.SetUniform(Prefix + 'specular', Light.Specular * DirectVisibility);
   Shader.SetUniform(Prefix + 'direction', Direction);
   Shader.SetUniform(Prefix + 'constantAttenuation', Light.ConstantAttenuation);
   Shader.SetUniform(Prefix + 'linearAttenuation', Light.LinearAttenuation);

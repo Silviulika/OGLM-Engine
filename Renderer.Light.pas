@@ -104,7 +104,29 @@ type
     property OnApplyShaderLight: TOnApplyShaderLight read fOnApplyShaderLight write fOnApplyShaderLight;
   end;
 
+function DirectionalLightHorizonVisibility(const ADirection: TVector3): Single;
+
 implementation
+
+const
+  DIRECTIONAL_LIGHT_HORIZON_FADE = 0.08;
+
+function DirectionalLightHorizonVisibility(const ADirection: TVector3): Single;
+var
+  Direction: TVector3;
+  SunElevation: Single;
+  T: Single;
+begin
+  Direction := ADirection;
+  if Direction.LengthSquared < 1e-6 then
+    Direction := Vector3(-0.35, -1.0, -0.35)
+  else
+    Direction.Normalize;
+
+  SunElevation := -Direction.Y;
+  T := EnsureRange(SunElevation / DIRECTIONAL_LIGHT_HORIZON_FADE, 0.0, 1.0);
+  Result := T * T * (3.0 - 2.0 * T);
+end;
 
 procedure WriteStringToStream(Stream: TStream; const Value: string);
 var

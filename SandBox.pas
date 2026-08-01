@@ -1000,6 +1000,7 @@ type
     procedure DrawImGuiObjectProperties;
     procedure DrawImGuiAnimationProperties;
     procedure DrawImGuiWindProperties;
+    procedure DrawImGuiVegetationLODProperties;
     procedure DrawImGuiLightProperties;
     procedure DrawImGuiBillboardProperties;
     procedure DrawImGuiAnimatedSpriteProperties;
@@ -1355,7 +1356,7 @@ end;
 
 const
   SCENE_FILE_EXTENSION_LOCAL = '.omescn';
-  SCENE_FILE_VERSION_LOCAL = 11;
+  SCENE_FILE_VERSION_LOCAL = 12;
   SCENE_FILE_MAGIC_LOCAL: array[0..7] of AnsiChar =
     ('O', 'M', 'E', 'S', 'C', 'N', '0', '1');
   SCENE_RENDER_SETTINGS_VERSION_LOCAL = 3;
@@ -1371,7 +1372,7 @@ const
   SCENE_SCRIPTS_MAGIC_LOCAL: array[0..7] of AnsiChar =
     ('O', 'M', 'E', 'S', 'C', 'P', '0', '1');
   PREFAB_FILE_EXTENSION_LOCAL = '.omeprefab';
-  PREFAB_FILE_VERSION_LOCAL = 2;
+  PREFAB_FILE_VERSION_LOCAL = 3;
   PREFAB_FILE_MAGIC_LOCAL: array[0..7] of AnsiChar =
     ('O', 'M', 'E', 'P', 'R', 'F', '0', '1');
   SCRIPT_LIBRARY_FILE_EXTENSION_LOCAL = '.omeslib';
@@ -7412,6 +7413,7 @@ var
   TargetPath: string;
   RelativeTarget: string;
   ScriptCountValue: Integer;
+  ObjectSceneVersion: Integer;
 
   function IsObjectInPrefab(Obj: TSceneObject): Boolean;
   begin
@@ -7468,6 +7470,8 @@ begin
     Stream.WriteBuffer(Version, SizeOf(Version));
     WritePreviewString(Stream, fSelectedObject.Name);
 
+    ObjectSceneVersion := SCENE_FILE_VERSION_LOCAL;
+    Stream.WriteBuffer(ObjectSceneVersion, SizeOf(ObjectSceneVersion));
     fSelectedObject.SaveToStream(Stream);
 
     HasMaterials := (MaterialLibraries <> nil) and (MaterialLibraries.Count > 0);
@@ -7675,10 +7679,16 @@ begin
       raise Exception.CreateFmt('Unsupported prefab version: %d.', [Version]);
 
     StoredName := ReadPreviewString(Stream);
-    if Version >= 2 then
-      ObjectSceneVersion := SCENE_FILE_VERSION_LOCAL
+    if Version >= 3 then
+      Stream.ReadBuffer(ObjectSceneVersion, SizeOf(ObjectSceneVersion))
+    else if Version >= 2 then
+      ObjectSceneVersion := 11
     else
       ObjectSceneVersion := 9;
+    if (ObjectSceneVersion < 1) or
+       (ObjectSceneVersion > SCENE_FILE_VERSION_LOCAL) then
+      raise Exception.CreateFmt('Unsupported prefab scene object version: %d.',
+        [ObjectSceneVersion]);
     Result := TSceneObject.LoadFromStream(Stream, ParentObj, ObjectSceneVersion);
     if Trim(Result.Name) = '' then
       Result.Name := StoredName;
@@ -9589,6 +9599,7 @@ var
   TypeInt: Integer;
   CosCutoff: Single;
   Direction: TVector3;
+  DirectVisibility: Single;
 begin
   if fEngine <> nil then
   begin
@@ -9618,8 +9629,6 @@ begin
   Shader.SetUniform(Prefix + 'enabled', Ord(Light.Enabled));
   Shader.SetUniform(Prefix + 'type', TypeInt);
   Shader.SetUniform(Prefix + 'ambient', Light.Ambient);
-  Shader.SetUniform(Prefix + 'diffuse', Light.Diffuse);
-  Shader.SetUniform(Prefix + 'specular', Light.Specular);
   Shader.SetUniform(Prefix + 'position', Light.Position);
 
   Direction := Light.Direction;
@@ -9637,6 +9646,12 @@ begin
   if Direction.LengthSquared > 1e-6 then
     Direction.Normalize;
 
+  DirectVisibility := 1.0;
+  if Light.LightType = ltDirectional then
+    DirectVisibility := DirectionalLightHorizonVisibility(Direction);
+
+  Shader.SetUniform(Prefix + 'diffuse', Light.Diffuse * DirectVisibility);
+  Shader.SetUniform(Prefix + 'specular', Light.Specular * DirectVisibility);
   Shader.SetUniform(Prefix + 'direction', Direction);
   Shader.SetUniform(Prefix + 'constantAttenuation', Light.ConstantAttenuation);
   Shader.SetUniform(Prefix + 'linearAttenuation', Light.LinearAttenuation);
@@ -10362,6 +10377,8 @@ begin
 
   if Assigned(fSelectedObject) then
   begin
+    if GeometryChanged then
+      fSelectedObject.MarkVegetationLODDirty;
     fSelectedObject.UpdateBoundingRadiusFromMesh;
     fSelectedObject.NotifyChange;
   end;
@@ -10836,6 +10853,115 @@ begin
     end;
   finally
     ImGui.PopItemWidth;
+  end;
+end;
+
+procedure TSandBoxForm.DrawImGuiVegetationLODProperties;
+var
+  LOD: TVegetationLODSettings;
+  Enabled: Boolean;
+  WindEnabled: Boolean;
+  LevelCount: Integer;
+  I: Integer;
+  FloatValue: Single;
+  HeaderText: string;
+
+  procedure CommitLODSettings;
+  begin
+    LOD.Sanitize;
+    fSelectedObject.VegetationLOD := LOD;
+    NotifyInspectorObjectEdited;
+    RequestRender;
+  end;
+
+begin
+  if fSelectedObject = nil then
+    Exit;
+
+  LOD := fSelectedObject.VegetationLOD;
+  if (not fSelectedObject.HasGeometry) and (not LOD.Enabled) then
+    Exit;
+  if not ImGui.CollapsingHeader('Vegetation LOD',
+    ImGuiTreeNodeFlags_DefaultOpen) then
+    Exit;
+
+  Enabled := LOD.Enabled;
+  if ImGui.Checkbox('Enabled##VegetationLOD', @Enabled) then
+  begin
+    if Enabled then
+    begin
+      if not LOD.Enabled then
+        LOD := TVegetationLODSettings.Default;
+      LOD.Enabled := True;
+    end
+    else
+      LOD.Enabled := False;
+    CommitLODSettings;
+  end;
+
+  ImGui.SameLine;
+  if ImGui.Button('Reset##VegetationLOD') then
+  begin
+    LOD := TVegetationLODSettings.Default;
+    CommitLODSettings;
+  end;
+
+  if not LOD.Enabled then
+    Exit;
+
+  ImGui.Text(PAnsiChar(AnsiString(Format('Active: LOD%d',
+    [fSelectedObject.ActiveVegetationLODLevel]))));
+
+  LevelCount := LOD.LevelCount;
+  ImGui.PushItemWidth(IMGUI_PROP_SCALAR_WIDTH);
+  try
+    if InspectorInputInt('Levels##VegetationLOD', @LevelCount, 1.0,
+      1, VEGETATION_LOD_MAX_LEVELS, '%d', ImGuiSliderFlags_None) then
+    begin
+      LOD.LevelCount := LevelCount;
+      CommitLODSettings;
+    end;
+  finally
+    ImGui.PopItemWidth;
+  end;
+
+  for I := 0 to LOD.LevelCount - 1 do
+  begin
+    HeaderText := Format('LOD%d##VegetationLODLevel%d', [I, I]);
+    if ImGui.TreeNode(PAnsiChar(AnsiString(HeaderText))) then
+    begin
+      ImGui.PushId(I);
+      try
+        if I = 0 then
+          ImGui.Text('Source model')
+        else
+        begin
+          FloatValue := LOD.Levels[I].StartDistance;
+          ImGui.PushItemWidth(IMGUI_PROP_SCALAR_WIDTH);
+          try
+            if InspectorInputFloat('Start distance##VegetationLODLevel',
+              @FloatValue, 1.0, 0.001, 100000.0, '%.2f') then
+            begin
+              LOD.Levels[I].StartDistance := FloatValue;
+              CommitLODSettings;
+            end;
+          finally
+            ImGui.PopItemWidth;
+          end;
+        end;
+
+        WindEnabled := LOD.Levels[I].WindEnabled;
+        if ImGui.Checkbox('Wind animation##VegetationLODLevel',
+          @WindEnabled) then
+        begin
+          LOD.Levels[I].WindEnabled := WindEnabled;
+          CommitLODSettings;
+        end;
+      finally
+        ImGui.PopId;
+        ImGui.TreePop;
+      end;
+    end;
   end;
 end;
 
@@ -14225,6 +14351,7 @@ var
   Style: PImGuiStyle;
   ButtonWidth: Single;
   RunButtonText: string;
+  SourceEditorHeight: Single;
 
   function BuildSceneObjectPath(Obj: TSceneObject): string;
   begin
@@ -14559,28 +14686,10 @@ begin
       ScriptTargetKindDisplayName(Script.TargetKind))));
 
     ImGui.Separator;
+    ImGui.AlignTextToFramePadding;
     ImGui.Text('Source');
-    if ImGui.InputTextMultiline(PAnsiChar(AnsiString('Source##ScriptSource')),
-      @fScriptEditor.Source[0], SizeOf(fScriptEditor.Source),
-      ImVec2.New(-1, 250), ImGuiInputTextFlags_AllowTabInput, nil, nil) then
-      fScriptEditor.Dirty := True;
 
-    SourceActive := ImGui.IsItemActive;
-    SourceRectMin := ImGui.GetItemRectMin;
-    SourceRectMax := ImGui.GetItemRectMax;
-    fScriptEditor.SourceEditorActive := SourceActive;
-    fScriptEditor.SourceEditorHovered := ImGui.IsItemHovered;
-    fScriptEditor.SourceRectMinX := SourceRectMin.x;
-    fScriptEditor.SourceRectMinY := SourceRectMin.y;
-    fScriptEditor.SourceRectMaxX := SourceRectMax.x;
-    fScriptEditor.SourceRectMaxY := SourceRectMax.y;
-
-    if fScriptEditor.Dirty then
-      ImGui.TextWrapped('Unsaved editor changes. Apply, Compile, Run, or Save will sync them.');
-
-    ImGui.TextWrapped(
-      'Apply syncs editor changes. Compile validates the script. Run enables it and executes the entry point once; Pause disables it.');
-
+    ImGui.SameLine;
     if ImGui.Button('Apply##ScriptApply') then
     begin
       SyncSelectedScriptFromEditor;
@@ -14646,14 +14755,34 @@ begin
       end;
     end;
 
+    if fScriptEditor.Dirty then
+      ImGui.TextWrapped('Unsaved editor changes. Apply, Compile, Run, or Save will sync them.');
+
     if fScriptEditor.Status <> '' then
-    begin
-      ImGui.Separator;
       ImGui.TextWrapped(PAnsiChar(AnsiString(fScriptEditor.Status)));
-    end;
 
     if fScriptEditor.LastError <> '' then
       ImGui.TextWrapped(PAnsiChar(AnsiString(fScriptEditor.LastError)));
+
+    SourceEditorHeight := ImGui.GetContentRegionAvail.y;
+    if SourceEditorHeight < 160.0 then
+      SourceEditorHeight := 160.0;
+
+    if ImGui.InputTextMultiline(PAnsiChar(AnsiString('##ScriptSource')),
+      @fScriptEditor.Source[0], SizeOf(fScriptEditor.Source),
+      ImVec2.New(-1, SourceEditorHeight), ImGuiInputTextFlags_AllowTabInput,
+      nil, nil) then
+      fScriptEditor.Dirty := True;
+
+    SourceActive := ImGui.IsItemActive;
+    SourceRectMin := ImGui.GetItemRectMin;
+    SourceRectMax := ImGui.GetItemRectMax;
+    fScriptEditor.SourceEditorActive := SourceActive;
+    fScriptEditor.SourceEditorHovered := ImGui.IsItemHovered;
+    fScriptEditor.SourceRectMinX := SourceRectMin.x;
+    fScriptEditor.SourceRectMinY := SourceRectMin.y;
+    fScriptEditor.SourceRectMaxX := SourceRectMax.x;
+    fScriptEditor.SourceRectMaxY := SourceRectMax.y;
   end;
   ImGui.EndChild;
 
@@ -15735,6 +15864,9 @@ begin
 
     ImGui.Separator;
     DrawImGuiWindProperties;
+
+    ImGui.Separator;
+    DrawImGuiVegetationLODProperties;
 
     ImGui.Separator;
     DrawImGuiLightProperties;

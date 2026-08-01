@@ -338,6 +338,10 @@ type
     function GetObjectWindVector3(AObject: TSceneObject; const AName: string): TVector3;
     procedure SetObjectWindVector3(AObject: TSceneObject; const AName: string;
       const AValue: TVector3);
+    function ClampVegetationLODLevel(AObject: TSceneObject;
+      ALevel: Integer): Integer;
+    procedure ApplyVegetationLODSettings(AObject: TSceneObject;
+      const ASettings: TVegetationLODSettings);
     function RequireRenderer: TRenderer;
     function RenderWindowHandle: HWND;
     function TryGetRenderWindowRect(out ARect: TRect): Boolean;
@@ -480,6 +484,18 @@ type
     procedure DoObjectEnableVertexWind(Info: TProgramInfo);
     procedure DoObjectEnableGrassWind(Info: TProgramInfo);
     procedure DoObjectDisableWind(Info: TProgramInfo);
+    procedure DoObjectEnableVegetationLOD(Info: TProgramInfo);
+    procedure DoObjectDisableVegetationLOD(Info: TProgramInfo);
+    procedure DoObjectResetVegetationLODDefaults(Info: TProgramInfo);
+    procedure DoObjectVegetationLODEnabled(Info: TProgramInfo);
+    procedure DoObjectSetVegetationLODEnabled(Info: TProgramInfo);
+    procedure DoObjectVegetationLODLevelCount(Info: TProgramInfo);
+    procedure DoObjectSetVegetationLODLevelCount(Info: TProgramInfo);
+    procedure DoObjectActiveVegetationLODLevel(Info: TProgramInfo);
+    procedure DoObjectVegetationLODStartDistance(Info: TProgramInfo);
+    procedure DoObjectSetVegetationLODStartDistance(Info: TProgramInfo);
+    procedure DoObjectVegetationLODWindEnabled(Info: TProgramInfo);
+    procedure DoObjectSetVegetationLODWindEnabled(Info: TProgramInfo);
     procedure DoObjectHasWind(Info: TProgramInfo);
     procedure DoObjectHasBoneWind(Info: TProgramInfo);
     procedure DoObjectHasVertexWind(Info: TProgramInfo);
@@ -840,6 +856,18 @@ type
     procedure DoSceneObjectEnableVertexWind(Info: TProgramInfo; ExtObject: TObject);
     procedure DoSceneObjectEnableGrassWind(Info: TProgramInfo; ExtObject: TObject);
     procedure DoSceneObjectDisableWind(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectEnableVegetationLOD(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectDisableVegetationLOD(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectResetVegetationLODDefaults(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectGetVegetationLODEnabled(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectSetVegetationLODEnabled(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectGetVegetationLODLevelCount(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectSetVegetationLODLevelCount(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectGetActiveVegetationLODLevel(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectVegetationLODStartDistance(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectSetVegetationLODStartDistance(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectVegetationLODWindEnabled(Info: TProgramInfo; ExtObject: TObject);
+    procedure DoSceneObjectSetVegetationLODWindEnabled(Info: TProgramInfo; ExtObject: TObject);
     procedure DoSceneObjectGetHasWind(Info: TProgramInfo; ExtObject: TObject);
     procedure DoSceneObjectGetHasBoneWind(Info: TProgramInfo; ExtObject: TObject);
     procedure DoSceneObjectGetHasVertexWind(Info: TProgramInfo; ExtObject: TObject);
@@ -3206,6 +3234,30 @@ begin
   AddMethod('EnableVertexWind', '', [], [], DoSceneObjectEnableVertexWind);
   AddMethod('EnableGrassWind', '', [], [], DoSceneObjectEnableGrassWind);
   AddMethod('DisableWind', '', [], [], DoSceneObjectDisableWind);
+  AddMethod('EnableVegetationLOD', '', [], [],
+    DoSceneObjectEnableVegetationLOD);
+  AddMethod('DisableVegetationLOD', '', [], [],
+    DoSceneObjectDisableVegetationLOD);
+  AddMethod('ResetVegetationLODDefaults', '', [], [],
+    DoSceneObjectResetVegetationLODDefaults);
+  AddMethod('GetVegetationLODEnabled', 'Boolean', [], [],
+    DoSceneObjectGetVegetationLODEnabled);
+  AddMethod('SetVegetationLODEnabled', '', ['Value'], ['Boolean'],
+    DoSceneObjectSetVegetationLODEnabled);
+  AddMethod('GetVegetationLODLevelCount', 'Integer', [], [],
+    DoSceneObjectGetVegetationLODLevelCount);
+  AddMethod('SetVegetationLODLevelCount', '', ['Value'], ['Integer'],
+    DoSceneObjectSetVegetationLODLevelCount);
+  AddMethod('GetActiveVegetationLODLevel', 'Integer', [], [],
+    DoSceneObjectGetActiveVegetationLODLevel);
+  AddMethod('VegetationLODStartDistance', 'Float', ['Level'], ['Integer'],
+    DoSceneObjectVegetationLODStartDistance);
+  AddMethod('SetVegetationLODStartDistance', '', ['Level', 'Distance'],
+    ['Integer', 'Float'], DoSceneObjectSetVegetationLODStartDistance);
+  AddMethod('VegetationLODWindEnabled', 'Boolean', ['Level'], ['Integer'],
+    DoSceneObjectVegetationLODWindEnabled);
+  AddMethod('SetVegetationLODWindEnabled', '', ['Level', 'Enabled'],
+    ['Integer', 'Boolean'], DoSceneObjectSetVegetationLODWindEnabled);
   AddMethod('WindInteger', 'Integer', ['Name'], ['String'],
     DoSceneObjectWindInteger);
   AddMethod('SetWindInteger', '', ['Name', 'Value'], ['String', 'Integer'],
@@ -3253,6 +3305,12 @@ begin
   AddProperty('HasWind', 'Boolean', 'GetHasWind', '');
   AddProperty('HasBoneWind', 'Boolean', 'GetHasBoneWind', '');
   AddProperty('HasVertexWind', 'Boolean', 'GetHasVertexWind', '');
+  AddProperty('VegetationLODEnabled', 'Boolean',
+    'GetVegetationLODEnabled', 'SetVegetationLODEnabled');
+  AddProperty('VegetationLODLevelCount', 'Integer',
+    'GetVegetationLODLevelCount', 'SetVegetationLODLevelCount');
+  AddProperty('ActiveVegetationLODLevel', 'Integer',
+    'GetActiveVegetationLODLevel', '');
   AddProperty('AnimationCount', 'Integer', 'GetAnimationCount', '');
   AddProperty('CurrentAnimationName', 'String', 'GetCurrentAnimationName', '');
   AddProperty('CurrentAnimationIndex', 'Integer',
@@ -4194,6 +4252,29 @@ begin
       [AName]);
 
   AObject.WindSettings := Settings;
+  AObject.NotifyChange;
+end;
+
+function TdwsEngineUnit.ClampVegetationLODLevel(AObject: TSceneObject;
+  ALevel: Integer): Integer;
+var
+  Settings: TVegetationLODSettings;
+begin
+  if AObject = nil then
+    raise Exception.Create('Scene object is nil.');
+
+  Settings := AObject.VegetationLOD;
+  Settings.Sanitize;
+  Result := EnsureRange(ALevel, 0, Settings.LevelCount - 1);
+end;
+
+procedure TdwsEngineUnit.ApplyVegetationLODSettings(AObject: TSceneObject;
+  const ASettings: TVegetationLODSettings);
+begin
+  if AObject = nil then
+    raise Exception.Create('Scene object is nil.');
+
+  AObject.VegetationLOD := ASettings;
   AObject.NotifyChange;
 end;
 
@@ -5437,6 +5518,144 @@ begin
   Obj.NotifyChange;
 end;
 
+procedure TdwsEngineUnit.DoObjectEnableVegetationLOD(Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  Obj.EnableVegetationLOD;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoObjectDisableVegetationLOD(Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  Obj.DisableVegetationLOD;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoObjectResetVegetationLODDefaults(Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  Obj.ResetVegetationLODDefaults;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoObjectVegetationLODEnabled(Info: TProgramInfo);
+var
+  Settings: TVegetationLODSettings;
+begin
+  Settings := FContext.SceneObjectFromHandle(
+    Info.ParamAsInteger[0]).VegetationLOD;
+  Info.ResultAsBoolean := Settings.Enabled;
+end;
+
+procedure TdwsEngineUnit.DoObjectSetVegetationLODEnabled(Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  if Info.ParamAsBoolean[1] then
+    Obj.EnableVegetationLOD
+  else
+    Obj.DisableVegetationLOD;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoObjectVegetationLODLevelCount(Info: TProgramInfo);
+var
+  Settings: TVegetationLODSettings;
+begin
+  Settings := FContext.SceneObjectFromHandle(
+    Info.ParamAsInteger[0]).VegetationLOD;
+  Settings.Sanitize;
+  Info.ResultAsInteger := Settings.LevelCount;
+end;
+
+procedure TdwsEngineUnit.DoObjectSetVegetationLODLevelCount(
+  Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+  Settings: TVegetationLODSettings;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  Settings := Obj.VegetationLOD;
+  Settings.Sanitize;
+  Settings.LevelCount := EnsureRange(Info.ParamAsInteger[1], 1,
+    VEGETATION_LOD_MAX_LEVELS);
+  ApplyVegetationLODSettings(Obj, Settings);
+end;
+
+procedure TdwsEngineUnit.DoObjectActiveVegetationLODLevel(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := FContext.SceneObjectFromHandle(
+    Info.ParamAsInteger[0]).ActiveVegetationLODLevel;
+end;
+
+procedure TdwsEngineUnit.DoObjectVegetationLODStartDistance(
+  Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+  Settings: TVegetationLODSettings;
+  Level: Integer;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  Settings := Obj.VegetationLOD;
+  Level := ClampVegetationLODLevel(Obj, Info.ParamAsInteger[1]);
+  Info.ResultAsFloat := Settings.Levels[Level].StartDistance;
+end;
+
+procedure TdwsEngineUnit.DoObjectSetVegetationLODStartDistance(
+  Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+  Settings: TVegetationLODSettings;
+  Level: Integer;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  Settings := Obj.VegetationLOD;
+  Settings.Sanitize;
+  Level := EnsureRange(Info.ParamAsInteger[1], 0,
+    VEGETATION_LOD_MAX_LEVELS - 1);
+  if Level >= Settings.LevelCount then
+    Settings.LevelCount := Level + 1;
+  Settings.Levels[Level].StartDistance := Max(0.0, Info.ParamAsFloat[2]);
+  ApplyVegetationLODSettings(Obj, Settings);
+end;
+
+procedure TdwsEngineUnit.DoObjectVegetationLODWindEnabled(
+  Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+  Level: Integer;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  Level := ClampVegetationLODLevel(Obj, Info.ParamAsInteger[1]);
+  Info.ResultAsBoolean := Obj.VegetationLODWindEnabledForLevel(Level);
+end;
+
+procedure TdwsEngineUnit.DoObjectSetVegetationLODWindEnabled(
+  Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+  Settings: TVegetationLODSettings;
+  Level: Integer;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  Settings := Obj.VegetationLOD;
+  Settings.Sanitize;
+  Level := EnsureRange(Info.ParamAsInteger[1], 0,
+    VEGETATION_LOD_MAX_LEVELS - 1);
+  if Level >= Settings.LevelCount then
+    Settings.LevelCount := Level + 1;
+  Settings.Levels[Level].WindEnabled := Info.ParamAsBoolean[2];
+  ApplyVegetationLODSettings(Obj, Settings);
+end;
+
 procedure TdwsEngineUnit.DoObjectHasWind(Info: TProgramInfo);
 begin
   Info.ResultAsBoolean :=
@@ -6140,6 +6359,148 @@ begin
   Obj := RequireSceneObject(ExtObject);
   Obj.DisableWind;
   Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectEnableVegetationLOD(Info: TProgramInfo;
+  ExtObject: TObject);
+var
+  Obj: TSceneObject;
+begin
+  Obj := RequireSceneObject(ExtObject);
+  Obj.EnableVegetationLOD;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectDisableVegetationLOD(Info: TProgramInfo;
+  ExtObject: TObject);
+var
+  Obj: TSceneObject;
+begin
+  Obj := RequireSceneObject(ExtObject);
+  Obj.DisableVegetationLOD;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectResetVegetationLODDefaults(
+  Info: TProgramInfo; ExtObject: TObject);
+var
+  Obj: TSceneObject;
+begin
+  Obj := RequireSceneObject(ExtObject);
+  Obj.ResetVegetationLODDefaults;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectGetVegetationLODEnabled(
+  Info: TProgramInfo; ExtObject: TObject);
+var
+  Settings: TVegetationLODSettings;
+begin
+  Settings := RequireSceneObject(ExtObject).VegetationLOD;
+  Info.ResultAsBoolean := Settings.Enabled;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectSetVegetationLODEnabled(
+  Info: TProgramInfo; ExtObject: TObject);
+var
+  Obj: TSceneObject;
+begin
+  Obj := RequireSceneObject(ExtObject);
+  if Info.ParamAsBoolean[0] then
+    Obj.EnableVegetationLOD
+  else
+    Obj.DisableVegetationLOD;
+  Obj.NotifyChange;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectGetVegetationLODLevelCount(
+  Info: TProgramInfo; ExtObject: TObject);
+var
+  Settings: TVegetationLODSettings;
+begin
+  Settings := RequireSceneObject(ExtObject).VegetationLOD;
+  Settings.Sanitize;
+  Info.ResultAsInteger := Settings.LevelCount;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectSetVegetationLODLevelCount(
+  Info: TProgramInfo; ExtObject: TObject);
+var
+  Obj: TSceneObject;
+  Settings: TVegetationLODSettings;
+begin
+  Obj := RequireSceneObject(ExtObject);
+  Settings := Obj.VegetationLOD;
+  Settings.Sanitize;
+  Settings.LevelCount := EnsureRange(Info.ParamAsInteger[0], 1,
+    VEGETATION_LOD_MAX_LEVELS);
+  ApplyVegetationLODSettings(Obj, Settings);
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectGetActiveVegetationLODLevel(
+  Info: TProgramInfo; ExtObject: TObject);
+begin
+  Info.ResultAsInteger := RequireSceneObject(ExtObject).ActiveVegetationLODLevel;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectVegetationLODStartDistance(
+  Info: TProgramInfo; ExtObject: TObject);
+var
+  Obj: TSceneObject;
+  Settings: TVegetationLODSettings;
+  Level: Integer;
+begin
+  Obj := RequireSceneObject(ExtObject);
+  Settings := Obj.VegetationLOD;
+  Level := ClampVegetationLODLevel(Obj, Info.ParamAsInteger[0]);
+  Info.ResultAsFloat := Settings.Levels[Level].StartDistance;
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectSetVegetationLODStartDistance(
+  Info: TProgramInfo; ExtObject: TObject);
+var
+  Obj: TSceneObject;
+  Settings: TVegetationLODSettings;
+  Level: Integer;
+begin
+  Obj := RequireSceneObject(ExtObject);
+  Settings := Obj.VegetationLOD;
+  Settings.Sanitize;
+  Level := EnsureRange(Info.ParamAsInteger[0], 0,
+    VEGETATION_LOD_MAX_LEVELS - 1);
+  if Level >= Settings.LevelCount then
+    Settings.LevelCount := Level + 1;
+  Settings.Levels[Level].StartDistance := Max(0.0, Info.ParamAsFloat[1]);
+  ApplyVegetationLODSettings(Obj, Settings);
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectVegetationLODWindEnabled(
+  Info: TProgramInfo; ExtObject: TObject);
+var
+  Obj: TSceneObject;
+  Level: Integer;
+begin
+  Obj := RequireSceneObject(ExtObject);
+  Level := ClampVegetationLODLevel(Obj, Info.ParamAsInteger[0]);
+  Info.ResultAsBoolean := Obj.VegetationLODWindEnabledForLevel(Level);
+end;
+
+procedure TdwsEngineUnit.DoSceneObjectSetVegetationLODWindEnabled(
+  Info: TProgramInfo; ExtObject: TObject);
+var
+  Obj: TSceneObject;
+  Settings: TVegetationLODSettings;
+  Level: Integer;
+begin
+  Obj := RequireSceneObject(ExtObject);
+  Settings := Obj.VegetationLOD;
+  Settings.Sanitize;
+  Level := EnsureRange(Info.ParamAsInteger[0], 0,
+    VEGETATION_LOD_MAX_LEVELS - 1);
+  if Level >= Settings.LevelCount then
+    Settings.LevelCount := Level + 1;
+  Settings.Levels[Level].WindEnabled := Info.ParamAsBoolean[1];
+  ApplyVegetationLODSettings(Obj, Settings);
 end;
 
 procedure TdwsEngineUnit.DoSceneObjectGetHasWind(Info: TProgramInfo;
@@ -9376,6 +9737,18 @@ begin
   RegisterEngineFunction('ObjectEnableVertexWind', '', ['Obj'], ['Integer'], DoObjectEnableVertexWind);
   RegisterEngineFunction('ObjectEnableGrassWind', '', ['Obj'], ['Integer'], DoObjectEnableGrassWind);
   RegisterEngineFunction('ObjectDisableWind', '', ['Obj'], ['Integer'], DoObjectDisableWind);
+  RegisterEngineFunction('ObjectEnableVegetationLOD', '', ['Obj'], ['Integer'], DoObjectEnableVegetationLOD);
+  RegisterEngineFunction('ObjectDisableVegetationLOD', '', ['Obj'], ['Integer'], DoObjectDisableVegetationLOD);
+  RegisterEngineFunction('ObjectResetVegetationLODDefaults', '', ['Obj'], ['Integer'], DoObjectResetVegetationLODDefaults);
+  RegisterEngineFunction('ObjectVegetationLODEnabled', 'Boolean', ['Obj'], ['Integer'], DoObjectVegetationLODEnabled);
+  RegisterEngineFunction('ObjectSetVegetationLODEnabled', '', ['Obj', 'Enabled'], ['Integer', 'Boolean'], DoObjectSetVegetationLODEnabled);
+  RegisterEngineFunction('ObjectVegetationLODLevelCount', 'Integer', ['Obj'], ['Integer'], DoObjectVegetationLODLevelCount);
+  RegisterEngineFunction('ObjectSetVegetationLODLevelCount', '', ['Obj', 'LevelCount'], ['Integer', 'Integer'], DoObjectSetVegetationLODLevelCount);
+  RegisterEngineFunction('ObjectActiveVegetationLODLevel', 'Integer', ['Obj'], ['Integer'], DoObjectActiveVegetationLODLevel);
+  RegisterEngineFunction('ObjectVegetationLODStartDistance', 'Float', ['Obj', 'Level'], ['Integer', 'Integer'], DoObjectVegetationLODStartDistance);
+  RegisterEngineFunction('ObjectSetVegetationLODStartDistance', '', ['Obj', 'Level', 'Distance'], ['Integer', 'Integer', 'Float'], DoObjectSetVegetationLODStartDistance);
+  RegisterEngineFunction('ObjectVegetationLODWindEnabled', 'Boolean', ['Obj', 'Level'], ['Integer', 'Integer'], DoObjectVegetationLODWindEnabled);
+  RegisterEngineFunction('ObjectSetVegetationLODWindEnabled', '', ['Obj', 'Level', 'Enabled'], ['Integer', 'Integer', 'Boolean'], DoObjectSetVegetationLODWindEnabled);
   RegisterEngineFunction('ObjectHasWind', 'Boolean', ['Obj'], ['Integer'], DoObjectHasWind);
   RegisterEngineFunction('ObjectHasBoneWind', 'Boolean', ['Obj'], ['Integer'], DoObjectHasBoneWind);
   RegisterEngineFunction('ObjectHasVertexWind', 'Boolean', ['Obj'], ['Integer'], DoObjectHasVertexWind);

@@ -11,10 +11,32 @@ uses
   Engine.Generators, Engine.Wind, Utility.Functions, Renderer.Mesh.List,
   Renderer.Mesh.Factory;
 
+const
+  VEGETATION_LOD_MAX_LEVELS = 8;
+  VEGETATION_LOD_DEFAULT_LEVELS = 3;
+  VEGETATION_LOD_DEFAULT_DISTANCE = 100.0;
+
 type
   TSceneObject = class;
   TObjectList = TArray<TSceneObject>;
   TLightList = TArray<TLight>;
+
+  TVegetationLODLevelSettings = record
+    StartDistance: Single;
+    WindEnabled: Boolean;
+  end;
+
+  TVegetationLODSettings = record
+    Enabled: Boolean;
+    LevelCount: Integer;
+    Levels: array[0..VEGETATION_LOD_MAX_LEVELS - 1] of TVegetationLODLevelSettings;
+
+    class function Disabled: TVegetationLODSettings; static;
+    class function Default: TVegetationLODSettings; static;
+    procedure Sanitize;
+    procedure SaveToStream(AStream: TStream);
+    procedure LoadFromStream(AStream: TStream);
+  end;
 
   TSceneObjectScriptState = class
   private
@@ -174,6 +196,10 @@ type
     fWindSettings: TWindActorSettings;
     fWindTime: Single;
     fWindPoseApplied: Boolean;
+    fVegetationLODSettings: TVegetationLODSettings;
+    fVegetationLODMeshes: array[0..VEGETATION_LOD_MAX_LEVELS - 1] of TMeshList;
+    fVegetationLODDirty: Boolean;
+    fActiveVegetationLODLevel: Integer;
 
     procedure RebuildModelMatrix;  // computes local matrix
     procedure LookAtDirection(const ADirection: TVector3);
@@ -225,6 +251,10 @@ type
     procedure MakeInstancesUniqueFromSource(ASource: TSceneObject);
     function ApplyWindAnimation(DeltaTime: Single): Boolean;
     procedure ResetWindAnimationPose;
+    procedure SetVegetationLODSettings(const Value: TVegetationLODSettings);
+    procedure ClearVegetationLODMeshes;
+    function CreateVegetationLODMesh(AMesh: TMesh; ALODLevel: Integer): TMesh;
+    procedure EnsureVegetationLODGenerated;
   public
     constructor Create(aOwner: TSceneObject);
     destructor Destroy; override;
@@ -246,6 +276,7 @@ type
     // returns a copy
     function GetMeshListCopy: TMeshList;
     function EffectiveMeshList: TMeshList;
+    function EffectiveMeshListForCamera(const ACameraPosition: TVector3): TMeshList;
     function CanInstanceFrom(Source: TSceneObject): Boolean;
     procedure MakeInstanceOf(Source: TSceneObject);
     procedure MakeUniqueFromInstance;
@@ -264,6 +295,13 @@ type
     procedure EnableGrassWind;
     procedure DisableWind;
     procedure ApplyVertexWindUniforms(Shader: TShader);
+    procedure EnableVegetationLOD;
+    procedure DisableVegetationLOD;
+    procedure ResetVegetationLODDefaults;
+    procedure MarkVegetationLODDirty;
+    function SelectVegetationLODLevel(const ACameraPosition: TVector3): Integer;
+    function VegetationLODWindEnabledForLevel(ALevel: Integer): Boolean;
+    function CurrentVegetationLODWindEnabled: Boolean;
     function AnimationCount: Integer;
     function AnimationName(AIndex: Integer): string;
     function PlayAnimation(const AName: string; ALoop: Boolean = True;
@@ -372,6 +410,8 @@ type
     property AudioEmitterItem[aIndex: Integer]: TSceneAudioEmitter read GetAudioEmitterItem;
     property ScriptState: TSceneObjectScriptState read fScriptState;
     property WindSettings: TWindActorSettings read fWindSettings write SetWindSettings;
+    property VegetationLOD: TVegetationLODSettings read fVegetationLODSettings write SetVegetationLODSettings;
+    property ActiveVegetationLODLevel: Integer read fActiveVegetationLODLevel;
     property Light[aIndex: Integer]: TLight read GetLight write SetLight;
     property SceneObject[aIndex: Integer]: TSceneObject read GeTSceneObject write SeTSceneObject;
     property Parent: TSceneObject read fParent;
@@ -427,7 +467,7 @@ type
 implementation
 
 const
-  SCENE_FILE_VERSION = 11;
+  SCENE_FILE_VERSION = 12;
   MAX_SERIALIZED_STRING_CHARS = 1048576;
   MAX_SCENE_DEPTH = 256;
   MAX_SCENE_LIGHTS = 65536;
@@ -436,6 +476,7 @@ const
   SCENE_OBJECT_SCRIPT_STATE_VERSION = 1;
   SCENE_AUDIO_EMITTER_VERSION = 1;
   SCENE_AUDIO_EMITTER_LIST_VERSION = 1;
+  VEGETATION_LOD_SETTINGS_STREAM_VERSION = 1;
 
 threadvar
   SceneLoadDepth: Integer;
@@ -477,6 +518,106 @@ begin
   for I := Low(SCENE_FILE_MAGIC) to High(SCENE_FILE_MAGIC) do
     if Magic[I] <> SCENE_FILE_MAGIC[I] then
       Exit(False);
+end;
+
+{ TVegetationLODSettings }
+
+class function TVegetationLODSettings.Default: TVegetationLODSettings;
+var
+  I: Integer;
+begin
+  Result.Enabled := True;
+  Result.LevelCount := VEGETATION_LOD_DEFAULT_LEVELS;
+  for I := Low(Result.Levels) to High(Result.Levels) do
+  begin
+    Result.Levels[I].StartDistance := I * VEGETATION_LOD_DEFAULT_DISTANCE;
+    Result.Levels[I].WindEnabled := I = 0;
+  end;
+  Result.Sanitize;
+end;
+
+class function TVegetationLODSettings.Disabled: TVegetationLODSettings;
+begin
+  Result := Default;
+  Result.Enabled := False;
+end;
+
+procedure TVegetationLODSettings.Sanitize;
+var
+  I: Integer;
+begin
+  if LevelCount < 1 then
+    LevelCount := 1
+  else if LevelCount > VEGETATION_LOD_MAX_LEVELS then
+    LevelCount := VEGETATION_LOD_MAX_LEVELS;
+
+  if Levels[0].StartDistance <> 0.0 then
+    Levels[0].StartDistance := 0.0;
+
+  for I := 1 to LevelCount - 1 do
+  begin
+    if Levels[I].StartDistance < 0.0 then
+      Levels[I].StartDistance := I * VEGETATION_LOD_DEFAULT_DISTANCE;
+
+    if Levels[I].StartDistance <= Levels[I - 1].StartDistance then
+      Levels[I].StartDistance := Levels[I - 1].StartDistance +
+        VEGETATION_LOD_DEFAULT_DISTANCE;
+  end;
+end;
+
+procedure TVegetationLODSettings.SaveToStream(AStream: TStream);
+var
+  Version: Integer;
+  I: Integer;
+begin
+  Sanitize;
+  Version := VEGETATION_LOD_SETTINGS_STREAM_VERSION;
+  AStream.WriteBuffer(Version, SizeOf(Version));
+  AStream.WriteBuffer(Enabled, SizeOf(Enabled));
+  AStream.WriteBuffer(LevelCount, SizeOf(LevelCount));
+  for I := 0 to LevelCount - 1 do
+  begin
+    AStream.WriteBuffer(Levels[I].StartDistance,
+      SizeOf(Levels[I].StartDistance));
+    AStream.WriteBuffer(Levels[I].WindEnabled,
+      SizeOf(Levels[I].WindEnabled));
+  end;
+end;
+
+procedure TVegetationLODSettings.LoadFromStream(AStream: TStream);
+var
+  Version: Integer;
+  SavedLevelCount: Integer;
+  I: Integer;
+  Defaults: TVegetationLODSettings;
+begin
+  Defaults := Disabled;
+  Enabled := Defaults.Enabled;
+  LevelCount := Defaults.LevelCount;
+  for I := Low(Levels) to High(Levels) do
+    Levels[I] := Defaults.Levels[I];
+
+  AStream.ReadBuffer(Version, SizeOf(Version));
+  if Version <> VEGETATION_LOD_SETTINGS_STREAM_VERSION then
+    raise Exception.CreateFmt('Unsupported vegetation LOD settings stream version %d.',
+      [Version]);
+
+  AStream.ReadBuffer(Enabled, SizeOf(Enabled));
+  AStream.ReadBuffer(SavedLevelCount, SizeOf(SavedLevelCount));
+  if (SavedLevelCount < 1) or
+     (SavedLevelCount > VEGETATION_LOD_MAX_LEVELS) then
+    raise Exception.Create('Invalid vegetation LOD level count in scene stream.');
+
+  LevelCount := SavedLevelCount;
+  for I := 0 to LevelCount - 1 do
+  begin
+    AStream.ReadBuffer(Levels[I].StartDistance,
+      SizeOf(Levels[I].StartDistance));
+    AStream.ReadBuffer(Levels[I].WindEnabled,
+      SizeOf(Levels[I].WindEnabled));
+  end;
+
+  Sanitize;
 end;
 
 { TSceneObjectScriptState }
@@ -1278,6 +1419,292 @@ begin
     Result := Source.fMeshList;
 end;
 
+procedure TSceneObject.ClearVegetationLODMeshes;
+var
+  I: Integer;
+begin
+  for I := Low(fVegetationLODMeshes) to High(fVegetationLODMeshes) do
+    FreeAndNil(fVegetationLODMeshes[I]);
+end;
+
+procedure TSceneObject.MarkVegetationLODDirty;
+begin
+  ClearVegetationLODMeshes;
+  fVegetationLODDirty := True;
+end;
+
+procedure TSceneObject.SetVegetationLODSettings(
+  const Value: TVegetationLODSettings);
+begin
+  fVegetationLODSettings := Value;
+  fVegetationLODSettings.Sanitize;
+  if fActiveVegetationLODLevel >= fVegetationLODSettings.LevelCount then
+    fActiveVegetationLODLevel := fVegetationLODSettings.LevelCount - 1;
+  if fActiveVegetationLODLevel < 0 then
+    fActiveVegetationLODLevel := 0;
+  MarkVegetationLODDirty;
+end;
+
+procedure TSceneObject.EnableVegetationLOD;
+var
+  Settings: TVegetationLODSettings;
+begin
+  if fVegetationLODSettings.Enabled then
+    Settings := fVegetationLODSettings
+  else
+    Settings := TVegetationLODSettings.Default;
+
+  Settings.Enabled := True;
+  if Settings.LevelCount < VEGETATION_LOD_DEFAULT_LEVELS then
+    Settings.LevelCount := VEGETATION_LOD_DEFAULT_LEVELS;
+  VegetationLOD := Settings;
+end;
+
+procedure TSceneObject.DisableVegetationLOD;
+var
+  Settings: TVegetationLODSettings;
+begin
+  Settings := fVegetationLODSettings;
+  Settings.Enabled := False;
+  VegetationLOD := Settings;
+end;
+
+procedure TSceneObject.ResetVegetationLODDefaults;
+begin
+  VegetationLOD := TVegetationLODSettings.Default;
+end;
+
+function TSceneObject.CreateVegetationLODMesh(AMesh: TMesh;
+  ALODLevel: Integer): TMesh;
+var
+  TriangleStride: Integer;
+  SourceVertices: TArray<TVertex>;
+  NewVertices: TArray<TVertex>;
+  NewIndices: TArray<GLuint>;
+  TriangleCount: Integer;
+  Tri, WriteIndex, WriteVertex: Integer;
+
+  procedure CopyRenderState(SourceMesh, DestMesh: TMesh);
+  begin
+    if (SourceMesh = nil) or (DestMesh = nil) then
+      Exit;
+
+    DestMesh.Visible := SourceMesh.Visible;
+    DestMesh.AlwaysOnTop := SourceMesh.AlwaysOnTop;
+    DestMesh.Tag := SourceMesh.Tag;
+    DestMesh.WireFrame := SourceMesh.WireFrame;
+    DestMesh.MaterialLibrary := SourceMesh.MaterialLibrary;
+    DestMesh.MaterialLibraryName := SourceMesh.MaterialLibraryName;
+    DestMesh.LibMaterialname := SourceMesh.LibMaterialname;
+    DestMesh.SetTransform(SourceMesh.Position, SourceMesh.Rotation,
+      SourceMesh.Scale);
+    DestMesh.OnRender := SourceMesh.OnRender;
+  end;
+
+begin
+  Result := nil;
+  if AMesh = nil then
+    Exit;
+
+  if ALODLevel <= 0 then
+    Exit(AMesh.Clone);
+
+  if (AMesh is THeightFieldMesh) or (AMesh is TWaterPlaneMesh) then
+    Exit(AMesh.Clone);
+
+  TriangleStride := 1 shl System.Math.Min(ALODLevel, 7);
+  SourceVertices := System.Copy(AMesh.Vertices, 0, AMesh.VertexCount);
+
+  if (AMesh.IndexCount >= 3) and (Length(SourceVertices) > 0) then
+  begin
+    TriangleCount := AMesh.IndexCount div 3;
+    if TriangleCount <= 0 then
+      Exit(AMesh.Clone);
+
+    SetLength(NewVertices, Length(SourceVertices));
+    if Length(SourceVertices) > 0 then
+      Move(SourceVertices[0], NewVertices[0],
+        Length(SourceVertices) * SizeOf(TVertex));
+
+    SetLength(NewIndices, ((TriangleCount + TriangleStride - 1) div
+      TriangleStride) * 3);
+    WriteIndex := 0;
+    for Tri := 0 to TriangleCount - 1 do
+      if (Tri mod TriangleStride) = 0 then
+      begin
+        NewIndices[WriteIndex] := AMesh.Indices[Tri * 3];
+        NewIndices[WriteIndex + 1] := AMesh.Indices[Tri * 3 + 1];
+        NewIndices[WriteIndex + 2] := AMesh.Indices[Tri * 3 + 2];
+        Inc(WriteIndex, 3);
+      end;
+
+    if WriteIndex < 3 then
+    begin
+      NewIndices[0] := AMesh.Indices[0];
+      NewIndices[1] := AMesh.Indices[1];
+      NewIndices[2] := AMesh.Indices[2];
+      WriteIndex := 3;
+    end;
+    SetLength(NewIndices, WriteIndex);
+  end
+  else if AMesh.VertexCount >= 3 then
+  begin
+    TriangleCount := AMesh.VertexCount div 3;
+    if TriangleCount <= 0 then
+      Exit(AMesh.Clone);
+
+    SetLength(NewVertices, ((TriangleCount + TriangleStride - 1) div
+      TriangleStride) * 3);
+    WriteVertex := 0;
+    for Tri := 0 to TriangleCount - 1 do
+      if (Tri mod TriangleStride) = 0 then
+      begin
+        NewVertices[WriteVertex] := SourceVertices[Tri * 3];
+        NewVertices[WriteVertex + 1] := SourceVertices[Tri * 3 + 1];
+        NewVertices[WriteVertex + 2] := SourceVertices[Tri * 3 + 2];
+        Inc(WriteVertex, 3);
+      end;
+
+    if WriteVertex < 3 then
+    begin
+      NewVertices[0] := SourceVertices[0];
+      NewVertices[1] := SourceVertices[1];
+      NewVertices[2] := SourceVertices[2];
+      WriteVertex := 3;
+    end;
+    SetLength(NewVertices, WriteVertex);
+    SetLength(NewIndices, 0);
+  end
+  else
+    Exit(AMesh.Clone);
+
+  Result := TMeshFactory.CreateMesh(NewVertices, NewIndices,
+    Format('%s_LOD%d', [AMesh.Name, ALODLevel]), AMesh.MeshType, False,
+    AMesh.IsStatic);
+  CopyRenderState(AMesh, Result);
+end;
+
+procedure TSceneObject.EnsureVegetationLODGenerated;
+var
+  SourceMeshes: TMeshList;
+  LODMeshes: TMeshList;
+  SourceMesh, LODMesh: TMesh;
+  LODLevel, MeshIndex: Integer;
+begin
+  if (not fVegetationLODSettings.Enabled) or
+     (fVegetationLODSettings.LevelCount <= 1) or
+     (not fVegetationLODDirty) then
+    Exit;
+
+  ClearVegetationLODMeshes;
+  SourceMeshes := EffectiveMeshList;
+  if SourceMeshes = nil then
+  begin
+    fVegetationLODDirty := False;
+    Exit;
+  end;
+
+  for LODLevel := 1 to fVegetationLODSettings.LevelCount - 1 do
+  begin
+    LODMeshes := TMeshList.Create;
+    try
+      for MeshIndex := 0 to SourceMeshes.Count - 1 do
+      begin
+        SourceMesh := SourceMeshes.Item[MeshIndex];
+        if SourceMesh = nil then
+          Continue;
+
+        LODMesh := CreateVegetationLODMesh(SourceMesh, LODLevel);
+        if LODMesh <> nil then
+          LODMeshes.AddMeshToList(LODMesh);
+      end;
+
+      if LODMeshes.Count > 0 then
+      begin
+        fVegetationLODMeshes[LODLevel] := LODMeshes;
+        LODMeshes := nil;
+      end;
+    finally
+      LODMeshes.Free;
+    end;
+  end;
+
+  fVegetationLODDirty := False;
+end;
+
+function TSceneObject.SelectVegetationLODLevel(
+  const ACameraPosition: TVector3): Integer;
+var
+  Center: TVector3;
+  Distance: Single;
+  LowIndex, HighIndex, MidIndex: Integer;
+begin
+  Result := 0;
+  if (not fVegetationLODSettings.Enabled) or
+     (fVegetationLODSettings.LevelCount <= 1) then
+    Exit;
+
+  Center := Vector3(fWorldMatrix.Columns[3]);
+  Distance := (Center - ACameraPosition).Length;
+
+  LowIndex := 0;
+  HighIndex := fVegetationLODSettings.LevelCount - 1;
+  while LowIndex <= HighIndex do
+  begin
+    MidIndex := (LowIndex + HighIndex) div 2;
+    if Distance >= fVegetationLODSettings.Levels[MidIndex].StartDistance then
+    begin
+      Result := MidIndex;
+      LowIndex := MidIndex + 1;
+    end
+    else
+      HighIndex := MidIndex - 1;
+  end;
+end;
+
+function TSceneObject.EffectiveMeshListForCamera(
+  const ACameraPosition: TVector3): TMeshList;
+var
+  LODLevel: Integer;
+begin
+  fActiveVegetationLODLevel := 0;
+  Result := EffectiveMeshList;
+  if (Result = nil) or (not fVegetationLODSettings.Enabled) or
+     (fVegetationLODSettings.LevelCount <= 1) then
+    Exit;
+
+  LODLevel := SelectVegetationLODLevel(ACameraPosition);
+  fActiveVegetationLODLevel := LODLevel;
+  if LODLevel <= 0 then
+    Exit;
+
+  EnsureVegetationLODGenerated;
+  if Assigned(fVegetationLODMeshes[LODLevel]) then
+    Result := fVegetationLODMeshes[LODLevel]
+  else
+    fActiveVegetationLODLevel := 0;
+end;
+
+function TSceneObject.VegetationLODWindEnabledForLevel(
+  ALevel: Integer): Boolean;
+begin
+  Result := True;
+  if not fVegetationLODSettings.Enabled then
+    Exit;
+
+  if ALevel < 0 then
+    ALevel := 0
+  else if ALevel >= fVegetationLODSettings.LevelCount then
+    ALevel := fVegetationLODSettings.LevelCount - 1;
+
+  Result := fVegetationLODSettings.Levels[ALevel].WindEnabled;
+end;
+
+function TSceneObject.CurrentVegetationLODWindEnabled: Boolean;
+begin
+  Result := VegetationLODWindEnabledForLevel(fActiveVegetationLODLevel);
+end;
+
 function TSceneObject.GetAnimationController: TSkeletonAnimator;
 var
   Meshes: TMeshList;
@@ -1303,16 +1730,19 @@ end;
 procedure TSceneObject.EnableTreeWind;
 begin
   WindSettings := TWindActorSettings.DefaultTree;
+  EnableVegetationLOD;
 end;
 
 procedure TSceneObject.EnableVertexTreeWind;
 begin
   WindSettings := TWindActorSettings.DefaultVertexTree;
+  EnableVegetationLOD;
 end;
 
 procedure TSceneObject.EnableGrassWind;
 begin
   WindSettings := TWindActorSettings.DefaultGrass;
+  EnableVegetationLOD;
 end;
 
 procedure TSceneObject.DisableWind;
@@ -1455,6 +1885,7 @@ begin
 
   Shader.SetUniform('useVertexWind', GLint(0));
   if (not HasVertexWindAnimation) or
+     (not CurrentVegetationLODWindEnabled) or
      (not TryGetVertexWindFrame(Root, Axis, Height)) then
     Exit;
 
@@ -1514,6 +1945,7 @@ begin
   fMeshList.Clear;
   fInstanceSource := Source;
   fIsInstance := True;
+  MarkVegetationLODDirty;
   UpdateBoundingRadiusFromMesh;
   NotifyChange;
 end;
@@ -1536,6 +1968,7 @@ begin
 
   fInstanceSource := nil;
   fIsInstance := False;
+  MarkVegetationLODDirty;
   UpdateBoundingRadiusFromMesh;
   NotifyChange;
 end;
@@ -1620,6 +2053,9 @@ begin
   fWindSettings := TWindActorSettings.Disabled;
   fWindTime := 0.0;
   fWindPoseApplied := False;
+  fVegetationLODSettings := TVegetationLODSettings.Disabled;
+  fVegetationLODDirty := True;
+  fActiveVegetationLODLevel := 0;
   fMeshList := TMeshList.Create;
   fIsInstance := False;
   fInstanceSource := nil;
@@ -1667,6 +2103,7 @@ begin
     fLightList[i].Free;
   SetLength(fLightList, 0);
 
+  ClearVegetationLODMeshes;
   fMeshList.Free;
   fParticleSystemList.Free;
   fBillboardList.Free;
@@ -1924,6 +2361,7 @@ begin
       ChildrenCopy[i].Free;
 
   // Update bounding radius (now includes the newly added meshes)
+  MarkVegetationLODDirty;
   UpdateBoundingRadiusFromMesh;
   NotifyChange;
 end;
@@ -2092,6 +2530,9 @@ begin
   Result.fWindSettings := fWindSettings;
   Result.fWindTime := 0.0;
   Result.fWindPoseApplied := False;
+  Result.fVegetationLODSettings := fVegetationLODSettings;
+  Result.fVegetationLODDirty := True;
+  Result.fActiveVegetationLODLevel := 0;
   Result.RebuildModelMatrix;
 
   // Clone all effective meshes. Copy/paste must be safe even if the original
@@ -2211,6 +2652,7 @@ begin
   fScriptState.SaveToStream(Stream);
 
   fWindSettings.SaveToStream(Stream);
+  fVegetationLODSettings.SaveToStream(Stream);
 
   SavedChildCount := 0;
   for I := 0 to Count - 1 do
@@ -2348,6 +2790,14 @@ begin
       Result.fWindSettings.LoadFromStream(Stream)
     else
       Result.fWindSettings := TWindActorSettings.Disabled;
+
+    if SceneVersion >= 12 then
+      Result.fVegetationLODSettings.LoadFromStream(Stream)
+    else if Result.HasWindAnimation and Result.HasGeometry then
+      Result.fVegetationLODSettings := TVegetationLODSettings.Default
+    else
+      Result.fVegetationLODSettings := TVegetationLODSettings.Disabled;
+    Result.MarkVegetationLODDirty;
 
     Stream.ReadBuffer(ChildCount, SizeOf(ChildCount));
     if (ChildCount < 0) or (ChildCount > MAX_SCENE_CHILDREN) then
@@ -2661,7 +3111,6 @@ begin
 
   for i := 0 to Meshes.Count - 1 do
     if Assigned(Meshes.Item[i]) and
-       (Length(Meshes.Item[i].Indices) > 0) and
        (Length(Meshes.Item[i].Vertices) > 0) then
       Exit(True);
 end;
