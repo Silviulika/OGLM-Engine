@@ -18,6 +18,7 @@ uniform int useSkinning;
 uniform int skinMatrixCount;
 uniform int flipAlphaCutoutV;
 uniform int useVertexWind;
+uniform int shadowWindMode;
 uniform float windTime;
 uniform vec3 windDirection;
 uniform float windStrength;
@@ -76,6 +77,51 @@ void ApplyVertexWind(inout vec4 worldPosition)
 {
     if (useVertexWind == 0 || windHeight <= 1e-5 || windStrength <= 0.0)
         return;
+
+    if (shadowWindMode == 1)
+    {
+        vec3 grassAxis = windAxis;
+        if (dot(grassAxis, grassAxis) <= 1e-8)
+            grassAxis = vec3(0.0, 1.0, 0.0);
+        else
+            grassAxis = normalize(grassAxis);
+
+        vec3 direction = windDirection -
+            grassAxis * dot(windDirection, grassAxis);
+        if (dot(direction, direction) <= 1e-8)
+        {
+            direction = abs(grassAxis.x) < 0.85 ? vec3(1.0, 0.0, 0.0) :
+                vec3(0.0, 0.0, 1.0);
+            direction -= grassAxis * dot(direction, grassAxis);
+        }
+        direction = normalize(direction);
+
+        vec3 crossDirection = normalize(cross(grassAxis, direction));
+        vec3 relativePosition = worldPosition.xyz - windRoot;
+        float heightRatio = clamp(dot(relativePosition, grassAxis) /
+            max(windHeight, 1e-5), 0.0, 1.0);
+        if (heightRatio <= 0.0)
+            return;
+
+        float basePhase = windTime * windFrequency * 6.28318530718 +
+            windPhaseOffset;
+        float spatialPhase = dot(relativePosition, vec3(0.31, 0.07, 0.23));
+        float wave = sin(basePhase + spatialPhase) * 0.66 +
+            sin(basePhase * 1.91 + spatialPhase * 1.37 + 0.8) * 0.34;
+        float gust = 1.0 + windGustStrength * (0.5 + 0.5 *
+            sin(windTime * windGustFrequency * 6.28318530718 +
+            windPhaseOffset * 0.43));
+        float heightProfile = heightRatio * heightRatio *
+            (3.0 - 2.0 * heightRatio);
+        float flutter = sin(basePhase * 5.3 + spatialPhase * 3.1) *
+            windLeafFlutter * 0.12;
+        float swayDistance = windStrength * windHeight * heightProfile * gust;
+        float bendAmount = wave * windBranchFlex + flutter * heightRatio;
+
+        worldPosition.xyz += direction * swayDistance * bendAmount;
+        worldPosition.xyz += crossDirection * swayDistance * flutter * 0.55;
+        return;
+    }
 
     vec3 treeAxis = windAxis;
     if (dot(treeAxis, treeAxis) <= 1e-8)

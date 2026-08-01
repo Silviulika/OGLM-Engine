@@ -3,6 +3,9 @@
 const int MaxLights = 8;
 const float MaxLeafGlossPower = 12.0;
 const float LeafSpecularScale = 0.16;
+const float FoliageShadowMinBias = 0.00045;
+const float FoliageShadowSlopeBias = 0.00120;
+const float FoliageShadowStrengthScale = 0.84;
 
 struct Light
 {
@@ -77,24 +80,31 @@ float ShadowVisibility(vec4 lightSpacePosition, int shadowLayer,
         projected.z < 0.0 || projected.z > 1.0)
         return 1.0;
 
-    float facing = abs(dot(normal, lightDirection));
-    float bias = max(0.00035 * (1.0 - facing), 0.00008);
+    float facing = abs(dot(normalize(normal), normalize(lightDirection)));
+    float bias = max(FoliageShadowSlopeBias * (1.0 - facing),
+        FoliageShadowMinBias);
     vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0).xy);
     float visibility = 0.0;
+    float totalWeight = 0.0;
 
     for (int y = -1; y <= 1; ++y)
     {
         for (int x = -1; x <= 1; ++x)
         {
+            float weight = (2.0 - float(abs(x))) *
+                (2.0 - float(abs(y)));
             float depth = texture(shadowMap,
                 vec3(projected.xy + vec2(x, y) * texelSize,
                 float(shadowLayer))).r;
-            visibility += projected.z - bias <= depth ? 1.0 : 0.0;
+            visibility += (projected.z - bias <= depth ? 1.0 : 0.0) *
+                weight;
+            totalWeight += weight;
         }
     }
 
-    visibility /= 9.0;
-    return mix(1.0, visibility, clamp(lightShadowStrength, 0.0, 1.0));
+    visibility /= max(totalWeight, 0.0001);
+    return mix(1.0, visibility,
+        clamp(lightShadowStrength * FoliageShadowStrengthScale, 0.0, 1.0));
 }
 
 vec3 ApplyFog(vec3 inputColor)
