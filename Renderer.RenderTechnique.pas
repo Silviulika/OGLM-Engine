@@ -22,6 +22,8 @@ type
     class function DefaultOpaque: TRenderTechniqueState; static;
     class function DefaultTransparent: TRenderTechniqueState; static;
     class function DefaultShadow: TRenderTechniqueState; static;
+    class function ForMaterial(AMaterial: TMaterial;
+      AMeshType: TMeshType = mtEmpty): TRenderTechniqueState; static;
   end;
 
   TRenderTechnique = class
@@ -141,6 +143,36 @@ begin
   Result.Blend := False;
   Result.BlendSrc := GL_ONE;
   Result.BlendDst := GL_ZERO;
+end;
+
+class function TRenderTechniqueState.ForMaterial(AMaterial: TMaterial;
+  AMeshType: TMeshType): TRenderTechniqueState;
+begin
+  if Assigned(AMaterial) and (AMaterial.Materialtype = mtShadow) then
+    Exit(DefaultShadow);
+
+  if AMeshType = Engine.Types.mtWater then
+  begin
+    Result := DefaultTransparent;
+    Result.CullFace := False;
+    Exit;
+  end;
+
+  Result := DefaultOpaque;
+  if not Assigned(AMaterial) then
+    Exit;
+
+  case AMaterial.Materialtype of
+    Managers.Material.mtTreeLeaf,
+    Managers.Material.mtGrass:
+      begin
+        // Tree leaves and grass are alpha-cutout materials: keep depth writes
+        // and cull only where the source geometry is truly one-sided.
+        Result.Blend := False;
+        Result.DepthWrite := True;
+        Result.CullFace := False;
+      end;
+  end;
 end;
 
 { TRenderTechnique }

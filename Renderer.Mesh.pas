@@ -2367,9 +2367,7 @@ begin
   end;
 
   try
-    RenderState := Technique.State;
-    RenderState.CullFace := False;
-    RenderState.Blend := True;
+    RenderState := TRenderTechniqueState.ForMaterial(Mat, fMeshType);
     Technique.State := RenderState;
 
     Technique.BeginTechnique;
@@ -4102,9 +4100,7 @@ begin
   end;
 
   try
-    RenderState := Technique.State;
-    RenderState.CullFace := False;
-    RenderState.Blend := True;
+    RenderState := TRenderTechniqueState.ForMaterial(Mat, fMeshType);
     Technique.State := RenderState;
 
     Technique.BeginTechnique;
