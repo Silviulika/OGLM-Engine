@@ -10,6 +10,7 @@
         <TargetedPlatforms>3</TargetedPlatforms>
         <AppType>Application</AppType>
         <MainSource>OGLM_SandBox.dpr</MainSource>
+        <ImportEnvOptions>false</ImportEnvOptions>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Config)'=='Base' or '$(Base)'!=''">
         <Base>true</Base>
@@ -68,7 +69,7 @@
         <DCC_K>false</DCC_K>
         <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;Vcl;Vcl.Imaging;Vcl.Touch;Vcl.Samples;Vcl.Shell;$(DCC_Namespace)</DCC_Namespace>
         <DCC_Define>KraftPasMP;DYNAMIC_LINK;FM_COLUMN_MAJOR;$(DCC_Define)</DCC_Define>
-        <DCC_UnitSearchPath>GuiEditor;MaterialEditor;$(OGLMDependencySearchPath);$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UnitSearchPath>External\DWScript\Source;External\kraft\src;External\FastMath\FastMath;External\GraphEx;External\dglOpenGL;External\ImGui-Pascal\src;External\pasdblstrutils\src;External\pasjson\src;External\pasmp\src;External\GraphEx\3rd party\AutoResourceStr;External\GraphEx\3rd party\DelphiZlib;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
         <Icon_MainIcon>$(BDS)\bin\delphi_PROJECTICON.ico</Icon_MainIcon>
         <UWP_DelphiLogo44>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_44.png</UWP_DelphiLogo44>
         <UWP_DelphiLogo150>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_150.png</UWP_DelphiLogo150>
@@ -218,9 +219,9 @@
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile LocalName="OGLM_SandBox.rsm" Configuration="Debug" Class="DebugSymbols">
+                <DeployFile LocalName="OGLM_SandBox.exe" Configuration="Release" Class="ProjectOutput">
                     <Platform Name="Win64">
-                        <RemoteName>OGLM_SandBox.rsm</RemoteName>
+                        <RemoteName>OGLM_SandBox.exe</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
