@@ -128,6 +128,9 @@
         <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <DCC_ExeOutput>.\</DCC_ExeOutput>
+        <Icon_MainIcon>SceneEditorIcon.ico</Icon_MainIcon>
+        <UWP_DelphiLogo44>SceneEditorIcon.png</UWP_DelphiLogo44>
+        <UWP_DelphiLogo150>SceneEditorIcon.png</UWP_DelphiLogo150>
     </PropertyGroup>
     <Import Project="Build.Dependencies.props" Condition="Exists('Build.Dependencies.props')"/>
     <ItemGroup>
@@ -222,6 +225,13 @@
                 <DeployFile LocalName="OGLM_SandBox.exe" Configuration="Release" Class="ProjectOutput">
                     <Platform Name="Win64">
                         <RemoteName>OGLM_SandBox.exe</RemoteName>
+                        <Overwrite>true</Overwrite>
+                    </Platform>
+                </DeployFile>
+                <DeployFile LocalName="SceneEditorIcon.png" Configuration="Release" Class="UWP_DelphiLogo44">
+                    <Platform Name="Win64">
+                        <RemoteDir>Assets\</RemoteDir>
+                        <RemoteName>Logo44x44.png</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
