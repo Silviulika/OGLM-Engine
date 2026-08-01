@@ -1,5 +1,7 @@
 # OpenGL Micro Engine
 
+![OpenGL Micro Engine preview](Data/Generated/EngineObjects.png)
+
 OpenGL Micro Engine (OGLM) is a Delphi/VCL OpenGL 3D engine with two runnable
 projects:
 
@@ -217,8 +219,6 @@ Data\EngineGUI\        runtime GUI skins/layouts
 Data\Terrain\          height-field sources
 Data\Generated\        generated runtime/editor outputs
 ```
-
-The checked-in generated assets include `Data\Generated\EngineObjects.png`.
 
 ## Notes For New Host Applications
 
