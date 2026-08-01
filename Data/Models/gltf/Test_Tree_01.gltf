@@ -1,0 +1,523 @@
+{
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5125,
+      "count": 366192,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 108416,
+      "max": [
+        3.91068696975708,
+        3.8573410511016846,
+        17.49358558654785
+      ],
+      "min": [
+        -3.5128469467163086,
+        -4.3068718910217285,
+        -0.012236000038683414
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 108416,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 108416,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 108416,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 108416,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5125,
+      "count": 544278,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 362852,
+      "max": [
+        3.991142988204956,
+        4.065607070922852,
+        17.672042846679688
+      ],
+      "min": [
+        -3.681307077407837,
+        -4.522014141082764,
+        4.5306172370910645
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 362852,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5126,
+      "count": 362852,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 10,
+      "componentType": 5123,
+      "count": 362852,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 11,
+      "componentType": 5126,
+      "count": 362852,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 12,
+      "componentType": 5126,
+      "count": 7,
+      "type": "MAT4"
+    },
+    {
+      "bufferView": 13,
+      "componentType": 5126,
+      "count": 7,
+      "type": "MAT4"
+    }
+  ],
+  "asset": {
+    "generator": "Khronos glTF exporter for 3dsmax 2.00 (C)Khronos Group Inc.",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 1464768,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1300992,
+      "byteOffset": 1464768,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1300992,
+      "byteOffset": 2765760,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1734656,
+      "byteOffset": 4066752,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 867328,
+      "byteOffset": 5801408,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1734656,
+      "byteOffset": 6668736,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2177112,
+      "byteOffset": 8403392,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 4354224,
+      "byteOffset": 10580504,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 4354224,
+      "byteOffset": 14934728,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 5805632,
+      "byteOffset": 19288952,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2902816,
+      "byteOffset": 25094584,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 5805632,
+      "byteOffset": 27997400,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 448,
+      "byteOffset": 33803032
+    },
+    {
+      "buffer": 0,
+      "byteLength": 448,
+      "byteOffset": 33803480
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 33803928,
+      "uri": "Test_Tree_01.bin"
+    }
+  ],
+  "extensionsUsed": [
+    "KHR_materials_sheen",
+    "KHR_materials_anisotropy",
+    "KHR_materials_iridescence"
+  ],
+  "materials": [
+    {
+      "extensions": {
+        "KHR_materials_anisotropy": {
+          "anisotropyRotation": 0.25
+        },
+        "KHR_materials_iridescence": {
+          "iridescenceThicknessMaximum": 555.0
+        },
+        "KHR_materials_sheen": {
+          "sheenColorFactor": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "sheenRoughnessFactor": 0.3
+        }
+      },
+      "name": "Tree1_Material_001",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.6399999856948853,
+          0.6399999856948853,
+          0.6399999856948853,
+          1.0
+        ],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.039215683937072754
+      }
+    },
+    {
+      "extensions": {
+        "KHR_materials_anisotropy": {
+          "anisotropyRotation": 0.25
+        },
+        "KHR_materials_iridescence": {
+          "iridescenceThicknessMaximum": 555.0
+        },
+        "KHR_materials_sheen": {
+          "sheenColorFactor": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "sheenRoughnessFactor": 0.3
+        }
+      },
+      "name": "Tree1_Leaves",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.6399999856948853,
+          0.6399999856948853,
+          0.6399999856948853,
+          1.0
+        ],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.039215683937072754
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "tree_001_Mesh_002",
+      "primitives": [
+        {
+          "attributes": {
+            "JOINTS_0": 4,
+            "NORMAL": 2,
+            "POSITION": 1,
+            "TANGENT": 3,
+            "WEIGHTS_0": 5
+          },
+          "indices": 0,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "leaves_001",
+      "primitives": [
+        {
+          "attributes": {
+            "JOINTS_0": 10,
+            "NORMAL": 8,
+            "POSITION": 7,
+            "TANGENT": 9,
+            "WEIGHTS_0": 11
+          },
+          "indices": 6,
+          "material": 1,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "tree_001_Mesh_002",
+      "rotation": [
+        0.7071067690849304,
+        -0.0,
+        -0.0,
+        -0.7071067690849304
+      ],
+      "scale": [
+        10.0,
+        10.0,
+        10.0
+      ],
+      "skin": 1,
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "mesh": 1,
+      "name": "leaves_001",
+      "rotation": [
+        0.7071067690849304,
+        -0.0,
+        -0.0,
+        -0.7071067690849304
+      ],
+      "scale": [
+        10.0,
+        10.0,
+        10.0
+      ],
+      "skin": 0,
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Bone001",
+      "rotation": [
+        -0.0194486603140831,
+        0.020335808396339417,
+        -0.7062563300132751,
+        -0.7073968052864075
+      ],
+      "scale": [
+        0.9999999403953552,
+        1.0000001192092896,
+        0.9999999403953552
+      ],
+      "translation": [
+        -0.13644027709960938,
+        0.3728175461292267,
+        1.6296372251645153e-08
+      ]
+    },
+    {
+      "name": "Bone002",
+      "rotation": [
+        1.430524548595713e-06,
+        -4.936101660746317e-08,
+        -0.001015182351693511,
+        -0.999999463558197
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        0.9999998807907104
+      ],
+      "translation": [
+        36.96455383300781,
+        2.428889274597168e-06,
+        -4.805624485015869e-07
+      ]
+    },
+    {
+      "name": "Bone003",
+      "rotation": [
+        -3.8794997436752965e-08,
+        -9.314684579209143e-10,
+        0.002099549863487482,
+        -0.9999977946281433
+      ],
+      "scale": [
+        1.0000001192092896,
+        1.0000001192092896,
+        1.0000001192092896
+      ],
+      "translation": [
+        38.496097564697266,
+        -9.894371032714844e-06,
+        0.0
+      ]
+    },
+    {
+      "name": "Bone004",
+      "rotation": [
+        1.1639217367687138e-10,
+        2.3203466058274724e-12,
+        -0.019931629300117493,
+        -0.9998013377189636
+      ],
+      "scale": [
+        0.9999452233314514,
+        1.0000003576278687,
+        1.0000001192092896
+      ],
+      "translation": [
+        14.890716552734375,
+        -1.2218952178955078e-06,
+        4.76837158203125e-07
+      ]
+    },
+    {
+      "name": "Bone005",
+      "rotation": [
+        -1.0255576943229983e-10,
+        -1.8618679931137194e-09,
+        0.00818577315658331,
+        -0.9999665021896362
+      ],
+      "scale": [
+        1.0000001192092896,
+        0.9999997019767761,
+        1.0
+      ],
+      "translation": [
+        28.08985137939453,
+        -1.3589859008789063e-05,
+        -4.76837158203125e-07
+      ]
+    },
+    {
+      "name": "Bone006",
+      "rotation": [
+        -0.00015671292203478515,
+        -0.017133256420493126,
+        0.009144981391727924,
+        -0.9998113512992859
+      ],
+      "scale": [
+        1.0000007152557373,
+        1.0000001192092896,
+        1.0000001192092896
+      ],
+      "translation": [
+        23.108367919921875,
+        -2.1457672119140625e-06,
+        -4.76837158203125e-07
+      ]
+    },
+    {
+      "name": "Bone007",
+      "rotation": [
+        2.2737367544323206e-12,
+        4.656612873077393e-10,
+        -2.9103830456733704e-11,
+        -1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0000001192092896
+      ],
+      "translation": [
+        30.85736083984375,
+        -7.545948028564453e-05,
+        0.0
+      ]
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    }
+  ],
+  "skins": [
+    {
+      "inverseBindMatrices": 12,
+      "joints": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "skeleton": 2
+    },
+    {
+      "inverseBindMatrices": 13,
+      "joints": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "skeleton": 2
+    }
+  ]
+}
