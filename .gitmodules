@@ -22,3 +22,7 @@
 	path = External/pasmp
 	url = https://git.rosseaux.net/BeRo1985/pasmp.git
 	branch = master
+[submodule "External/dglOpenGL"]
+	path = External/dglOpenGL
+	url = https://github.com/SaschaWillems/dglOpenGL.git
+	branch = master
