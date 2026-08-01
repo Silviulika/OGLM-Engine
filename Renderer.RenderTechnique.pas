@@ -7,6 +7,8 @@ uses
   Renderer.Shader, Managers.Material;
 
 type
+  TRenderTechniqueKind = (rtkPBR, rtkHeightFieldMultiMaterial, rtkShadowDepth);
+
   TRenderTechniqueState = record
     DepthTest: Boolean;
     DepthWrite: Boolean;
@@ -40,6 +42,10 @@ type
   public
     constructor Create(AShader: TShader; AOwnsShader: Boolean = False); virtual;
     destructor Destroy; override;
+
+    class function Acquire(AShader: TShader;
+      AKind: TRenderTechniqueKind): TRenderTechnique; static;
+    class procedure ClearCache; static;
 
     procedure BeginTechnique; virtual;
     procedure EndTechnique; virtual;
@@ -84,6 +90,16 @@ type
   end;
 
 implementation
+
+type
+  TRenderTechniqueCacheItem = record
+    Shader: TShader;
+    Kind: TRenderTechniqueKind;
+    Technique: TRenderTechnique;
+  end;
+
+var
+  CachedRenderTechniques: TArray<TRenderTechniqueCacheItem>;
 
 const
   TERRAIN_LAYER_COUNT = 5;
@@ -195,6 +211,44 @@ begin
     FreeAndNil(fShader);
 
   inherited Destroy;
+end;
+
+class function TRenderTechnique.Acquire(AShader: TShader;
+  AKind: TRenderTechniqueKind): TRenderTechnique;
+var
+  I, Index: Integer;
+begin
+  if not Assigned(AShader) then
+    raise Exception.Create('TRenderTechnique requires a valid shader.');
+
+  for I := 0 to High(CachedRenderTechniques) do
+    if (CachedRenderTechniques[I].Shader = AShader) and
+       (CachedRenderTechniques[I].Kind = AKind) then
+      Exit(CachedRenderTechniques[I].Technique);
+
+  case AKind of
+    rtkShadowDepth:
+      Result := TShadowDepthTechnique.Create(AShader);
+    rtkHeightFieldMultiMaterial:
+      Result := THeightFieldMultiMaterialTechnique.Create(AShader);
+  else
+    Result := TPBRRenderTechnique.Create(AShader);
+  end;
+
+  Index := Length(CachedRenderTechniques);
+  SetLength(CachedRenderTechniques, Index + 1);
+  CachedRenderTechniques[Index].Shader := AShader;
+  CachedRenderTechniques[Index].Kind := AKind;
+  CachedRenderTechniques[Index].Technique := Result;
+end;
+
+class procedure TRenderTechnique.ClearCache;
+var
+  I: Integer;
+begin
+  for I := 0 to High(CachedRenderTechniques) do
+    CachedRenderTechniques[I].Technique.Free;
+  SetLength(CachedRenderTechniques, 0);
 end;
 
 procedure TRenderTechnique.ApplyRenderState;
@@ -662,5 +716,9 @@ begin
   // Shadow depth usually does not need material textures.
   // You normally only need modelMatrix + lightSpaceMatrix.
 end;
+
+initialization
+finalization
+  TRenderTechnique.ClearCache;
 
 end.

@@ -2357,13 +2357,14 @@ begin
 
   case Mat.Materialtype of
     mtShadow:
-      Technique := TShadowDepthTechnique.Create(Mat.Shader);
+      Technique := TRenderTechnique.Acquire(Mat.Shader, rtkShadowDepth);
   else
     if (Mat.Materialtype = mtHeightFieldMaterial) or
        UsesHeightFieldMultiMaterialShader(Mat.Shader) then
-      Technique := THeightFieldMultiMaterialTechnique.Create(Mat.Shader)
+      Technique := TRenderTechnique.Acquire(Mat.Shader,
+        rtkHeightFieldMultiMaterial)
     else
-      Technique := TPBRRenderTechnique.Create(Mat.Shader);
+      Technique := TRenderTechnique.Acquire(Mat.Shader, rtkPBR);
   end;
 
   try
@@ -2439,7 +2440,6 @@ begin
     end;
   finally
     Technique.EndTechnique;
-    Technique.Free;
   end;
 end;
 
@@ -4090,13 +4090,14 @@ begin
 
   case Mat.Materialtype of
     mtShadow:
-      Technique := TShadowDepthTechnique.Create(Mat.Shader);
+      Technique := TRenderTechnique.Acquire(Mat.Shader, rtkShadowDepth);
   else
     if (Mat.Materialtype = mtHeightFieldMaterial) or (fMeshType = mtHeightField) or
        UsesHeightFieldMultiMaterialShader(Mat.Shader) then
-      Technique := THeightFieldMultiMaterialTechnique.Create(Mat.Shader)
+      Technique := TRenderTechnique.Acquire(Mat.Shader,
+        rtkHeightFieldMultiMaterial)
     else
-      Technique := TPBRRenderTechnique.Create(Mat.Shader);
+      Technique := TRenderTechnique.Acquire(Mat.Shader, rtkPBR);
   end;
 
   try
@@ -4141,7 +4142,6 @@ begin
     end;
   finally
     Technique.EndTechnique;
-    Technique.Free;
   end;
 end;
 
