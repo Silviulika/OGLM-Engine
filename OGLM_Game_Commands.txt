@@ -1,0 +1,126 @@
+OGLM_Game.exe command-line commands
+===================================
+
+General notes
+-------------
+- Switches are case-insensitive.
+- Quote paths that contain spaces.
+- If a scene is provided as a bare file name, the engine resolves it from
+  Data\Scenes and appends .omescn when needed.
+- If a relative path contains a slash or backslash, it is resolved relative to
+  the executable folder.
+- If no startup scene is supplied, the game uses its compiled
+  DEFAULT_ENTRY_SCENE value. In the current template this is empty, so the
+  engine falls back to Data\Default.omescn when that file exists.
+
+Scene selection
+---------------
+OGLM_Game.exe <SceneFile>
+OGLM_Game.exe --scene <SceneFile>
+OGLM_Game.exe -scene <SceneFile>
+OGLM_Game.exe /scene <SceneFile>
+OGLM_Game.exe --scene=<SceneFile>
+OGLM_Game.exe -scene=<SceneFile>
+OGLM_Game.exe /scene:<SceneFile>
+OGLM_Game.exe /scene=<SceneFile>
+
+Examples:
+OGLM_Game.exe MainMenu
+OGLM_Game.exe MainMenu.omescn
+OGLM_Game.exe "Data\Scenes\Main Menu.omescn"
+OGLM_Game.exe --scene GameIntro.omescn
+
+Window mode
+-----------
+Start fullscreen:
+OGLM_Game.exe --fullscreen
+OGLM_Game.exe -fullscreen
+OGLM_Game.exe /fullscreen
+OGLM_Game.exe --full-screen
+OGLM_Game.exe -full-screen
+OGLM_Game.exe /full-screen
+OGLM_Game.exe --fs
+OGLM_Game.exe -fs
+OGLM_Game.exe /fs
+
+Set fullscreen with a boolean value:
+OGLM_Game.exe --fullscreen=<Value>
+OGLM_Game.exe -fullscreen=<Value>
+OGLM_Game.exe --full-screen=<Value>
+OGLM_Game.exe -full-screen=<Value>
+OGLM_Game.exe /fullscreen:<Value>
+OGLM_Game.exe /fullscreen=<Value>
+
+Accepted boolean values:
+true, false, yes, no, on, off, 1, 0
+
+Force windowed mode:
+OGLM_Game.exe --window
+OGLM_Game.exe -window
+OGLM_Game.exe /window
+OGLM_Game.exe --windowed
+OGLM_Game.exe -windowed
+OGLM_Game.exe /windowed
+OGLM_Game.exe --no-fullscreen
+OGLM_Game.exe -no-fullscreen
+OGLM_Game.exe /no-fullscreen
+
+Resolution
+----------
+Set width and height together:
+OGLM_Game.exe --resolution <Width>x<Height>
+OGLM_Game.exe -resolution <Width>x<Height>
+OGLM_Game.exe /resolution <Width>x<Height>
+OGLM_Game.exe --res <Width>x<Height>
+OGLM_Game.exe -res <Width>x<Height>
+OGLM_Game.exe /res <Width>x<Height>
+OGLM_Game.exe --resolution=<Width>x<Height>
+OGLM_Game.exe --resolution:<Width>x<Height>
+OGLM_Game.exe -resolution=<Width>x<Height>
+OGLM_Game.exe -resolution:<Width>x<Height>
+OGLM_Game.exe /resolution:<Width>x<Height>
+OGLM_Game.exe /resolution=<Width>x<Height>
+OGLM_Game.exe --res=<Width>x<Height>
+OGLM_Game.exe --res:<Width>x<Height>
+OGLM_Game.exe -res=<Width>x<Height>
+OGLM_Game.exe -res:<Width>x<Height>
+OGLM_Game.exe /res:<Width>x<Height>
+OGLM_Game.exe /res=<Width>x<Height>
+
+Resolution separators accepted:
+1920x1080
+1920*1080
+1920,1080
+
+Set width and height separately:
+OGLM_Game.exe --width <Width>
+OGLM_Game.exe -width <Width>
+OGLM_Game.exe /width <Width>
+OGLM_Game.exe --width=<Width>
+OGLM_Game.exe --width:<Width>
+OGLM_Game.exe -width=<Width>
+OGLM_Game.exe -width:<Width>
+OGLM_Game.exe /width:<Width>
+OGLM_Game.exe /width=<Width>
+
+OGLM_Game.exe --height <Height>
+OGLM_Game.exe -height <Height>
+OGLM_Game.exe /height <Height>
+OGLM_Game.exe --height=<Height>
+OGLM_Game.exe --height:<Height>
+OGLM_Game.exe -height=<Height>
+OGLM_Game.exe -height:<Height>
+OGLM_Game.exe /height:<Height>
+OGLM_Game.exe /height=<Height>
+
+Startup size defaults to 1280x720.
+Minimum startup size is clamped to 320x200.
+In fullscreen, a supplied resolution attempts to change the display mode. If
+that mode is unavailable, the game uses the desktop resolution.
+
+Combined examples
+-----------------
+OGLM_Game.exe --fullscreen GUI_Scene_2.omescn
+OGLM_Game.exe --scene GUI_Scene_2.omescn --resolution 1600x900
+OGLM_Game.exe --fullscreen --res=1920x1080 GUI_Scene_2.omescn
+OGLM_Game.exe --windowed --width 1280 --height 720 GUI_Scene_2
