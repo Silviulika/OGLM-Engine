@@ -2,3 +2,7 @@
 	path = External/DWScript
 	url = https://github.com/EricGrange/DWScript.git
 	branch = master
+[submodule "External/kraft"]
+	path = External/kraft
+	url = https://github.com/BeRo1985/kraft.git
+	branch = master
