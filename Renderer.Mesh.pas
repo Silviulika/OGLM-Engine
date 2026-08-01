@@ -163,6 +163,7 @@ type
     procedure DrawCulled(const AFrustumPlanes: TFrustumPlanes;
       AUseFrustum: Boolean); virtual;
     procedure DrawGeometryOnly;
+    procedure DrawInstancedGeometryOnly(AInstanceCount: Integer);
     procedure DrawGeometryOnlyCulled(const AFrustumPlanes: TFrustumPlanes;
       AUseFrustum: Boolean); virtual;
 
@@ -2249,6 +2250,7 @@ var
   RenderState: TRenderTechniqueState;
   OldDepthFunc: GLint;
   OldDepthMask: GLboolean;
+  NormalMatrix: TMatrix3;
   I: Integer;
   LODIndex: Integer;
   EdgeIndex: Integer;
@@ -2373,7 +2375,9 @@ begin
 
     Technique.BeginTechnique;
     Technique.ApplyMaterial(Mat);
-    Technique.ApplyObject(fModelMatrix);
+    NormalMatrix := Matrix3(fModelMatrix);
+    NormalMatrix := NormalMatrix.Inverse.Transpose;
+    Technique.ApplyObject(fModelMatrix, NormalMatrix);
     Technique.Shader.SetUniform('terrainUVScale', GLfloat(fUVScale));
     Technique.Shader.SetUniform('heightFieldUseMorph', GLint(0));
     Technique.Shader.SetUniform('heightFieldMorphFactor', GLfloat(0.0));
@@ -4071,6 +4075,7 @@ var
   RenderState: TRenderTechniqueState;
   OldDepthFunc: GLint;
   OldDepthMask: GLboolean;
+  NormalMatrix: TMatrix3;
 
   function UsesHeightFieldMultiMaterialShader(AShader: TShader): Boolean;
   begin
@@ -4106,7 +4111,9 @@ begin
 
     Technique.BeginTechnique;
     Technique.ApplyMaterial(Mat);
-    Technique.ApplyObject(fModelMatrix);
+    NormalMatrix := Matrix3(fModelMatrix);
+    NormalMatrix := NormalMatrix.Inverse.Transpose;
+    Technique.ApplyObject(fModelMatrix, NormalMatrix);
     PrepareShader(Technique.Shader);
     if Self is THeightFieldMesh then
       Technique.Shader.SetUniform('terrainUVScale',
@@ -4148,7 +4155,10 @@ end;
 procedure TMesh.PrepareShader(AShader: TShader);
 begin
   if AShader <> nil then
+  begin
     AShader.SetUniform('useSkinning', GLint(0));
+    AShader.SetUniform('useInstanceBuffer', GLint(0));
+  end;
 end;
 
 procedure TMesh.DrawCulled(const AFrustumPlanes: TFrustumPlanes;
@@ -4173,6 +4183,31 @@ begin
       glDrawArrays(GL_TRIANGLES, 0, Length(fVertices));
   finally
     glBindVertexArray(0);
+  end;
+end;
+
+procedure TMesh.DrawInstancedGeometryOnly(AInstanceCount: Integer);
+begin
+  if (not fVisible) or (AInstanceCount <= 0) then
+    Exit;
+
+  if fWireFrame then
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
+  else
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+  glBindVertexArray(fVAO);
+  try
+    if fUseElements then
+      glDrawElementsInstanced(GL_TRIANGLES, Length(fIndices), GL_UNSIGNED_INT,
+        nil, AInstanceCount)
+    else
+      glDrawArraysInstanced(GL_TRIANGLES, 0, Length(fVertices),
+        AInstanceCount);
+  finally
+    glBindVertexArray(0);
+    if fWireFrame then
+      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   end;
 end;
 

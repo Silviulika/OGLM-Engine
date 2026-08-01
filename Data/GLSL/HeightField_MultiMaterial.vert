@@ -10,9 +10,9 @@ layout(location = 4) in vec2 texcoord;
 layout(location = 5) in vec3 morphPosition;
 
 uniform mat4 modelMatrix;
+uniform mat3 normalMatrix;
 uniform mat4 viewProjection;
 uniform mat4 lightSpaceMatrix;
-uniform mat4 lightSpaceMatrices[MaxLights];
 uniform vec4 clipPlane;
 uniform int useClipPlane;
 uniform int heightFieldUseMorph;
@@ -25,12 +25,10 @@ out Vertex
     mat3 tangentBasis;
     vec3 geometricNormal;
     vec4 lightSpacePosition;
-    vec4 lightSpacePositions[MaxLights];
 } vout;
 
 void main()
 {
-    int i;
     vec3 localPosition = position;
     if (heightFieldUseMorph != 0)
         localPosition = mix(position, morphPosition, clamp(heightFieldMorphFactor, 0.0, 1.0));
@@ -41,8 +39,6 @@ void main()
         // the default six-wave stack can trough about 0.42 below it. Keep the
         // clip below that animated trough plus a small rasterization margin.
         gl_ClipDistance[0] = dot(worldPos, clipPlane) + 0.55;
-
-    mat3 normalMatrix = transpose(inverse(mat3(modelMatrix)));
 
     vec3 N = normalize(normalMatrix * normal);
     vec3 T = normalize(normalMatrix * tangent);
@@ -57,8 +53,6 @@ void main()
     vout.tangentBasis = mat3(T, B, N);
     vout.geometricNormal = N;
     vout.lightSpacePosition = lightSpaceMatrix * worldPos;
-    for (i = 0; i < MaxLights; ++i)
-        vout.lightSpacePositions[i] = lightSpaceMatrices[i] * worldPos;
 
     gl_Position = viewProjection * worldPos;
 }

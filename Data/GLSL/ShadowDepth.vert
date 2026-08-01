@@ -12,11 +12,25 @@ layout(std430, binding = 3) readonly buffer SkinPalette
     mat4 skinMatrices[];
 };
 
+struct InstanceData
+{
+    mat4 modelMatrix;
+    mat4 normalMatrix;
+    vec4 windRootHeight;
+    vec4 windAxisUnused;
+};
+
+layout(std430, binding = 4) readonly buffer InstanceBuffer
+{
+    InstanceData instances[];
+};
+
 uniform mat4 modelMatrix;
 uniform mat4 lightSpaceMatrix;
 uniform int useSkinning;
 uniform int skinMatrixCount;
 uniform int flipAlphaCutoutV;
+uniform int useInstanceBuffer;
 uniform int useVertexWind;
 uniform int shadowWindMode;
 uniform float windTime;
@@ -73,14 +87,16 @@ vec3 RotateAroundAxis(vec3 value, vec3 axis, float angle)
         axis * dot(axis, value) * (1.0 - cosine);
 }
 
-void ApplyVertexWind(inout vec4 worldPosition)
+void ApplyVertexWind(inout vec4 worldPosition, vec3 instanceWindRoot,
+    vec3 instanceWindAxis, float instanceWindHeight)
 {
-    if (useVertexWind == 0 || windHeight <= 1e-5 || windStrength <= 0.0)
+    if (useVertexWind == 0 || instanceWindHeight <= 1e-5 ||
+        windStrength <= 0.0)
         return;
 
     if (shadowWindMode == 1)
     {
-        vec3 grassAxis = windAxis;
+        vec3 grassAxis = instanceWindAxis;
         if (dot(grassAxis, grassAxis) <= 1e-8)
             grassAxis = vec3(0.0, 1.0, 0.0);
         else
@@ -97,9 +113,9 @@ void ApplyVertexWind(inout vec4 worldPosition)
         direction = normalize(direction);
 
         vec3 crossDirection = normalize(cross(grassAxis, direction));
-        vec3 relativePosition = worldPosition.xyz - windRoot;
+        vec3 relativePosition = worldPosition.xyz - instanceWindRoot;
         float heightRatio = clamp(dot(relativePosition, grassAxis) /
-            max(windHeight, 1e-5), 0.0, 1.0);
+            max(instanceWindHeight, 1e-5), 0.0, 1.0);
         if (heightRatio <= 0.0)
             return;
 
@@ -115,7 +131,8 @@ void ApplyVertexWind(inout vec4 worldPosition)
             (3.0 - 2.0 * heightRatio);
         float flutter = sin(basePhase * 5.3 + spatialPhase * 3.1) *
             windLeafFlutter * 0.12;
-        float swayDistance = windStrength * windHeight * heightProfile * gust;
+        float swayDistance = windStrength * instanceWindHeight *
+            heightProfile * gust;
         float bendAmount = wave * windBranchFlex + flutter * heightRatio;
 
         worldPosition.xyz += direction * swayDistance * bendAmount;
@@ -123,7 +140,7 @@ void ApplyVertexWind(inout vec4 worldPosition)
         return;
     }
 
-    vec3 treeAxis = windAxis;
+    vec3 treeAxis = instanceWindAxis;
     if (dot(treeAxis, treeAxis) <= 1e-8)
         treeAxis = vec3(0.0, 1.0, 0.0);
     else
@@ -139,9 +156,9 @@ void ApplyVertexWind(inout vec4 worldPosition)
     direction = normalize(direction);
     vec3 rotationAxis = normalize(cross(treeAxis, direction));
 
-    vec3 relativePosition = worldPosition.xyz - windRoot;
+    vec3 relativePosition = worldPosition.xyz - instanceWindRoot;
     float heightRatio = clamp(dot(relativePosition, treeAxis) /
-        max(windHeight, 1e-5), 0.0, 1.0);
+        max(instanceWindHeight, 1e-5), 0.0, 1.0);
     if (heightRatio <= 0.0)
         return;
 
@@ -161,17 +178,32 @@ void ApplyVertexWind(inout vec4 worldPosition)
     float rotationAngle = windStrength * heightProfile * gust *
         (wave * flex + flutter);
 
-    worldPosition.xyz = windRoot + RotateAroundAxis(relativePosition,
+    worldPosition.xyz = instanceWindRoot + RotateAroundAxis(relativePosition,
         rotationAxis, rotationAngle);
 }
 
 void main()
 {
+    mat4 effectiveModelMatrix = modelMatrix;
+    vec3 instanceWindRoot = windRoot;
+    vec3 instanceWindAxis = windAxis;
+    float instanceWindHeight = windHeight;
     vec3 localPosition = position;
     if (useSkinning != 0)
         localPosition = (CalculateSkinMatrix() * vec4(position, 1.0)).xyz;
-    vec4 worldPosition = modelMatrix * vec4(localPosition, 1.0);
-    ApplyVertexWind(worldPosition);
+
+    if (useInstanceBuffer != 0)
+    {
+        InstanceData instance = instances[gl_InstanceID];
+        effectiveModelMatrix = instance.modelMatrix;
+        instanceWindRoot = instance.windRootHeight.xyz;
+        instanceWindHeight = instance.windRootHeight.w;
+        instanceWindAxis = instance.windAxisUnused.xyz;
+    }
+
+    vec4 worldPosition = effectiveModelMatrix * vec4(localPosition, 1.0);
+    ApplyVertexWind(worldPosition, instanceWindRoot, instanceWindAxis,
+        instanceWindHeight);
     shadowTexcoord = flipAlphaCutoutV != 0 ?
         vec2(texcoord.x, 1.0 - texcoord.y) : texcoord;
     gl_Position = lightSpaceMatrix * worldPosition;

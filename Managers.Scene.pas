@@ -200,6 +200,12 @@ type
     fVegetationLODMeshes: array[0..VEGETATION_LOD_MAX_LEVELS - 1] of TMeshList;
     fVegetationLODDirty: Boolean;
     fActiveVegetationLODLevel: Integer;
+    fVertexWindFrameValid: Boolean;
+    fVertexWindFrameAvailable: Boolean;
+    fVertexWindRoot: TVector3;
+    fVertexWindAxis: TVector3;
+    fVertexWindHeight: Single;
+    fVertexWindBoundsExpansion: Single;
 
     procedure RebuildModelMatrix;  // computes local matrix
     procedure LookAtDirection(const ADirection: TVector3);
@@ -234,6 +240,9 @@ type
     function GetInstanceSource: TSceneObject;
     function EffectiveInstanceSource: TSceneObject;
     function EffectiveWindSource: TSceneObject;
+    procedure InvalidateVertexWindFrameCache;
+    procedure InvalidateVertexWindFrameCacheForSource(ASource: TSceneObject);
+    function RebuildVertexWindFrameCache: Boolean;
     function GetParticleSystem: TParticleSystem;
     function GetParticleSystemCount: Integer;
     function GetBillboard: TBillboard;
@@ -297,6 +306,9 @@ type
     procedure EnableGrassWind;
     procedure DisableWind;
     procedure ApplyVertexWindUniforms(Shader: TShader);
+    function EffectiveVertexWindSource: TSceneObject;
+    function CachedVertexWindFrame(out ARoot, AAxis: TVector3;
+      out AHeight: Single): Boolean;
     procedure EnableVegetationLOD;
     procedure DisableVegetationLOD;
     procedure ResetVegetationLODDefaults;
@@ -304,6 +316,7 @@ type
     function SelectVegetationLODLevel(const ACameraPosition: TVector3): Integer;
     function VegetationLODWindEnabledForLevel(ALevel: Integer): Boolean;
     function CurrentVegetationLODWindEnabled: Boolean;
+    function VertexWindBoundsExpansion: Single;
     function AnimationCount: Integer;
     function AnimationName(AIndex: Integer): string;
     function PlayAnimation(const AName: string; ALoop: Boolean = True;
@@ -1310,6 +1323,30 @@ begin
     Result := Source;
 end;
 
+procedure TSceneObject.InvalidateVertexWindFrameCache;
+begin
+  fVertexWindFrameValid := False;
+  fVertexWindFrameAvailable := False;
+  fVertexWindBoundsExpansion := 0.0;
+end;
+
+procedure TSceneObject.InvalidateVertexWindFrameCacheForSource(
+  ASource: TSceneObject);
+var
+  I: Integer;
+begin
+  if ASource = nil then
+    Exit;
+
+  if (Self <> ASource) and fIsInstance and
+     (EffectiveInstanceSource = ASource) then
+    InvalidateVertexWindFrameCache;
+
+  for I := 0 to Count - 1 do
+    if Assigned(ObjectList[I]) then
+      ObjectList[I].InvalidateVertexWindFrameCacheForSource(ASource);
+end;
+
 function TSceneObject.GetParticleSystem: TParticleSystem;
 begin
   Result := GetParticleSystemItem(0);
@@ -1463,7 +1500,13 @@ begin
 end;
 
 procedure TSceneObject.MarkVegetationLODDirty;
+var
+  SceneRoot: TSceneObject;
 begin
+  InvalidateVertexWindFrameCache;
+  SceneRoot := RootObject;
+  if Assigned(SceneRoot) then
+    SceneRoot.InvalidateVertexWindFrameCacheForSource(Self);
   ClearVegetationLODMeshes;
   fVegetationLODDirty := True;
 end;
@@ -1740,6 +1783,43 @@ begin
   Result := VegetationLODWindEnabledForLevel(fActiveVegetationLODLevel);
 end;
 
+function TSceneObject.VertexWindBoundsExpansion: Single;
+var
+  WindSource: TSceneObject;
+  Wind: TWindActorSettings;
+  MaxFlex: Single;
+  MaxBend: Single;
+begin
+  Result := 0.0;
+
+  WindSource := EffectiveWindSource;
+  if not Assigned(WindSource) then
+    Exit;
+
+  Wind := WindSource.fWindSettings;
+  if (not Wind.Enabled) or (Wind.Kind <> wakVertexTree) or
+     (not CurrentVegetationLODWindEnabled) then
+    Exit;
+
+  if not fVertexWindFrameValid then
+    RebuildVertexWindFrameCache;
+
+  if fVertexWindFrameAvailable then
+    Exit(fVertexWindBoundsExpansion);
+
+  if BoundingRadius <= 0.0 then
+    Exit;
+
+  MaxFlex := System.Math.Max(Wind.TrunkFlex, Wind.BranchFlex) +
+    Wind.LeafFlutter * 0.16;
+  MaxBend := Abs(Wind.Strength) * (1.0 + System.Math.Max(0.0,
+    Wind.GustStrength)) * System.Math.Max(0.0, MaxFlex);
+  Result := BoundingRadius * System.Math.Min(MaxBend, 1.0);
+
+  if Result > 0.0 then
+    Result := System.Math.Max(Result, BoundingRadius * 0.02);
+end;
+
 function TSceneObject.GetAnimationController: TSkeletonAnimator;
 var
   Meshes: TMeshList;
@@ -1754,12 +1834,17 @@ end;
 procedure TSceneObject.SetWindSettings(const Value: TWindActorSettings);
 var
   Settings: TWindActorSettings;
+  SceneRoot: TSceneObject;
 begin
   Settings := Value;
   Settings.Sanitize;
   fWindSettings := Settings;
   if not fWindSettings.Enabled then
     fWindTime := 0.0;
+  InvalidateVertexWindFrameCache;
+  SceneRoot := RootObject;
+  if Assigned(SceneRoot) then
+    SceneRoot.InvalidateVertexWindFrameCacheForSource(Self);
 end;
 
 procedure TSceneObject.EnableTreeWind;
@@ -1817,6 +1902,11 @@ begin
     (Source.fWindSettings.Kind = wakVertexTree);
 end;
 
+function TSceneObject.EffectiveVertexWindSource: TSceneObject;
+begin
+  Result := EffectiveWindSource;
+end;
+
 function TSceneObject.ApplyWindAnimation(DeltaTime: Single): Boolean;
 var
   Animator: TSkeletonAnimator;
@@ -1837,8 +1927,7 @@ begin
     fWindPoseApplied := True;
 end;
 
-function TSceneObject.TryGetVertexWindFrame(out ARoot, AAxis: TVector3;
-  out AHeight: Single): Boolean;
+function TSceneObject.RebuildVertexWindFrameCache: Boolean;
 var
   Meshes: TMeshList;
   Mesh: TMesh;
@@ -1846,13 +1935,21 @@ var
   LocalRoot, LocalAxis: TVector3;
   WorldAxis: TVector4;
   Extents: TVector3;
+  WindSource: TSceneObject;
+  Wind: TWindActorSettings;
   I, AxisIndex: Integer;
   HasBounds: Boolean;
+  MaxFlex: Single;
+  MaxBend: Single;
 begin
+  fVertexWindFrameValid := True;
+  fVertexWindFrameAvailable := False;
+  fVertexWindRoot := Vector3(0.0, 0.0, 0.0);
+  fVertexWindAxis := Vector3(0.0, 1.0, 0.0);
+  fVertexWindHeight := 0.0;
+  fVertexWindBoundsExpansion := 0.0;
+
   Result := False;
-  ARoot := Vector3(0.0, 0.0, 0.0);
-  AAxis := Vector3(0.0, 1.0, 0.0);
-  AHeight := 0.0;
 
   Meshes := EffectiveMeshList;
   if (Meshes = nil) or (Meshes.Count = 0) then
@@ -1898,28 +1995,76 @@ begin
       begin
         LocalAxis := Vector3(1.0, 0.0, 0.0);
         LocalRoot.X := CombinedBounds.Min.X;
-        AHeight := Extents.X;
+        fVertexWindHeight := Extents.X;
       end;
     2:
       begin
         LocalAxis := Vector3(0.0, 0.0, 1.0);
         LocalRoot.Z := CombinedBounds.Min.Z;
-        AHeight := Extents.Z;
+        fVertexWindHeight := Extents.Z;
       end;
   else
     LocalAxis := Vector3(0.0, 1.0, 0.0);
     LocalRoot.Y := CombinedBounds.Min.Y;
-    AHeight := Extents.Y;
+    fVertexWindHeight := Extents.Y;
   end;
 
-  ARoot := Vector3(fWorldMatrix * Vector4(LocalRoot, 1.0));
+  fVertexWindRoot := Vector3(fWorldMatrix * Vector4(LocalRoot, 1.0));
   WorldAxis := fWorldMatrix * Vector4(LocalAxis, 0.0);
-  AHeight := Vector3(WorldAxis).Length * AHeight;
-  if (AHeight <= 1.0e-5) or (Vector3(WorldAxis).LengthSquared <= 1.0e-8) then
+  fVertexWindHeight := Vector3(WorldAxis).Length * fVertexWindHeight;
+  if (fVertexWindHeight <= 1.0e-5) or
+     (Vector3(WorldAxis).LengthSquared <= 1.0e-8) then
     Exit;
 
-  AAxis := Vector3(WorldAxis).Normalize;
+  fVertexWindAxis := Vector3(WorldAxis).Normalize;
+  fVertexWindFrameAvailable := True;
+
+  WindSource := EffectiveWindSource;
+  if Assigned(WindSource) then
+  begin
+    Wind := WindSource.fWindSettings;
+    if Wind.Enabled and (Wind.Kind = wakVertexTree) then
+    begin
+      MaxFlex := System.Math.Max(Wind.TrunkFlex, Wind.BranchFlex) +
+        Wind.LeafFlutter * 0.16;
+      MaxBend := Abs(Wind.Strength) * (1.0 + System.Math.Max(0.0,
+        Wind.GustStrength)) * System.Math.Max(0.0, MaxFlex);
+      fVertexWindBoundsExpansion := fVertexWindHeight *
+        System.Math.Min(MaxBend, 1.0);
+      if fVertexWindBoundsExpansion > 0.0 then
+        fVertexWindBoundsExpansion := System.Math.Max(
+          fVertexWindBoundsExpansion, fVertexWindHeight * 0.02);
+    end;
+  end;
+
   Result := True;
+end;
+
+function TSceneObject.TryGetVertexWindFrame(out ARoot, AAxis: TVector3;
+  out AHeight: Single): Boolean;
+begin
+  if not fVertexWindFrameValid then
+    RebuildVertexWindFrameCache;
+
+  Result := fVertexWindFrameAvailable;
+  if Result then
+  begin
+    ARoot := fVertexWindRoot;
+    AAxis := fVertexWindAxis;
+    AHeight := fVertexWindHeight;
+  end
+  else
+  begin
+    ARoot := Vector3(0.0, 0.0, 0.0);
+    AAxis := Vector3(0.0, 1.0, 0.0);
+    AHeight := 0.0;
+  end;
+end;
+
+function TSceneObject.CachedVertexWindFrame(out ARoot, AAxis: TVector3;
+  out AHeight: Single): Boolean;
+begin
+  Result := TryGetVertexWindFrame(ARoot, AAxis, AHeight);
 end;
 
 procedure TSceneObject.ApplyVertexWindUniforms(Shader: TShader);
@@ -2121,6 +2266,12 @@ begin
   fVegetationLODSettings := TVegetationLODSettings.Disabled;
   fVegetationLODDirty := True;
   fActiveVegetationLODLevel := 0;
+  fVertexWindFrameValid := False;
+  fVertexWindFrameAvailable := False;
+  fVertexWindRoot := Vector3(0.0, 0.0, 0.0);
+  fVertexWindAxis := Vector3(0.0, 1.0, 0.0);
+  fVertexWindHeight := 0.0;
+  fVertexWindBoundsExpansion := 0.0;
   fMeshList := TMeshList.Create;
   fIsInstance := False;
   fInstanceSource := nil;
@@ -2464,6 +2615,7 @@ procedure TSceneObject.NotifyChange;
 var
   i: Integer;
 begin
+  InvalidateVertexWindFrameCache;
   fWorldMatrixValid := False;
   for i := 0 to Count - 1 do
     if ObjectList[i] <> nil then
@@ -3156,12 +3308,17 @@ end;
 procedure TSceneObject.UpdateBoundingRadiusFromMesh;
 var
   Meshes: TMeshList;
+  SceneRoot: TSceneObject;
 begin
   Meshes := EffectiveMeshList;
   if Assigned(Meshes) then
     fInternalBoundingRadius := Meshes.GetBoundingRadius
   else
     fInternalBoundingRadius := 0;
+  InvalidateVertexWindFrameCache;
+  SceneRoot := RootObject;
+  if Assigned(SceneRoot) then
+    SceneRoot.InvalidateVertexWindFrameCacheForSource(Self);
 end;
 
 function TSceneObject.HasGeometry: Boolean;

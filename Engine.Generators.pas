@@ -797,8 +797,8 @@ begin
         v3.Bitangent := Vector3(0,0,0);
         idx3 := Builder.AddVertex(v3);
 
-        Builder.AddTriangle(idx0, idx1, idx2);
-        Builder.AddTriangle(idx0, idx2, idx3);
+        Builder.AddTriangle(idx0, idx2, idx1);
+        Builder.AddTriangle(idx0, idx3, idx2);
       end;
 
     // ------------------- Left Face (X = left) -------------------
@@ -834,8 +834,8 @@ begin
         idx3 := Builder.AddVertex(v3);
 
         // Reverse winding for outward facing
-        Builder.AddTriangle(idx1, idx0, idx3);
-        Builder.AddTriangle(idx1, idx3, idx2);
+        Builder.AddTriangle(idx1, idx3, idx0);
+        Builder.AddTriangle(idx1, idx2, idx3);
       end;
 
     // ------------------- Top Face (Y = top) -------------------
@@ -870,8 +870,8 @@ begin
         v3.Bitangent := Vector3(0,0,0);
         idx3 := Builder.AddVertex(v3);
 
-        Builder.AddTriangle(idx0, idx1, idx2);
-        Builder.AddTriangle(idx0, idx2, idx3);
+        Builder.AddTriangle(idx0, idx2, idx1);
+        Builder.AddTriangle(idx0, idx3, idx2);
       end;
 
     // ------------------- Bottom Face (Y = bottom) -------------------
@@ -906,8 +906,8 @@ begin
         v3.Bitangent := Vector3(0,0,0);
         idx3 := Builder.AddVertex(v3);
 
-        Builder.AddTriangle(idx1, idx0, idx3);
-        Builder.AddTriangle(idx1, idx3, idx2);
+        Builder.AddTriangle(idx1, idx3, idx0);
+        Builder.AddTriangle(idx1, idx2, idx3);
       end;
 
     Vertices := Builder.Vertices.ToArray;
@@ -970,8 +970,8 @@ begin
         idxTopLeft := (i+1) * (SliceCount+1) + j;
         idxTopRight := (i+1) * (SliceCount+1) + j+1;
 
-        Builder.AddTriangle(idxBottomLeft, idxBottomRight, idxTopRight);
-        Builder.AddTriangle(idxBottomLeft, idxTopRight, idxTopLeft);
+        Builder.AddTriangle(idxBottomLeft, idxTopRight, idxBottomRight);
+        Builder.AddTriangle(idxBottomLeft, idxTopLeft, idxTopRight);
       end;
 
     Vertices := Builder.Vertices.ToArray;
@@ -1086,8 +1086,8 @@ begin
         var idxBR := i * (Slices+1) + j+1;
         var idxTL := (i+1) * (Slices+1) + j;
         var idxTR := (i+1) * (Slices+1) + j+1;
-        Builder.AddTriangle(idxBL, idxBR, idxTR);
-        Builder.AddTriangle(idxBL, idxTR, idxTL);
+        Builder.AddTriangle(idxBL, idxTR, idxBR);
+        Builder.AddTriangle(idxBL, idxTL, idxTR);
       end;
 
     AddCap(False, BottomCap);
@@ -1158,8 +1158,8 @@ begin
         idxTL := (i + 1) * (Slices + 1) + j;
         idxTR := (i + 1) * (Slices + 1) + j + 1;
 
-        Builder.AddTriangle(idxBL, idxBR, idxTR);
-        Builder.AddTriangle(idxBL, idxTR, idxTL);
+        Builder.AddTriangle(idxBL, idxTR, idxBR);
+        Builder.AddTriangle(idxBL, idxTL, idxTR);
       end;
 
     // -----------------------------------------------------------------
@@ -1205,8 +1205,8 @@ begin
         idxTL := baseIdx + (i + 1) * (Slices + 1) + j;
         idxTR := baseIdx + (i + 1) * (Slices + 1) + j + 1;
 
-        Builder.AddTriangle(idxBL, idxBR, idxTR);
-        Builder.AddTriangle(idxBL, idxTR, idxTL);
+        Builder.AddTriangle(idxBL, idxTR, idxBR);
+        Builder.AddTriangle(idxBL, idxTL, idxTR);
       end;
 
     // -----------------------------------------------------------------
@@ -1250,8 +1250,8 @@ begin
         idxTL := baseIdx + (i + 1) * (Slices + 1) + j;
         idxTR := baseIdx + (i + 1) * (Slices + 1) + j + 1;
 
-        Builder.AddTriangle(idxBL, idxBR, idxTR);
-        Builder.AddTriangle(idxBL, idxTR, idxTL);
+        Builder.AddTriangle(idxBL, idxTR, idxBR);
+        Builder.AddTriangle(idxBL, idxTL, idxTR);
       end;
 
     // -----------------------------------------------------------------
@@ -1335,8 +1335,8 @@ begin
         idxTL := (i + 1) * (MinorSegments + 1) + j;
         idxTR := (i + 1) * (MinorSegments + 1) + j + 1;
 
-        Builder.AddTriangle(idxBL, idxBR, idxTR);
-        Builder.AddTriangle(idxBL, idxTR, idxTL);
+        Builder.AddTriangle(idxBL, idxTR, idxBR);
+        Builder.AddTriangle(idxBL, idxTL, idxTR);
       end;
 
     Vertices := Builder.Vertices.ToArray;
@@ -1421,8 +1421,8 @@ begin
         idx2 := (i + 1) * (Sides + 1) + j;
         idx3 := (i + 1) * (Sides + 1) + j + 1;
 
-        Builder.AddTriangle(idx0, idx1, idx3);
-        Builder.AddTriangle(idx0, idx3, idx2);
+        Builder.AddTriangle(idx0, idx3, idx1);
+        Builder.AddTriangle(idx0, idx2, idx3);
       end;
 
     // ----- Bottom cap (triangle fan from center) -----
@@ -1528,8 +1528,8 @@ begin
         idxTL := (i + 1) * (Sides + 1) + j;
         idxTR := (i + 1) * (Sides + 1) + j + 1;
 
-        Builder.AddTriangle(idxBL, idxBR, idxTR);
-        Builder.AddTriangle(idxBL, idxTR, idxTL);
+        Builder.AddTriangle(idxBL, idxTR, idxBR);
+        Builder.AddTriangle(idxBL, idxTL, idxTR);
       end;
 
     // ----- Bottom cap (triangle fan from center) -----
@@ -1687,8 +1687,8 @@ begin
         idxTL := (i + 1) * (Slices + 1) + j;
         idxTR := (i + 1) * (Slices + 1) + j + 1;
 
-        Builder.AddTriangle(idxBL, idxBR, idxTR);
-        Builder.AddTriangle(idxBL, idxTR, idxTL);
+        Builder.AddTriangle(idxBL, idxTR, idxBR);
+        Builder.AddTriangle(idxBL, idxTL, idxTR);
       end;
 
     // -----------------------------------------------------------------
@@ -2255,11 +2255,20 @@ var
     baseIdx: Integer;
     dirVec: TVector3;
     length: Single;
+    reverseWinding: Boolean;
   begin
     // direction vector and length
     dirVec := EndPos - StartPos;
     length := dirVec.Length;
     if length = 0 then Exit;
+
+    case Axis of
+      0: reverseWinding := dirVec.X < 0;
+      1: reverseWinding := dirVec.Y >= 0;
+      2: reverseWinding := dirVec.Z < 0;
+    else
+      reverseWinding := False;
+    end;
 
     baseIdx := Builder.Vertices.Count;
 
@@ -2314,8 +2323,16 @@ var
         idxBR := baseIdx + i * (Slices + 1) + j + 1;
         idxTL := baseIdx + (i + 1) * (Slices + 1) + j;
         idxTR := baseIdx + (i + 1) * (Slices + 1) + j + 1;
-        Builder.AddTriangle(idxBL, idxBR, idxTR);
-        Builder.AddTriangle(idxBL, idxTR, idxTL);
+        if reverseWinding then
+        begin
+          Builder.AddTriangle(idxBL, idxTR, idxBR);
+          Builder.AddTriangle(idxBL, idxTL, idxTR);
+        end
+        else
+        begin
+          Builder.AddTriangle(idxBL, idxBR, idxTR);
+          Builder.AddTriangle(idxBL, idxTR, idxTL);
+        end;
       end;
   end;
 
@@ -2333,10 +2350,19 @@ var
     dirVec: TVector3;
     length: Single;
     nxComp: Single;
+    reverseWinding: Boolean;
   begin
     dirVec := TipPos - BasePos;
     length := dirVec.Length;
     if length = 0 then Exit;
+
+    case Axis of
+      0: reverseWinding := dirVec.X < 0;
+      1: reverseWinding := dirVec.Y >= 0;
+      2: reverseWinding := dirVec.Z < 0;
+    else
+      reverseWinding := False;
+    end;
 
     baseIdx := Builder.Vertices.Count;
 
@@ -2407,8 +2433,16 @@ var
         idxBR := baseIdx + i * (Slices + 1) + j + 1;
         idxTL := baseIdx + (i + 1) * (Slices + 1) + j;
         idxTR := baseIdx + (i + 1) * (Slices + 1) + j + 1;
-        Builder.AddTriangle(idxBL, idxBR, idxTR);
-        Builder.AddTriangle(idxBL, idxTR, idxTL);
+        if reverseWinding then
+        begin
+          Builder.AddTriangle(idxBL, idxTR, idxBR);
+          Builder.AddTriangle(idxBL, idxTL, idxTR);
+        end
+        else
+        begin
+          Builder.AddTriangle(idxBL, idxBR, idxTR);
+          Builder.AddTriangle(idxBL, idxTR, idxTL);
+        end;
       end;
   end;
 
@@ -2458,8 +2492,8 @@ var
         idxBR := baseIdx + i * (Slices + 1) + j + 1;
         idxTL := baseIdx + (i + 1) * (Slices + 1) + j;
         idxTR := baseIdx + (i + 1) * (Slices + 1) + j + 1;
-        Builder.AddTriangle(idxBL, idxBR, idxTR);
-        Builder.AddTriangle(idxBL, idxTR, idxTL);
+        Builder.AddTriangle(idxBL, idxTR, idxBR);
+        Builder.AddTriangle(idxBL, idxTL, idxTR);
       end;
   end;
 
@@ -2562,8 +2596,8 @@ begin
         idxBR := i * (Slices + 1) + j + 1;
         idxTL := (i + 1) * (Slices + 1) + j;
         idxTR := (i + 1) * (Slices + 1) + j + 1;
-        Builder.AddTriangle(idxBL, idxBR, idxTR);
-        Builder.AddTriangle(idxBL, idxTR, idxTL);
+        Builder.AddTriangle(idxBL, idxTR, idxBR);
+        Builder.AddTriangle(idxBL, idxTL, idxTR);
       end;
 
     // -----------------------------------------------------------------------
@@ -2616,7 +2650,7 @@ begin
       ringIndices[j] := Builder.AddVertex(vert);
     end;
     for j := 0 to Slices - 1 do
-      Builder.AddTriangle(centerIdx, ringIndices[j], ringIndices[(j+1) mod Slices]);
+      Builder.AddTriangle(centerIdx, ringIndices[(j+1) mod Slices], ringIndices[j]);
 
     // =======================================================================
     // 4. Cone tip (side, no cap at tip)
@@ -2659,8 +2693,8 @@ begin
         idxBR := baseIdx + i * (Slices + 1) + j + 1;
         idxTL := baseIdx + (i + 1) * (Slices + 1) + j;
         idxTR := baseIdx + (i + 1) * (Slices + 1) + j + 1;
-        Builder.AddTriangle(idxBL, idxBR, idxTR);
-        Builder.AddTriangle(idxBL, idxTR, idxTL);
+        Builder.AddTriangle(idxBL, idxTR, idxBR);
+        Builder.AddTriangle(idxBL, idxTL, idxTR);
       end;
 
     // -----------------------------------------------------------------------

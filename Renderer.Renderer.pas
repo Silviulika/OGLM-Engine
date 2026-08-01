@@ -55,6 +55,24 @@ type
     Strength: Single;
   end;
 
+  TGPUInstanceRenderData = packed record
+    ModelMatrix: TMatrix4;
+    NormalMatrix: TMatrix4;
+    WindRootHeight: TVector4;
+    WindAxisUnused: TVector4;
+  end;
+
+  TInstancedRenderBatch = record
+    Mesh: TMesh;
+    Material: TMaterial;
+    FirstObject: TSceneObject;
+    WindSource: TSceneObject;
+    UseVertexWind: Boolean;
+    Instances: TArray<TGPUInstanceRenderData>;
+  end;
+
+  TInstancedRenderBatches = TArray<TInstancedRenderBatch>;
+
   TToneMappingMode = (
     tmLinear,
     tmExponential,
@@ -121,6 +139,9 @@ type
     fShadowAutoFit: Boolean;
     fShadowFitPadding: Single;
     fShadowDrawCount: Integer;
+    fInstanceDataBuffer: GLuint;
+    fSkipInstanceDraws: Boolean;
+    fBatchedInstanceObjects: TList<TSceneObject>;
 
     fWaterReflectionEnabled: Boolean;
     fWaterReflectionFBO: GLuint;
@@ -194,6 +215,18 @@ type
     function CountMeshTriangles(AMesh: TMesh): Int64;
     function CountSceneObjectTriangles(aObject: TSceneObject): Int64;
     procedure RenderSceneObject(aObject: TSceneObject);
+    function MeshMaterial(AMesh: TMesh): TMaterial;
+    function MeshCanUseInstancing(AMesh: TMesh; AMaterial: TMaterial;
+      AShadowPass: Boolean): Boolean;
+    procedure AddInstanceToBatch(var ABatches: TInstancedRenderBatches;
+      AMesh: TMesh; AMaterial: TMaterial; AObject: TSceneObject;
+      AWindSource: TSceneObject; AUseVertexWind: Boolean);
+    procedure CollectInstancedSceneObject(aObject: TSceneObject;
+      AShadowPass: Boolean; var ABatches: TInstancedRenderBatches);
+    procedure UploadInstanceData(const AInstances: TArray<TGPUInstanceRenderData>);
+    procedure RenderInstancedSceneObjects(AShadowPass: Boolean);
+    procedure RenderInstancedBatch(const ABatch: TInstancedRenderBatch;
+      AShadowPass: Boolean);
     procedure CollectSceneObjectBillboards(aObject: TSceneObject;
       var Items: TBillboardRenderList);
     procedure SortBillboardRenderItems(var Items: TBillboardRenderList);
@@ -201,8 +234,12 @@ type
     procedure RenderSceneObjectParticles(aObject: TSceneObject);
     procedure RenderSceneObjectDepth(aObject: TSceneObject);
     procedure ApplyShadowMaterial(AMesh: TMesh);
+    function ShadowMaterialNeedsTwoSided(AMesh: TMesh): Boolean;
     function MeshCastsShadowByDefault(AMesh: TMesh;
       const AWorldBounds: TAABB): Boolean;
+    function WorldBoundsVisibleInFrustum(const AWorldBounds: TAABB;
+      const AFrustumPlanes: TFrustumPlanes; AUseFrustum: Boolean;
+      AExpansion: Single = 0.0): Boolean;
     function FindFirstLightObject(aObject: TSceneObject): TSceneObject;
     function FindShadowLightObject(aObject: TSceneObject): TSceneObject;
     function TryGetShadowCasterBounds(out Bounds: TAABB): Boolean;
@@ -378,6 +415,9 @@ type
   end;
 
 implementation
+
+uses
+  Renderer.RenderTechnique;
 
 const
   LIGHT_GLYPH_TEXTURE_PATH = 'Billboards\Textures\LIGHT.tga';
@@ -772,6 +812,9 @@ begin
   fShadowAutoFit := True;
   fShadowFitPadding := 1.25;
   fShadowDrawCount := 0;
+  fInstanceDataBuffer := 0;
+  fSkipInstanceDraws := False;
+  fBatchedInstanceObjects := TList<TSceneObject>.Create;
   fWaterReflectionEnabled := True;
   fWaterReflectionFBO := 0;
   fWaterReflectionTexture := 0;
@@ -841,6 +884,12 @@ begin
   DestroyEmptyObjectMarker;
   DestroyWaterReflection;
   DestroyPostProcessResources;
+  FreeAndNil(fBatchedInstanceObjects);
+  if fInstanceDataBuffer <> 0 then
+  begin
+    glDeleteBuffers(1, @fInstanceDataBuffer);
+    fInstanceDataBuffer := 0;
+  end;
   if fFullscreenVBO <> 0 then
   begin
     glDeleteBuffers(1, @fFullscreenVBO);
@@ -1636,6 +1685,47 @@ begin
     Exit(False);
 end;
 
+function TRenderer.WorldBoundsVisibleInFrustum(const AWorldBounds: TAABB;
+  const AFrustumPlanes: TFrustumPlanes; AUseFrustum: Boolean;
+  AExpansion: Single): Boolean;
+var
+  Bounds: TAABB;
+  Center: TVector3;
+  Extents: TVector3;
+  Plane: TVector4;
+  Distance: Single;
+  Radius: Single;
+  PlaneIndex: Integer;
+begin
+  if (not AUseFrustum) or (not AWorldBounds.IsValid) then
+    Exit(True);
+
+  Bounds := AWorldBounds;
+  AExpansion := System.Math.Max(0.0, AExpansion);
+  if AExpansion > 0.0 then
+  begin
+    Bounds.Min := Bounds.Min - Vector3(AExpansion, AExpansion, AExpansion);
+    Bounds.Max := Bounds.Max + Vector3(AExpansion, AExpansion, AExpansion);
+  end;
+
+  Center := Bounds.Center;
+  Extents := Bounds.Extents;
+
+  for PlaneIndex := Low(AFrustumPlanes) to High(AFrustumPlanes) do
+  begin
+    Plane := AFrustumPlanes[PlaneIndex];
+    Distance := Plane.X * Center.X + Plane.Y * Center.Y +
+      Plane.Z * Center.Z + Plane.W;
+    Radius := Abs(Plane.X) * Extents.X + Abs(Plane.Y) * Extents.Y +
+      Abs(Plane.Z) * Extents.Z;
+
+    if Distance < -Radius then
+      Exit(False);
+  end;
+
+  Result := True;
+end;
+
 function TRenderer.TryGetShadowCasterBounds(out Bounds: TAABB): Boolean;
 var
   AllBounds: TAABB;
@@ -1664,15 +1754,29 @@ var
       ABounds.Include(AIncludeBounds);
   end;
 
+  procedure ExpandBounds(var ABounds: TAABB; AExpansion: Single);
+  begin
+    if (not ABounds.IsValid) or (AExpansion <= 0.0) then
+      Exit;
+
+    ABounds.Min := ABounds.Min - Vector3(AExpansion, AExpansion, AExpansion);
+    ABounds.Max := ABounds.Max + Vector3(AExpansion, AExpansion, AExpansion);
+  end;
+
   procedure IncludeObject(aObject: TSceneObject);
   var
     I: Integer;
     Meshes: TMeshList;
     Mesh: TMesh;
     WorldBounds: TAABB;
+    WindExpansion: Single;
   begin
     if (aObject = nil) or aObject.IsGizmo then
       Exit;
+
+    WindExpansion := 0.0;
+    if aObject.HasVertexWindAnimation and aObject.CurrentVegetationLODWindEnabled then
+      WindExpansion := aObject.VertexWindBoundsExpansion;
 
     Meshes := aObject.EffectiveMeshList;
     if Assigned(Meshes) then
@@ -1684,6 +1788,7 @@ var
 
       Mesh.ParentModelMatrix := aObject.WorldMatrix;
       WorldBounds := Mesh.GetBoundingBox.Transform(Mesh.ModelMatrix);
+      ExpandBounds(WorldBounds, WindExpansion);
       IncludeBounds(AllBounds, HasAllBounds, WorldBounds);
 
       if MeshCastsShadowByDefault(Mesh, WorldBounds) then
@@ -2270,15 +2375,46 @@ begin
   end;
 end;
 
+function TRenderer.ShadowMaterialNeedsTwoSided(AMesh: TMesh): Boolean;
+var
+  Mat: TMaterial;
+begin
+  Result := False;
+
+  if (AMesh = nil) or (AMesh.MaterialLibrary = nil) then
+    Exit;
+
+  if Trim(AMesh.LibMaterialname) <> '' then
+    Mat := AMesh.MaterialLibrary.GetMaterial(AMesh.LibMaterialname)
+  else if AMesh.MaterialLibrary.Count > 0 then
+    Mat := AMesh.MaterialLibrary.Material[0]
+  else
+    Mat := nil;
+
+  Result := Assigned(Mat) and
+    (Mat.Materialtype in [mtTreeLeaf, Managers.Material.mtGrass]);
+end;
+
 procedure TRenderer.RenderSceneObjectDepth(aObject: TSceneObject);
 var
   i: Integer;
   Mesh: TMesh;
   Meshes: TMeshList;
   WorldBounds: TAABB;
+  WindExpansion: Single;
+  UseExpandedWindBounds: Boolean;
+  UseShadowFrustum: Boolean;
 begin
   if (aObject = nil) or aObject.IsGizmo then
     Exit;
+
+  if fSkipInstanceDraws and Assigned(fBatchedInstanceObjects) and
+     (fBatchedInstanceObjects.IndexOf(aObject) >= 0) then
+  begin
+    for i := 0 to aObject.Count - 1 do
+      RenderSceneObjectDepth(aObject.ObjectList[i]);
+    Exit;
+  end;
 
   if Assigned(fActiveCamera) and Assigned(fActiveCamera.Camera) then
     Meshes := aObject.EffectiveMeshListForCamera(fActiveCamera.Camera.Position)
@@ -2295,6 +2431,17 @@ begin
       if not MeshCastsShadowByDefault(Mesh, WorldBounds) then
         Continue;
 
+      UseShadowFrustum := fFrustumCullingEnabled and fShadowFrustumValid;
+      UseExpandedWindBounds := aObject.HasVertexWindAnimation and
+        aObject.CurrentVegetationLODWindEnabled;
+      if UseExpandedWindBounds then
+      begin
+        WindExpansion := aObject.VertexWindBoundsExpansion;
+        if not WorldBoundsVisibleInFrustum(WorldBounds, fShadowFrustumPlanes,
+          UseShadowFrustum, WindExpansion) then
+          Continue;
+      end;
+
       if (Mesh is THeightFieldMesh) and Assigned(fActiveCamera) and
          Assigned(fActiveCamera.Camera) then
         THeightFieldMesh(Mesh).LODCameraPosition := fActiveCamera.Camera.Position;
@@ -2305,10 +2452,18 @@ begin
         Mesh.PrepareShader(fShadowShader);
         aObject.ApplyVertexWindUniforms(fShadowShader);
         ApplyShadowMaterial(Mesh);
-        Mesh.DrawGeometryOnlyCulled(fShadowFrustumPlanes,
-          fFrustumCullingEnabled and fShadowFrustumValid and
-          (not (aObject.HasVertexWindAnimation and
-          aObject.CurrentVegetationLODWindEnabled)));
+        if ShadowMaterialNeedsTwoSided(Mesh) then
+          glDisable(GL_CULL_FACE)
+        else
+        begin
+          glEnable(GL_CULL_FACE);
+          glCullFace(GL_BACK);
+        end;
+
+        if UseExpandedWindBounds then
+          Mesh.DrawGeometryOnly
+        else
+          Mesh.DrawGeometryOnlyCulled(fShadowFrustumPlanes, UseShadowFrustum);
         Inc(fShadowDrawCount);
       finally
         fCurrentSceneObject := nil;
@@ -2359,8 +2514,10 @@ begin
         Break;
       end;
 
-  for I := 0 to ShaderLightCount - 1 do
-    AddShadowMapLight(Lights[I], I);
+  if fShadowMapCount <= 0 then
+    for I := 0 to ShaderLightCount - 1 do
+      if AddShadowMapLight(Lights[I], I) then
+        Break;
 
   if fShadowMapCount <= 0 then
     Exit;
@@ -2380,7 +2537,8 @@ begin
   glDepthFunc(GL_LESS);
   glDepthMask(GL_TRUE);
   glDisable(GL_BLEND);
-  glDisable(GL_CULL_FACE);
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
   glEnable(GL_POLYGON_OFFSET_FILL);
   glPolygonOffset(1.2, 4.0);
 
@@ -2390,7 +2548,6 @@ begin
   begin
     Light := fShadowMaps[Layer].Light;
     fShadowMaps[Layer].Matrix := CalculateShadowLightMatrix(Light);
-    fShadowMaps[Layer].Strength := Light.ShadowStrength;
     fShadowLightViewProjection := fShadowMaps[Layer].Matrix;
 
     fShadowFrustumValid := False;
@@ -2403,8 +2560,16 @@ begin
 
     fShadowShader.SetUniform('lightSpaceMatrix', fShadowMaps[Layer].Matrix);
 
-    for I := 0 to fSceneManager.Count - 1 do
-      RenderSceneObjectDepth(fSceneManager.Root.ObjectList[I]);
+    RenderInstancedSceneObjects(True);
+    fSkipInstanceDraws := True;
+    try
+      for I := 0 to fSceneManager.Count - 1 do
+        RenderSceneObjectDepth(fSceneManager.Root.ObjectList[I]);
+    finally
+      fSkipInstanceDraws := False;
+      if Assigned(fBatchedInstanceObjects) then
+        fBatchedInstanceObjects.Clear;
+    end;
   end;
 
   fShadowLightViewProjection := fShadowMaps[0].Matrix;
@@ -2587,6 +2752,9 @@ begin
 
   if LocalMaxScale > 1e-6 then
     Radius := Radius * (WorldMaxScale / LocalMaxScale);
+
+  if aObject.HasVertexWindAnimation and aObject.CurrentVegetationLODWindEnabled then
+    Radius := Radius + aObject.VertexWindBoundsExpansion;
 
   Center := Vector3(aObject.WorldMatrix.Columns[3]);
   Result := IsSphereVisibleInViewFrustum(Center, Radius);
@@ -2946,17 +3114,321 @@ begin
     RenderSceneObjectWater(fSceneManager.Root.ObjectList[I]);
 end;
 
+function TRenderer.MeshMaterial(AMesh: TMesh): TMaterial;
+begin
+  Result := nil;
+  if (AMesh = nil) or (AMesh.MaterialLibrary = nil) then
+    Exit;
+
+  if Trim(AMesh.LibMaterialname) <> '' then
+    Result := AMesh.MaterialLibrary.GetMaterial(AMesh.LibMaterialname)
+  else if AMesh.MaterialLibrary.Count > 0 then
+    Result := AMesh.MaterialLibrary.Material[0];
+end;
+
+function TRenderer.MeshCanUseInstancing(AMesh: TMesh; AMaterial: TMaterial;
+  AShadowPass: Boolean): Boolean;
+begin
+  Result := False;
+
+  if (AMesh = nil) or (not AMesh.Visible) or AMesh.AlwaysOnTop or
+     (AMesh.VertexCount <= 0) then
+    Exit;
+
+  if (AMesh is THeightFieldMesh) or (AMesh is TWaterPlaneMesh) then
+    Exit;
+
+  if Assigned(AMesh.OnRender) then
+    Exit;
+
+  if AShadowPass then
+    Result := fShadowShader <> nil
+  else
+    Result := Assigned(AMaterial) and Assigned(AMaterial.Shader);
+end;
+
+procedure TRenderer.AddInstanceToBatch(var ABatches: TInstancedRenderBatches;
+  AMesh: TMesh; AMaterial: TMaterial; AObject: TSceneObject;
+  AWindSource: TSceneObject; AUseVertexWind: Boolean);
+var
+  I: Integer;
+  InstanceIndex: Integer;
+  BatchIndex: Integer;
+  Data: TGPUInstanceRenderData;
+  NormalMatrix: TMatrix3;
+  Root, Axis: TVector3;
+  Height: Single;
+begin
+  if (AMesh = nil) or (AObject = nil) then
+    Exit;
+
+  NormalMatrix := Matrix3(AMesh.ModelMatrix);
+  NormalMatrix := NormalMatrix.Inverse.Transpose;
+
+  Data.ModelMatrix := AMesh.ModelMatrix;
+  Data.NormalMatrix := Matrix4(NormalMatrix);
+  Data.WindRootHeight := Vector4(0.0, 0.0, 0.0, 0.0);
+  Data.WindAxisUnused := Vector4(0.0, 1.0, 0.0, 0.0);
+  if AUseVertexWind and AObject.CachedVertexWindFrame(Root, Axis, Height) then
+  begin
+    Data.WindRootHeight := Vector4(Root.X, Root.Y, Root.Z, Height);
+    Data.WindAxisUnused := Vector4(Axis.X, Axis.Y, Axis.Z, 0.0);
+  end;
+
+  BatchIndex := -1;
+  for I := 0 to High(ABatches) do
+    if (ABatches[I].Mesh = AMesh) and
+       (ABatches[I].Material = AMaterial) and
+       (ABatches[I].WindSource = AWindSource) and
+       (ABatches[I].UseVertexWind = AUseVertexWind) then
+    begin
+      BatchIndex := I;
+      Break;
+    end;
+
+  if BatchIndex < 0 then
+  begin
+    BatchIndex := Length(ABatches);
+    SetLength(ABatches, BatchIndex + 1);
+    ABatches[BatchIndex].Mesh := AMesh;
+    ABatches[BatchIndex].Material := AMaterial;
+    ABatches[BatchIndex].FirstObject := AObject;
+    ABatches[BatchIndex].WindSource := AWindSource;
+    ABatches[BatchIndex].UseVertexWind := AUseVertexWind;
+    SetLength(ABatches[BatchIndex].Instances, 0);
+  end;
+
+  InstanceIndex := Length(ABatches[BatchIndex].Instances);
+  SetLength(ABatches[BatchIndex].Instances, InstanceIndex + 1);
+  ABatches[BatchIndex].Instances[InstanceIndex] := Data;
+end;
+
+procedure TRenderer.CollectInstancedSceneObject(aObject: TSceneObject;
+  AShadowPass: Boolean; var ABatches: TInstancedRenderBatches);
+var
+  I: Integer;
+  Meshes: TMeshList;
+  Mesh: TMesh;
+  Material: TMaterial;
+  CandidateMeshes: TArray<TMesh>;
+  CandidateMaterials: TArray<TMaterial>;
+  CandidateCount: Integer;
+  WorldBounds: TAABB;
+  UseFrustum: Boolean;
+  UseVertexWind: Boolean;
+  WindExpansion: Single;
+  WindSource: TSceneObject;
+  CanBatchObject: Boolean;
+begin
+  if (aObject = nil) or aObject.IsGizmo then
+    Exit;
+
+  if aObject.IsInstance then
+  begin
+    if Assigned(fActiveCamera) and Assigned(fActiveCamera.Camera) then
+      Meshes := aObject.EffectiveMeshListForCamera(fActiveCamera.Camera.Position)
+    else
+      Meshes := aObject.EffectiveMeshList;
+
+    CandidateCount := 0;
+    CanBatchObject := True;
+    SetLength(CandidateMeshes, 0);
+    SetLength(CandidateMaterials, 0);
+
+    if Assigned(Meshes) then
+    begin
+      UseFrustum := fFrustumCullingEnabled and
+        ((AShadowPass and fShadowFrustumValid) or
+         ((not AShadowPass) and fViewFrustumValid));
+      UseVertexWind := aObject.HasVertexWindAnimation and
+        aObject.CurrentVegetationLODWindEnabled;
+      WindExpansion := 0.0;
+      WindSource := nil;
+      if UseVertexWind then
+      begin
+        WindExpansion := aObject.VertexWindBoundsExpansion;
+        WindSource := aObject.EffectiveVertexWindSource;
+      end;
+
+      for I := 0 to Meshes.Count - 1 do
+      begin
+        Mesh := Meshes.Item[I];
+        if (Mesh = nil) or (not Mesh.Visible) or Mesh.AlwaysOnTop or
+           (Mesh is TWaterPlaneMesh) then
+          Continue;
+
+        Mesh.ParentModelMatrix := aObject.WorldMatrix;
+        WorldBounds := Mesh.GetBoundingBox.Transform(Mesh.ModelMatrix);
+        if AShadowPass and (not MeshCastsShadowByDefault(Mesh, WorldBounds)) then
+          Continue;
+
+        if AShadowPass then
+        begin
+          if not WorldBoundsVisibleInFrustum(WorldBounds, fShadowFrustumPlanes,
+            UseFrustum, WindExpansion) then
+            Continue;
+        end
+        else if not WorldBoundsVisibleInFrustum(WorldBounds, fViewFrustumPlanes,
+          UseFrustum, WindExpansion) then
+          Continue;
+
+        Material := MeshMaterial(Mesh);
+        if not MeshCanUseInstancing(Mesh, Material, AShadowPass) then
+        begin
+          CanBatchObject := False;
+          Break;
+        end;
+
+        SetLength(CandidateMeshes, CandidateCount + 1);
+        SetLength(CandidateMaterials, CandidateCount + 1);
+        CandidateMeshes[CandidateCount] := Mesh;
+        CandidateMaterials[CandidateCount] := Material;
+        Inc(CandidateCount);
+      end;
+
+      if CanBatchObject and (CandidateCount > 0) then
+      begin
+        for I := 0 to CandidateCount - 1 do
+          AddInstanceToBatch(ABatches, CandidateMeshes[I],
+            CandidateMaterials[I], aObject, WindSource, UseVertexWind);
+        if Assigned(fBatchedInstanceObjects) and
+           (fBatchedInstanceObjects.IndexOf(aObject) < 0) then
+          fBatchedInstanceObjects.Add(aObject);
+      end;
+    end;
+  end;
+
+  for I := 0 to aObject.Count - 1 do
+    CollectInstancedSceneObject(aObject.ObjectList[I], AShadowPass, ABatches);
+end;
+
+procedure TRenderer.UploadInstanceData(
+  const AInstances: TArray<TGPUInstanceRenderData>);
+begin
+  if Length(AInstances) <= 0 then
+    Exit;
+
+  if fInstanceDataBuffer = 0 then
+    glGenBuffers(1, @fInstanceDataBuffer);
+
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, fInstanceDataBuffer);
+  glBufferData(GL_SHADER_STORAGE_BUFFER,
+    Length(AInstances) * SizeOf(TGPUInstanceRenderData), @AInstances[0],
+    GL_STREAM_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, fInstanceDataBuffer);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+end;
+
+procedure TRenderer.RenderInstancedBatch(const ABatch: TInstancedRenderBatch;
+  AShadowPass: Boolean);
+var
+  Technique: TRenderTechnique;
+  RenderState: TRenderTechniqueState;
+  IdentityNormal: TMatrix3;
+begin
+  if (ABatch.Mesh = nil) or (Length(ABatch.Instances) <= 0) then
+    Exit;
+
+  UploadInstanceData(ABatch.Instances);
+
+  if AShadowPass then
+  begin
+    if fShadowShader = nil then
+      Exit;
+
+    fShadowShader.SetUniform('modelMatrix', TMatrix4.Identity);
+    ABatch.Mesh.PrepareShader(fShadowShader);
+    if ABatch.UseVertexWind and Assigned(ABatch.FirstObject) then
+      ABatch.FirstObject.ApplyVertexWindUniforms(fShadowShader)
+    else
+      fShadowShader.SetUniform('useVertexWind', GLint(0));
+    ApplyShadowMaterial(ABatch.Mesh);
+
+    if ShadowMaterialNeedsTwoSided(ABatch.Mesh) then
+      glDisable(GL_CULL_FACE)
+    else
+    begin
+      glEnable(GL_CULL_FACE);
+      glCullFace(GL_BACK);
+    end;
+
+    fShadowShader.SetUniform('useInstanceBuffer', GLint(1));
+    ABatch.Mesh.DrawInstancedGeometryOnly(Length(ABatch.Instances));
+    fShadowShader.SetUniform('useInstanceBuffer', GLint(0));
+    Inc(fShadowDrawCount);
+    Exit;
+  end;
+
+  if (ABatch.Material = nil) or (ABatch.Material.Shader = nil) then
+    Exit;
+
+  Technique := TRenderTechnique.Acquire(ABatch.Material.Shader, rtkPBR);
+  RenderState := TRenderTechniqueState.ForMaterial(ABatch.Material,
+    ABatch.Mesh.MeshType);
+  Technique.State := RenderState;
+  Technique.BeginTechnique;
+  try
+    Technique.ApplyMaterial(ABatch.Material);
+    IdentityNormal := Matrix3(TMatrix4.Identity);
+    Technique.ApplyObject(TMatrix4.Identity, IdentityNormal);
+    ABatch.Mesh.PrepareShader(Technique.Shader);
+    Technique.Shader.SetUniform('terrainUVScale', GLfloat(1.0));
+    if ABatch.UseVertexWind and Assigned(ABatch.FirstObject) then
+      ABatch.FirstObject.ApplyVertexWindUniforms(Technique.Shader)
+    else
+      Technique.Shader.SetUniform('useVertexWind', GLint(0));
+
+    Technique.Shader.SetUniform('useInstanceBuffer', GLint(1));
+    ABatch.Mesh.DrawInstancedGeometryOnly(Length(ABatch.Instances));
+    Technique.Shader.SetUniform('useInstanceBuffer', GLint(0));
+  finally
+    Technique.EndTechnique;
+  end;
+end;
+
+procedure TRenderer.RenderInstancedSceneObjects(AShadowPass: Boolean);
+var
+  Batches: TInstancedRenderBatches;
+  I: Integer;
+begin
+  if (fSceneManager = nil) or (fSceneManager.Root = nil) then
+    Exit;
+
+  if Assigned(fBatchedInstanceObjects) then
+    fBatchedInstanceObjects.Clear;
+  SetLength(Batches, 0);
+
+  for I := 0 to fSceneManager.Count - 1 do
+    CollectInstancedSceneObject(fSceneManager.Root.ObjectList[I], AShadowPass,
+      Batches);
+
+  for I := 0 to High(Batches) do
+    RenderInstancedBatch(Batches[I], AShadowPass);
+end;
+
 procedure TRenderer.RenderSceneObject(aObject: TSceneObject);
 var
   i: Integer;
   HasObjectGeometry: Boolean;
   Mesh: TMesh;
   Meshes: TMeshList;
+  WorldBounds: TAABB;
+  WindExpansion: Single;
+  UseExpandedWindBounds: Boolean;
+  UseViewFrustum: Boolean;
 begin
   if aObject = nil then
     Exit;
   if fRenderingWaterReflection and aObject.IsGizmo then
     Exit;
+
+  if fSkipInstanceDraws and Assigned(fBatchedInstanceObjects) and
+     (fBatchedInstanceObjects.IndexOf(aObject) >= 0) then
+  begin
+    for i := 0 to aObject.Count - 1 do
+      RenderSceneObject(aObject.ObjectList[i]);
+    Exit;
+  end;
 
   HasObjectGeometry := aObject.HasGeometry;
   if HasObjectGeometry and (not IsSceneObjectGeometryVisible(aObject)) then
@@ -2989,12 +3461,24 @@ begin
         THeightFieldMesh(Mesh).LODCameraPosition := fActiveCamera.Camera.Position;
 
       Mesh.ParentModelMatrix := aObject.WorldMatrix;
+      UseViewFrustum := fFrustumCullingEnabled and fViewFrustumValid;
+      UseExpandedWindBounds := aObject.HasVertexWindAnimation and
+        aObject.CurrentVegetationLODWindEnabled;
+      if UseExpandedWindBounds then
+      begin
+        WindExpansion := aObject.VertexWindBoundsExpansion;
+        WorldBounds := Mesh.GetBoundingBox.Transform(Mesh.ModelMatrix);
+        if not WorldBoundsVisibleInFrustum(WorldBounds, fViewFrustumPlanes,
+          UseViewFrustum, WindExpansion) then
+          Continue;
+      end;
+
       fCurrentSceneObject := aObject;
       try
-        Mesh.DrawCulled(fViewFrustumPlanes,
-          fFrustumCullingEnabled and fViewFrustumValid and
-          (not (aObject.HasVertexWindAnimation and
-          aObject.CurrentVegetationLODWindEnabled)));
+        if UseExpandedWindBounds then
+          Mesh.Draw
+        else
+          Mesh.DrawCulled(fViewFrustumPlanes, UseViewFrustum);
       finally
         fCurrentSceneObject := nil;
       end;
@@ -3504,8 +3988,16 @@ begin
 
   //fShader.Use;
 
-  for i := 0 to fSceneManager.Count -1 do
-    RenderSceneObject(fSceneManager.Root.ObjectList[i]);
+  RenderInstancedSceneObjects(False);
+  fSkipInstanceDraws := True;
+  try
+    for i := 0 to fSceneManager.Count -1 do
+      RenderSceneObject(fSceneManager.Root.ObjectList[i]);
+  finally
+    fSkipInstanceDraws := False;
+    if Assigned(fBatchedInstanceObjects) then
+      fBatchedInstanceObjects.Clear;
+  end;
 
   RenderSceneBillboards;
 

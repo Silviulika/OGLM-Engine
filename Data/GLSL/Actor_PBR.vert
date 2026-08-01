@@ -18,16 +18,30 @@ layout(std430, binding = 3) readonly buffer SkinPalette
     mat4 skinMatrices[];
 };
 
+struct InstanceData
+{
+    mat4 modelMatrix;
+    mat4 normalMatrix;
+    vec4 windRootHeight;
+    vec4 windAxisUnused;
+};
+
+layout(std430, binding = 4) readonly buffer InstanceBuffer
+{
+    InstanceData instances[];
+};
+
 uniform mat4 modelMatrix;
+uniform mat3 normalMatrix;
 uniform mat4 viewProjection;
 uniform mat4 lightSpaceMatrix;
-uniform mat4 lightSpaceMatrices[MaxLights];
 uniform vec4 clipPlane;
 uniform int useClipPlane;
 uniform int heightFieldUseMorph;
 uniform float heightFieldMorphFactor;
 uniform int useSkinning;
 uniform int skinMatrixCount;
+uniform int useInstanceBuffer;
 uniform int useVertexWind;
 uniform float windTime;
 uniform vec3 windDirection;
@@ -50,7 +64,6 @@ out Vertex
     mat3 tangentBasis;
     vec3 geometricNormal;
     vec4 lightSpacePosition;
-    vec4 lightSpacePositions[MaxLights];
 } vout;
 
 void AddSkinInfluence(inout mat4 skinMatrix, inout float totalWeight,
@@ -91,15 +104,17 @@ vec3 RotateAroundAxis(vec3 value, vec3 axis, float angle)
         axis * dot(axis, value) * (1.0 - cosine);
 }
 
-void ApplyVertexWind(inout vec4 worldPosition, out vec3 rotationAxis,
+void ApplyVertexWind(inout vec4 worldPosition, vec3 instanceWindRoot,
+    vec3 instanceWindAxis, float instanceWindHeight, out vec3 rotationAxis,
     out float rotationAngle)
 {
     rotationAxis = vec3(0.0, 0.0, 1.0);
     rotationAngle = 0.0;
-    if (useVertexWind == 0 || windHeight <= 1e-5 || windStrength <= 0.0)
+    if (useVertexWind == 0 || instanceWindHeight <= 1e-5 ||
+        windStrength <= 0.0)
         return;
 
-    vec3 treeAxis = windAxis;
+    vec3 treeAxis = instanceWindAxis;
     if (dot(treeAxis, treeAxis) <= 1e-8)
         treeAxis = vec3(0.0, 1.0, 0.0);
     else
@@ -115,9 +130,9 @@ void ApplyVertexWind(inout vec4 worldPosition, out vec3 rotationAxis,
     direction = normalize(direction);
     rotationAxis = normalize(cross(treeAxis, direction));
 
-    vec3 relativePosition = worldPosition.xyz - windRoot;
+    vec3 relativePosition = worldPosition.xyz - instanceWindRoot;
     float heightRatio = clamp(dot(relativePosition, treeAxis) /
-        max(windHeight, 1e-5), 0.0, 1.0);
+        max(instanceWindHeight, 1e-5), 0.0, 1.0);
     if (heightRatio <= 0.0)
         return;
 
@@ -137,13 +152,17 @@ void ApplyVertexWind(inout vec4 worldPosition, out vec3 rotationAxis,
 
     rotationAngle = windStrength * heightProfile * gust *
         (wave * flex + flutter);
-    worldPosition.xyz = windRoot + RotateAroundAxis(relativePosition,
+    worldPosition.xyz = instanceWindRoot + RotateAroundAxis(relativePosition,
         rotationAxis, rotationAngle);
 }
 
 void main()
 {
-    int i;
+    mat4 effectiveModelMatrix = modelMatrix;
+    mat3 effectiveNormalMatrix = normalMatrix;
+    vec3 instanceWindRoot = windRoot;
+    vec3 instanceWindAxis = windAxis;
+    float instanceWindHeight = windHeight;
     vec3 windRotationAxis;
     float windRotationAngle;
     vec3 localPosition = position;
@@ -162,16 +181,25 @@ void main()
         localBitangent = mat3(skinMatrix) * localBitangent;
     }
 
-    vec4 worldPos = modelMatrix * vec4(localPosition, 1.0);
-    ApplyVertexWind(worldPos, windRotationAxis, windRotationAngle);
+    if (useInstanceBuffer != 0)
+    {
+        InstanceData instance = instances[gl_InstanceID];
+        effectiveModelMatrix = instance.modelMatrix;
+        effectiveNormalMatrix = mat3(instance.normalMatrix);
+        instanceWindRoot = instance.windRootHeight.xyz;
+        instanceWindHeight = instance.windRootHeight.w;
+        instanceWindAxis = instance.windAxisUnused.xyz;
+    }
+
+    vec4 worldPos = effectiveModelMatrix * vec4(localPosition, 1.0);
+    ApplyVertexWind(worldPos, instanceWindRoot, instanceWindAxis,
+        instanceWindHeight, windRotationAxis, windRotationAngle);
     if (useClipPlane != 0)
         // Match the terrain reflection overlap below the animated wave troughs.
         gl_ClipDistance[0] = dot(worldPos, clipPlane) + 0.55;
 
     vout.position = worldPos.xyz;
     vout.lightSpacePosition = lightSpaceMatrix * worldPos;
-    for (i = 0; i < MaxLights; ++i)
-        vout.lightSpacePositions[i] = lightSpaceMatrices[i] * worldPos;
 
     // Flip V if needed by asset pipeline
 	vout.texcoord = vec2(texcoord.x, 1.0 - texcoord.y);
@@ -179,9 +207,7 @@ void main()
 
     // Proper normal transform. Imported files can contain a TANGENT accessor
     // filled with zeroes, so keep the shader finite even for malformed data.
-    mat3 normalMatrix = transpose(inverse(mat3(modelMatrix)));
-	
-	vec3 N = normalMatrix * localNormal;
+	vec3 N = effectiveNormalMatrix * localNormal;
     if (dot(N, N) <= 1e-10)
         N = vec3(0.0, 1.0, 0.0);
     else
@@ -189,7 +215,7 @@ void main()
     if (useVertexWind != 0)
         N = RotateAroundAxis(N, windRotationAxis, windRotationAngle);
 
-	vec3 T = normalMatrix * localTangent;
+	vec3 T = effectiveNormalMatrix * localTangent;
     if (useVertexWind != 0)
         T = RotateAroundAxis(T, windRotationAxis, windRotationAngle);
 	T = T - N * dot(N, T);
@@ -201,7 +227,7 @@ void main()
     else
         T = normalize(T);
 
-    vec3 B = normalMatrix * localBitangent;
+    vec3 B = effectiveNormalMatrix * localBitangent;
     if (useVertexWind != 0)
         B = RotateAroundAxis(B, windRotationAxis, windRotationAngle);
     B = B - N * dot(N, B) - T * dot(T, B);

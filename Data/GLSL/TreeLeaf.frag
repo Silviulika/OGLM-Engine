@@ -61,7 +61,6 @@ in Vertex
     mat3 tangentBasis;
     vec3 geometricNormal;
     vec4 lightSpacePosition;
-    vec4 lightSpacePositions[MaxLights];
 } vin;
 
 out vec4 color;
@@ -85,24 +84,19 @@ float ShadowVisibility(vec4 lightSpacePosition, int shadowLayer,
         FoliageShadowMinBias);
     vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0).xy);
     float visibility = 0.0;
-    float totalWeight = 0.0;
+    vec2 offsets[4] = vec2[](
+        vec2(-0.5, -0.5), vec2(0.5, -0.5),
+        vec2(-0.5, 0.5), vec2(0.5, 0.5));
 
-    for (int y = -1; y <= 1; ++y)
+    for (int i = 0; i < 4; ++i)
     {
-        for (int x = -1; x <= 1; ++x)
-        {
-            float weight = (2.0 - float(abs(x))) *
-                (2.0 - float(abs(y)));
-            float depth = texture(shadowMap,
-                vec3(projected.xy + vec2(x, y) * texelSize,
-                float(shadowLayer))).r;
-            visibility += (projected.z - bias <= depth ? 1.0 : 0.0) *
-                weight;
-            totalWeight += weight;
-        }
+        float depth = texture(shadowMap,
+            vec3(projected.xy + offsets[i] * texelSize,
+            float(shadowLayer))).r;
+        visibility += projected.z - bias <= depth ? 1.0 : 0.0;
     }
 
-    visibility /= max(totalWeight, 0.0001);
+    visibility *= 0.25;
     return mix(1.0, visibility,
         clamp(lightShadowStrength * FoliageShadowStrengthScale, 0.0, 1.0));
 }
@@ -211,8 +205,12 @@ void main()
             }
         }
 
-        float visibility = ShadowVisibility(vin.lightSpacePositions[i],
-            shadowMapIndices[i], shadowStrengths[i], normal, lightDirection);
+        float visibility = 1.0;
+        int shadowLayer = shadowMapIndices[i];
+        if (useShadowMap != 0 && shadowLayer >= 0 &&
+            shadowLayer < shadowMapCount)
+            visibility = ShadowVisibility(vin.lightSpacePosition,
+                shadowLayer, shadowStrengths[i], normal, lightDirection);
         float diffuseAmount = abs(dot(normal, lightDirection));
         vec3 halfVector = normalize(lightDirection + viewDirection);
         float specularAmount = pow(max(dot(normal, halfVector), 0.0),

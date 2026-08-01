@@ -78,7 +78,6 @@ in Vertex
     mat3 tangentBasis;
     vec3 geometricNormal;
     vec4 lightSpacePosition;
-    vec4 lightSpacePositions[MaxLights];
 } vin;
 
 out vec4 color;
@@ -617,9 +616,10 @@ void main()
         vec3 radiance = light.diffuse * attenuation;
         float visibility = 1.0;
         int shadowLayer = shadowMapIndices[i];
-        if (shadowLayer >= 0)
+        if (useShadowMap != 0 && shadowLayer >= 0 &&
+            shadowLayer < shadowMapCount)
             visibility = ShadowVisibility(
-                vin.lightSpacePositions[i],
+                vin.lightSpacePosition,
                 shadowLayer,
                 shadowStrengths[i],
                 normalize(vin.geometricNormal),
