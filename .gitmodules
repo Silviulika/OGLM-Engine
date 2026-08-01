@@ -1,0 +1,4 @@
+[submodule "External/DWScript"]
+	path = External/DWScript
+	url = https://github.com/EricGrange/DWScript.git
+	branch = master
