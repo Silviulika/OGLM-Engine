@@ -218,6 +218,8 @@ Data\Terrain\          height-field sources
 Data\Generated\        generated runtime/editor outputs
 ```
 
+The checked-in generated assets include `Data\Generated\EngineObjects.png`.
+
 ## Notes For New Host Applications
 
 To embed the engine in another VCL app, add the OGLM project root and the
