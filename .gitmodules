@@ -6,3 +6,7 @@
 	path = External/kraft
 	url = https://github.com/BeRo1985/kraft.git
 	branch = master
+[submodule "External/FastMath"]
+	path = External/FastMath
+	url = https://github.com/neslib/FastMath.git
+	branch = master
