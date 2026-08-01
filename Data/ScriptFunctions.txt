@@ -239,9 +239,7 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
   OnCreate, OnMouseDown, OnMouseMove, OnMouseUp, OnMouseEnter, OnMouseLeave,
   OnKeyDown, OnKeyPress, OnKeyUp, OnButtonClick (alias OnClick), OnChange,
   OnWindowMove (aliases OnMove and OnMoving), OnWindowShow (alias OnShow),
-  OnWindowHide (alias OnHide), OnWindowMinimize (alias OnMinimize),
-  OnWindowMaximize (alias OnMaximize), OnWindowRestore (alias OnRestore),
-  and OnMenuClick.
+  OnWindowHide (alias OnHide), and OnMenuClick.
 - Focused text color is used while a focus-capable control is hovered or has
   keyboard focus. TGuiControl.Hovered reports the current hover state.
 - OnChange returns the current progress value in GuiEventValue(), or the
@@ -335,7 +333,7 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
   - property TitleOffset: Float read/write
   - property TitleBarHeight: Float read/write
   - property ButtonSize: Float read/write
-  - property WindowState: Integer read/write (0 = normal, 1 = minimized, 2 = maximized)
+  - property WindowState: Integer read/write
   - property ShowMinimizeButton: Boolean read/write
   - property ShowMaximizeButton: Boolean read/write
   - property ShowCloseButton: Boolean read/write
@@ -389,8 +387,6 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
   - property FillLayoutName: String read/write
   - property FillColor: Integer read/write (VCL TColor value)
   - property TrackColor: Integer read/write (VCL TColor value)
-  - FillLayoutName is source-clipped at the current value, so the skin keeps
-    its original proportions instead of being stretched as the value changes.
 
 - class TGuiShapeProgress(TGuiProgressBar)
   - property Shape: Integer read/write (0 = circle, 1 = triangle)
@@ -399,28 +395,21 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
   - property Segments: Integer read/write
 
 - class TGuiAnimatedProgress(TGuiProgressBar)
-  - HUD/loading-bar control intended for animated HP, mana, stamina, and
-    similar orbs. The base LayoutName is the empty/track skin,
-    FillLayoutName is clipped to the value, the current atlas frame is
-    clipped over the fill, and OverlayLayoutName is drawn last as a bezel.
   - property AtlasTexturePath: String read/write
   - property GridColumns: Integer read/write
   - property GridRows: Integer read/write
   - property FirstFrame: Integer read/write
   - property FrameCount: Integer read/write
-  - property CurrentFrameIndex: Integer read/write (relative to FirstFrame)
+  - property CurrentFrameIndex: Integer read/write
   - property CurrentSheetFrameIndex: Integer read
   - property GridFrameCapacity: Integer read
-  - property FrameRate: Float read/write (frames per second)
+  - property FrameRate: Float read/write
   - property Loop: Boolean read/write
   - property Playing: Boolean read/write
   - property OverlayLayoutName: String read/write
   - function LoadAtlas(Path: String): Boolean
   - procedure RestartAnimation()
   - procedure UpdateAnimation(DeltaTime: Float)
-  - Vertical bottom-up fill is the default. Set Horizontal and Reverse,
-    inherited from TGuiProgressBar, for other fill directions. FillColor
-    tints the atlas; use white for the atlas's original colors.
 
 - class TGuiSpinner(TGuiControl)
   - property Angle: Float read/write
@@ -538,6 +527,9 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
   - property HasWind: Boolean             read             - True when wind animation is enabled on this object.
   - property HasBoneWind: Boolean         read             - True when skeleton/bone wind is enabled on this object.
   - property HasVertexWind: Boolean       read             - True when shader vertex wind is enabled on this object.
+  - property VegetationLODEnabled: Boolean read/write      - Enables or disables automatic vegetation LOD selection.
+  - property VegetationLODLevelCount: Integer read/write   - Number of vegetation LOD levels, clamped to 1..8.
+  - property ActiveVegetationLODLevel: Integer read        - Last LOD level selected during rendering.
   - property AnimationCount: Integer      read             - Number of skeletal animation clips on this object.
   - property CurrentAnimationName: String read             - Name of the currently selected animation clip, or empty when none is selected.
   - property CurrentAnimationIndex: Integer read           - Index of the current animation clip, or -1 when none is selected.
@@ -619,6 +611,18 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
   - procedure EnableVertexWind()                           - Enables the default shader vertex tree wind preset.
   - procedure EnableGrassWind()                            - Enables the default shader grass wind preset.
   - procedure DisableWind()                                - Disables wind animation.
+  - procedure EnableVegetationLOD()                        - Enables automatic vegetation LOD selection using default settings when needed.
+  - procedure DisableVegetationLOD()                       - Disables automatic vegetation LOD selection.
+  - procedure ResetVegetationLODDefaults()                 - Restores default vegetation LOD settings: 3 levels at 0, 100, and 200 units.
+  - function GetVegetationLODEnabled(): Boolean            - Returns whether automatic vegetation LOD selection is enabled.
+  - procedure SetVegetationLODEnabled(Value: Boolean)      - Enables or disables automatic vegetation LOD selection.
+  - function GetVegetationLODLevelCount(): Integer         - Returns the number of vegetation LOD levels.
+  - procedure SetVegetationLODLevelCount(Value: Integer)   - Sets the LOD level count, clamped to 1..8.
+  - function GetActiveVegetationLODLevel(): Integer        - Returns the last LOD level selected during rendering.
+  - function VegetationLODStartDistance(Level: Integer): Float - Returns the camera distance where Level starts.
+  - procedure SetVegetationLODStartDistance(Level: Integer; Distance: Float) - Sets the start distance for Level; higher levels are kept in increasing distance order.
+  - function VegetationLODWindEnabled(Level: Integer): Boolean - Returns whether wind animation is enabled for Level.
+  - procedure SetVegetationLODWindEnabled(Level: Integer; Enabled: Boolean) - Enables or disables wind animation for Level.
   - function WindInteger(Name: String): Integer            - Reads integer wind parameters such as Kind/WindKind.
   - procedure SetWindInteger(Name: String; Value: Integer) - Writes integer wind parameters such as Kind/WindKind.
   - function WindFloat(Name: String): Float                - Reads float wind parameters: Strength, StrengthDegrees, Frequency, GustStrength, GustFrequency, PhaseOffset, PhaseDegrees, TrunkFlex/BaseFlex, BranchFlex/BladeFlex, LeafFlutter/BladeFlutter.
@@ -856,6 +860,12 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
 - function SceneFindObject(Name: String): TSceneObject
 - procedure SceneUpdate()
 - procedure SceneRender()
+- procedure SceneSave(FileName: String)
+- function SceneTrySave(FileName: String): Boolean
+- procedure SceneLoad(FileName: String)
+- function SceneTryLoad(FileName: String): Boolean
+- procedure EngineShutdown()
+- function EngineLastError(): String
 - function PrefabLoad(FileName: String; Parent: Integer): Integer
 - procedure PrefabDestroy(Obj: Integer)
 - function ObjectFromHandle(Handle: Integer): TSceneObject
@@ -908,6 +918,18 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
 - procedure ObjectEnableVertexWind(Obj: Integer)
 - procedure ObjectEnableGrassWind(Obj: Integer)
 - procedure ObjectDisableWind(Obj: Integer)
+- procedure ObjectEnableVegetationLOD(Obj: Integer)
+- procedure ObjectDisableVegetationLOD(Obj: Integer)
+- procedure ObjectResetVegetationLODDefaults(Obj: Integer)
+- function ObjectVegetationLODEnabled(Obj: Integer): Boolean
+- procedure ObjectSetVegetationLODEnabled(Obj: Integer; Enabled: Boolean)
+- function ObjectVegetationLODLevelCount(Obj: Integer): Integer
+- procedure ObjectSetVegetationLODLevelCount(Obj: Integer; LevelCount: Integer)
+- function ObjectActiveVegetationLODLevel(Obj: Integer): Integer
+- function ObjectVegetationLODStartDistance(Obj: Integer; Level: Integer): Float
+- procedure ObjectSetVegetationLODStartDistance(Obj: Integer; Level: Integer; Distance: Float)
+- function ObjectVegetationLODWindEnabled(Obj: Integer; Level: Integer): Boolean
+- procedure ObjectSetVegetationLODWindEnabled(Obj: Integer; Level: Integer; Enabled: Boolean)
 - function ObjectHasWind(Obj: Integer): Boolean
 - function ObjectHasBoneWind(Obj: Integer): Boolean
 - function ObjectHasVertexWind(Obj: Integer): Boolean
