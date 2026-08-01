@@ -9926,176 +9926,180 @@ begin
     8), ImGuiCond_Always);
   ImGui.SetNextWindowSize(ImVec2.New(ToolbarWidth, 48), ImGuiCond_Always);
 
-  if ImGui.Begin_('Toolbar', nil, ImGuiWindowFlags_MenuBar or
+  if ImGui.Begin_('Toolbar', nil,
     ImGuiWindowFlags_NoMove or ImGuiWindowFlags_NoResize or
     ImGuiWindowFlags_NoCollapse or ImGuiWindowFlags_NoSavedSettings) then
   begin
-    if ImGui.BeginMenuBar then
+    if ImGui.Button('Scene') then
+      ImGui.OpenPopup('ToolbarScenePopup');
+    ImGui.SameLine;
+    if ImGui.Button('Object') then
+      ImGui.OpenPopup('ToolbarObjectPopup');
+    ImGui.SameLine;
+    if ImGui.Button('Tools') then
+      ImGui.OpenPopup('ToolbarToolsPopup');
+
+    if ImGui.BeginPopup('ToolbarScenePopup') then
     begin
-      if ImGui.BeginMenu('Scene') then
+      if ImGui.MenuItem('New') then
       begin
-        if ImGui.MenuItem('New') then
-        begin
-          CreateDefaultScene;
-          LogLine('New scene created.');
-        end;
+        CreateDefaultScene;
+        LogLine('New scene created.');
+      end;
 
-        if ImGui.MenuItem('Save') then
-          OpenSceneFileBrowser(sfbSaveScene);
+      if ImGui.MenuItem('Save') then
+        OpenSceneFileBrowser(sfbSaveScene);
 
-        if ImGui.MenuItem('Load') then
-          OpenSceneFileBrowser(sfbLoadScene);
+      if ImGui.MenuItem('Load') then
+        OpenSceneFileBrowser(sfbLoadScene);
 
+      ImGui.EndPopup;
+    end;
+
+    if ImGui.BeginPopup('ToolbarObjectPopup') then
+    begin
+      if ImGui.BeginMenu('Create Object') then
+      begin
+        DrawAddObjectMenuItems;
         ImGui.EndMenu;
       end;
 
-      if ImGui.BeginMenu('Object') then
+      if ImGui.BeginMenu('Create Mesh',
+        (fSelectedObject <> nil) and (not fSelectedObject.IsInstance)) then
       begin
-        if ImGui.BeginMenu('Create Object') then
-        begin
-          DrawAddObjectMenuItems;
-          ImGui.EndMenu;
-        end;
-
-        if ImGui.BeginMenu('Create Mesh',
-          (fSelectedObject <> nil) and (not fSelectedObject.IsInstance)) then
-        begin
-          DrawAddMeshMenuItems;
-          ImGui.EndMenu;
-        end;
-
-        ImGui.Separator;
-
-        if ImGui.MenuItem('Cut', nil, False,
-          not IsProtectedSceneObject(fSelectedObject)) then
-          CutSelectedObjectToClipboard;
-
-        if ImGui.MenuItem('Copy', nil, False,
-          not IsProtectedSceneObject(fSelectedObject)) then
-          CopySelectedObjectToClipboard;
-
-        if ImGui.MenuItem('Paste as Child', nil, False,
-          fObjectClipboard <> nil) then
-          PasteObjectFromClipboard;
-
-        if ImGui.MenuItem('Create Instance', nil, False,
-          (not IsProtectedSceneObject(fSelectedObject)) and fSelectedObject.HasGeometry) then
-          CreateInstanceFromSelectedObject;
-
-        ImGui.Separator;
-
-        if ImGui.MenuItem('Save Selected as Prefab...', nil, False,
-          not IsProtectedSceneObject(fSelectedObject)) then
-          OpenPrefabFileBrowser(prefabSave);
-
-        if ImGui.MenuItem('Load Prefab...') then
-          OpenPrefabFileBrowser(prefabLoad);
-
-        ImGui.Separator;
-
-        if ImGui.MenuItem('Add Billboard', nil, False,
-          CanEditSelectedObject) then
-        begin
-          fSelectedObject.AddBillboard;
-          SelectBillboardIndex(fSelectedObject.BillboardCount - 1);
-          LogLine('Billboard created on object: ' + fSelectedObject.Name);
-          NotifyInspectorObjectEdited;
-        end;
-
-        if ImGui.MenuItem('Browse Billboard Texture...', nil, False,
-          CanEditSelectedObject) then
-          OpenBillboardTextureBrowser;
-
-        if ImGui.MenuItem('Remove Selected Billboard', nil, False,
-          HasSelectedBillboard) then
-          DeleteSelectedBillboard;
-
-        ImGui.Separator;
-
-        if ImGui.MenuItem('Add Animated Sprite', nil, False,
-          CanEditSelectedObject) then
-        begin
-          fSelectedObject.AddAnimatedSprite;
-          SelectAnimatedSpriteIndex(fSelectedObject.AnimatedSpriteCount - 1);
-          LogLine('Animated sprite created on object: ' + fSelectedObject.Name);
-          NotifyInspectorObjectEdited;
-        end;
-
-        if ImGui.MenuItem('Remove Selected Animated Sprite', nil, False,
-          HasSelectedAnimatedSprite) then
-          DeleteSelectedAnimatedSprite;
-
-        ImGui.Separator;
-
-        if ImGui.MenuItem('Delete Object', nil, False,
-          not IsProtectedSceneObject(fSelectedObject)) then
-          DeleteObjectFromImGui(fSelectedObject);
-
+        DrawAddMeshMenuItems;
         ImGui.EndMenu;
       end;
 
-      if ImGui.BeginMenu('Tools') then
+      ImGui.Separator;
+
+      if ImGui.MenuItem('Cut', nil, False,
+        not IsProtectedSceneObject(fSelectedObject)) then
+        CutSelectedObjectToClipboard;
+
+      if ImGui.MenuItem('Copy', nil, False,
+        not IsProtectedSceneObject(fSelectedObject)) then
+        CopySelectedObjectToClipboard;
+
+      if ImGui.MenuItem('Paste as Child', nil, False,
+        fObjectClipboard <> nil) then
+        PasteObjectFromClipboard;
+
+      if ImGui.MenuItem('Create Instance', nil, False,
+        (not IsProtectedSceneObject(fSelectedObject)) and fSelectedObject.HasGeometry) then
+        CreateInstanceFromSelectedObject;
+
+      ImGui.Separator;
+
+      if ImGui.MenuItem('Save Selected as Prefab...', nil, False,
+        not IsProtectedSceneObject(fSelectedObject)) then
+        OpenPrefabFileBrowser(prefabSave);
+
+      if ImGui.MenuItem('Load Prefab...') then
+        OpenPrefabFileBrowser(prefabLoad);
+
+      ImGui.Separator;
+
+      if ImGui.MenuItem('Add Billboard', nil, False,
+        CanEditSelectedObject) then
       begin
-        if ImGui.MenuItem('Material Editor', nil, fMaterialEditor.Active) then
-        begin
-          fMaterialEditor.Active := not fMaterialEditor.Active;
-          if fMaterialEditor.Active then
-          begin
-            fTextureBrowser.LastError := '';
-            fTextureBrowser.NeedsRefresh := True;
-            SyncTextureAssetSelectionToCurrentTexture;
-          end;
-        end;
-
-        if ImGui.MenuItem('Particle Editor', nil, fParticleEditorActive) then
-          OpenParticleEditor;
-
-        if Assigned(fGuiEditor) and
-          ImGui.MenuItem('GUI Layout Editor', nil, fGuiEditor.Active) then
-        begin
-          if fGuiEditor.Active then
-            fGuiEditor.Active := False
-          else
-            fGuiEditor.Open;
-        end;
-
-        if Assigned(fGuiDesigner) and
-          ImGui.MenuItem('Engine GUI Designer', nil,
-            fGuiDesigner.Active) then
-        begin
-          if fGuiDesigner.Active then
-            fGuiDesigner.Active := False
-          else
-            fGuiDesigner.Open;
-        end;
-
-        if ImGui.MenuItem('Post Effects', nil, fShowPostEffects) then
-          fShowPostEffects := not fShowPostEffects;
-
-        if ImGui.MenuItem('SkyDome', nil, fShowSkyDome) then
-          fShowSkyDome := not fShowSkyDome;
-
-        if ImGui.MenuItem('Render Texture', nil, fRenderTextureTool.Active) then
-          fRenderTextureTool.Active := not fRenderTextureTool.Active;
-
-        if ImGui.MenuItem('Physics', nil, fShowPhysics) then
-          fShowPhysics := not fShowPhysics;
-
-        if ImGui.MenuItem('Audio Test', nil, fShowAudioTest) then
-          fShowAudioTest := not fShowAudioTest;
-
-        if ImGui.MenuItem('Script Editor', nil, fShowScriptEditor) then
-          fShowScriptEditor := not fShowScriptEditor;
-
-        ImGui.Separator;
-
-        if ImGui.MenuItem('Dear ImGui Demo', nil, fShowImGuiDemo) then
-          fShowImGuiDemo := not fShowImGuiDemo;
-
-        ImGui.EndMenu;
+        fSelectedObject.AddBillboard;
+        SelectBillboardIndex(fSelectedObject.BillboardCount - 1);
+        LogLine('Billboard created on object: ' + fSelectedObject.Name);
+        NotifyInspectorObjectEdited;
       end;
 
-      ImGui.EndMenuBar;
+      if ImGui.MenuItem('Browse Billboard Texture...', nil, False,
+        CanEditSelectedObject) then
+        OpenBillboardTextureBrowser;
+
+      if ImGui.MenuItem('Remove Selected Billboard', nil, False,
+        HasSelectedBillboard) then
+        DeleteSelectedBillboard;
+
+      ImGui.Separator;
+
+      if ImGui.MenuItem('Add Animated Sprite', nil, False,
+        CanEditSelectedObject) then
+      begin
+        fSelectedObject.AddAnimatedSprite;
+        SelectAnimatedSpriteIndex(fSelectedObject.AnimatedSpriteCount - 1);
+        LogLine('Animated sprite created on object: ' + fSelectedObject.Name);
+        NotifyInspectorObjectEdited;
+      end;
+
+      if ImGui.MenuItem('Remove Selected Animated Sprite', nil, False,
+        HasSelectedAnimatedSprite) then
+        DeleteSelectedAnimatedSprite;
+
+      ImGui.Separator;
+
+      if ImGui.MenuItem('Delete Object', nil, False,
+        not IsProtectedSceneObject(fSelectedObject)) then
+        DeleteObjectFromImGui(fSelectedObject);
+
+      ImGui.EndPopup;
+    end;
+
+    if ImGui.BeginPopup('ToolbarToolsPopup') then
+    begin
+      if ImGui.MenuItem('Material Editor', nil, fMaterialEditor.Active) then
+      begin
+        fMaterialEditor.Active := not fMaterialEditor.Active;
+        if fMaterialEditor.Active then
+        begin
+          fTextureBrowser.LastError := '';
+          fTextureBrowser.NeedsRefresh := True;
+          SyncTextureAssetSelectionToCurrentTexture;
+        end;
+      end;
+
+      if ImGui.MenuItem('Particle Editor', nil, fParticleEditorActive) then
+        OpenParticleEditor;
+
+      if Assigned(fGuiEditor) and
+        ImGui.MenuItem('GUI Layout Editor', nil, fGuiEditor.Active) then
+      begin
+        if fGuiEditor.Active then
+          fGuiEditor.Active := False
+        else
+          fGuiEditor.Open;
+      end;
+
+      if Assigned(fGuiDesigner) and
+        ImGui.MenuItem('Engine GUI Designer', nil,
+          fGuiDesigner.Active) then
+      begin
+        if fGuiDesigner.Active then
+          fGuiDesigner.Active := False
+        else
+          fGuiDesigner.Open;
+      end;
+
+      if ImGui.MenuItem('Post Effects', nil, fShowPostEffects) then
+        fShowPostEffects := not fShowPostEffects;
+
+      if ImGui.MenuItem('SkyDome', nil, fShowSkyDome) then
+        fShowSkyDome := not fShowSkyDome;
+
+      if ImGui.MenuItem('Render Texture', nil, fRenderTextureTool.Active) then
+        fRenderTextureTool.Active := not fRenderTextureTool.Active;
+
+      if ImGui.MenuItem('Physics', nil, fShowPhysics) then
+        fShowPhysics := not fShowPhysics;
+
+      if ImGui.MenuItem('Audio Test', nil, fShowAudioTest) then
+        fShowAudioTest := not fShowAudioTest;
+
+      if ImGui.MenuItem('Script Editor', nil, fShowScriptEditor) then
+        fShowScriptEditor := not fShowScriptEditor;
+
+      ImGui.Separator;
+
+      if ImGui.MenuItem('Dear ImGui Demo', nil, fShowImGuiDemo) then
+        fShowImGuiDemo := not fShowImGuiDemo;
+
+      ImGui.EndPopup;
     end;
   end;
 

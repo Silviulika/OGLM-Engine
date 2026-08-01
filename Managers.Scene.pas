@@ -232,6 +232,8 @@ type
     procedure SetWireframe(ModeOn: Boolean);
     procedure SetIsInstance(const Value: Boolean);
     function GetInstanceSource: TSceneObject;
+    function EffectiveInstanceSource: TSceneObject;
+    function EffectiveWindSource: TSceneObject;
     function GetParticleSystem: TParticleSystem;
     function GetParticleSystemCount: Integer;
     function GetBillboard: TBillboard;
@@ -1262,6 +1264,52 @@ begin
     Result := nil;
 end;
 
+function TSceneObject.EffectiveInstanceSource: TSceneObject;
+var
+  Source: TSceneObject;
+  Guard: Integer;
+begin
+  Result := Self;
+  Source := Self;
+  Guard := 0;
+
+  while Assigned(Source) and Source.fIsInstance and Assigned(Source.fInstanceSource) and
+        (Source.fInstanceSource <> Source) and (Guard < 64) do
+  begin
+    if Source.fInstanceSource = Self then
+      Exit(Self);
+
+    Source := Source.fInstanceSource;
+    Inc(Guard);
+  end;
+
+  if Assigned(Source) then
+    Result := Source;
+end;
+
+function TSceneObject.EffectiveWindSource: TSceneObject;
+var
+  Source: TSceneObject;
+begin
+  Result := Self;
+
+  if fIsInstance then
+  begin
+    Source := EffectiveInstanceSource;
+    if Assigned(Source) and (Source <> Self) and Source.fWindSettings.Enabled and
+       (Source.fWindSettings.Kind <> wakNone) then
+      Exit(Source);
+  end;
+
+  if fWindSettings.Enabled and (fWindSettings.Kind <> wakNone) then
+    Exit;
+
+  Source := EffectiveInstanceSource;
+  if Assigned(Source) and (Source <> Self) and Source.fWindSettings.Enabled and
+     (Source.fWindSettings.Kind <> wakNone) then
+    Result := Source;
+end;
+
 function TSceneObject.GetParticleSystem: TParticleSystem;
 begin
   Result := GetParticleSystemItem(0);
@@ -1399,22 +1447,9 @@ end;
 function TSceneObject.EffectiveMeshList: TMeshList;
 var
   Source: TSceneObject;
-  Guard: Integer;
 begin
   Result := fMeshList;
-  Source := Self;
-  Guard := 0;
-
-  while Assigned(Source) and Source.fIsInstance and Assigned(Source.fInstanceSource) and
-        (Source.fInstanceSource <> Source) and (Guard < 64) do
-  begin
-    if Source.fInstanceSource = Self then
-      Exit(fMeshList);
-
-    Source := Source.fInstanceSource;
-    Inc(Guard);
-  end;
-
+  Source := EffectiveInstanceSource;
   if Assigned(Source) then
     Result := Source.fMeshList;
 end;
@@ -1756,18 +1791,30 @@ begin
 end;
 
 function TSceneObject.HasWindAnimation: Boolean;
+var
+  Source: TSceneObject;
 begin
-  Result := fWindSettings.Enabled and (fWindSettings.Kind <> wakNone);
+  Source := EffectiveWindSource;
+  Result := Assigned(Source) and Source.fWindSettings.Enabled and
+    (Source.fWindSettings.Kind <> wakNone);
 end;
 
 function TSceneObject.HasBoneWindAnimation: Boolean;
+var
+  Source: TSceneObject;
 begin
-  Result := fWindSettings.Enabled and (fWindSettings.Kind = wakTree);
+  Source := EffectiveWindSource;
+  Result := Assigned(Source) and Source.fWindSettings.Enabled and
+    (Source.fWindSettings.Kind = wakTree);
 end;
 
 function TSceneObject.HasVertexWindAnimation: Boolean;
+var
+  Source: TSceneObject;
 begin
-  Result := fWindSettings.Enabled and (fWindSettings.Kind = wakVertexTree);
+  Source := EffectiveWindSource;
+  Result := Assigned(Source) and Source.fWindSettings.Enabled and
+    (Source.fWindSettings.Kind = wakVertexTree);
 end;
 
 function TSceneObject.ApplyWindAnimation(DeltaTime: Single): Boolean;
@@ -1878,28 +1925,35 @@ end;
 procedure TSceneObject.ApplyVertexWindUniforms(Shader: TShader);
 var
   Root, Axis: TVector3;
+  WindSource: TSceneObject;
+  Wind: TWindActorSettings;
   Height: Single;
 begin
   if Shader = nil then
     Exit;
 
   Shader.SetUniform('useVertexWind', GLint(0));
-  if (not HasVertexWindAnimation) or
+  WindSource := EffectiveWindSource;
+  if not Assigned(WindSource) then
+    Exit;
+
+  Wind := WindSource.fWindSettings;
+  if (not Wind.Enabled) or (Wind.Kind <> wakVertexTree) or
      (not CurrentVegetationLODWindEnabled) or
      (not TryGetVertexWindFrame(Root, Axis, Height)) then
     Exit;
 
   Shader.SetUniform('useVertexWind', GLint(1));
-  Shader.SetUniform('windTime', GLfloat(fWindTime));
-  Shader.SetUniform('windDirection', fWindSettings.Direction);
-  Shader.SetUniform('windStrength', GLfloat(fWindSettings.Strength));
-  Shader.SetUniform('windFrequency', GLfloat(fWindSettings.Frequency));
-  Shader.SetUniform('windGustStrength', GLfloat(fWindSettings.GustStrength));
-  Shader.SetUniform('windGustFrequency', GLfloat(fWindSettings.GustFrequency));
-  Shader.SetUniform('windPhaseOffset', GLfloat(fWindSettings.PhaseOffset));
-  Shader.SetUniform('windTrunkFlex', GLfloat(fWindSettings.TrunkFlex));
-  Shader.SetUniform('windBranchFlex', GLfloat(fWindSettings.BranchFlex));
-  Shader.SetUniform('windLeafFlutter', GLfloat(fWindSettings.LeafFlutter));
+  Shader.SetUniform('windTime', GLfloat(WindSource.fWindTime));
+  Shader.SetUniform('windDirection', Wind.Direction);
+  Shader.SetUniform('windStrength', GLfloat(Wind.Strength));
+  Shader.SetUniform('windFrequency', GLfloat(Wind.Frequency));
+  Shader.SetUniform('windGustStrength', GLfloat(Wind.GustStrength));
+  Shader.SetUniform('windGustFrequency', GLfloat(Wind.GustFrequency));
+  Shader.SetUniform('windPhaseOffset', GLfloat(Wind.PhaseOffset));
+  Shader.SetUniform('windTrunkFlex', GLfloat(Wind.TrunkFlex));
+  Shader.SetUniform('windBranchFlex', GLfloat(Wind.BranchFlex));
+  Shader.SetUniform('windLeafFlutter', GLfloat(Wind.LeafFlutter));
   Shader.SetUniform('windRoot', Root);
   Shader.SetUniform('windAxis', Axis);
   Shader.SetUniform('windHeight', GLfloat(Height));
@@ -1938,6 +1992,8 @@ begin
 end;
 
 procedure TSceneObject.MakeInstanceOf(Source: TSceneObject);
+var
+  SourceOwner: TSceneObject;
 begin
   if not CanInstanceFrom(Source) then
     Exit;
@@ -1945,6 +2001,15 @@ begin
   fMeshList.Clear;
   fInstanceSource := Source;
   fIsInstance := True;
+  SourceOwner := EffectiveInstanceSource;
+  if Assigned(SourceOwner) and (SourceOwner <> Self) then
+  begin
+    fWindSettings := SourceOwner.fWindSettings;
+    fWindTime := 0.0;
+    fWindPoseApplied := False;
+    fVegetationLODSettings := SourceOwner.fVegetationLODSettings;
+    fVegetationLODSettings.Sanitize;
+  end;
   MarkVegetationLODDirty;
   UpdateBoundingRadiusFromMesh;
   NotifyChange;
@@ -2996,7 +3061,7 @@ procedure TSceneObject.UpdateAnimations(DeltaTime: Single);
 var
   I: Integer;
 begin
-  if HasVertexWindAnimation then
+  if fWindSettings.Enabled and (fWindSettings.Kind = wakVertexTree) then
     fWindTime := fWindTime + System.Math.Max(0.0, DeltaTime);
 
   // Instances share their source mesh list and therefore its animator. Updating
