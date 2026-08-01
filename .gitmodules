@@ -10,3 +10,7 @@
 	path = External/FastMath
 	url = https://github.com/neslib/FastMath.git
 	branch = master
+[submodule "External/GraphEx"]
+	path = External/GraphEx
+	url = https://github.com/mike-lischke/GraphicEx.git
+	branch = master
