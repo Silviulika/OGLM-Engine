@@ -54,7 +54,7 @@ Most Pascal dependencies are configured as Git submodules in `.gitmodules`.
 Clone with submodules:
 
 ```bat
-git clone --recurse-submodules <repo-url>
+git clone --recurse-submodules <https://github.com/ocornut/imgui.git>
 ```
 
 For an existing checkout, initialize or refresh them with:
