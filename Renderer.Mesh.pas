@@ -235,6 +235,14 @@ type
     fWaveStrength: Single;
     fFresnelPower: Single;
     fAlpha: Single;
+    fFoamColor: TVector4;
+    fFoamIntensity: Single;
+    fShoreFoamDistance: Single;
+    fShoreFoamFeather: Single;
+    fShoreLineSmoothness: Single;
+    fFoamNoiseScale: Single;
+    fCrestFoamThreshold: Single;
+    fCrestFoamIntensity: Single;
   protected
     procedure SaveShapeData(Stream: TStream); override;
   public
@@ -249,6 +257,14 @@ type
     property WaveStrength: Single read fWaveStrength write fWaveStrength;
     property FresnelPower: Single read fFresnelPower write fFresnelPower;
     property Alpha: Single read fAlpha write fAlpha;
+    property FoamColor: TVector4 read fFoamColor write fFoamColor;
+    property FoamIntensity: Single read fFoamIntensity write fFoamIntensity;
+    property ShoreFoamDistance: Single read fShoreFoamDistance write fShoreFoamDistance;
+    property ShoreFoamFeather: Single read fShoreFoamFeather write fShoreFoamFeather;
+    property ShoreLineSmoothness: Single read fShoreLineSmoothness write fShoreLineSmoothness;
+    property FoamNoiseScale: Single read fFoamNoiseScale write fFoamNoiseScale;
+    property CrestFoamThreshold: Single read fCrestFoamThreshold write fCrestFoamThreshold;
+    property CrestFoamIntensity: Single read fCrestFoamIntensity write fCrestFoamIntensity;
   end;
 
   THeightFieldMesh = class(TMesh)
@@ -1423,6 +1439,14 @@ begin
   fWaveStrength := 0.35;
   fFresnelPower := 5.0;
   fAlpha := 0.82;
+  fFoamColor := Vector4(0.96, 0.99, 0.94, 1.0);
+  fFoamIntensity := 1.6;
+  fShoreFoamDistance := 0.6;
+  fShoreFoamFeather := 0.55;
+  fShoreLineSmoothness := 2.0;
+  fFoamNoiseScale := 0.62;
+  fCrestFoamThreshold := 0.28;
+  fCrestFoamIntensity := 1.25;
 end;
 
 function TWaterPlaneMesh.Clone: TMesh;
@@ -1439,6 +1463,14 @@ begin
   Water.fWaveStrength := fWaveStrength;
   Water.fFresnelPower := fFresnelPower;
   Water.fAlpha := fAlpha;
+  Water.fFoamColor := fFoamColor;
+  Water.fFoamIntensity := fFoamIntensity;
+  Water.fShoreFoamDistance := fShoreFoamDistance;
+  Water.fShoreFoamFeather := fShoreFoamFeather;
+  Water.fShoreLineSmoothness := fShoreLineSmoothness;
+  Water.fFoamNoiseScale := fFoamNoiseScale;
+  Water.fCrestFoamThreshold := fCrestFoamThreshold;
+  Water.fCrestFoamIntensity := fCrestFoamIntensity;
   CopyRenderStateTo(Water);
   Result := Water;
 end;
@@ -1454,6 +1486,14 @@ begin
   Stream.WriteBuffer(fWaveStrength, SizeOf(fWaveStrength));
   Stream.WriteBuffer(fFresnelPower, SizeOf(fFresnelPower));
   Stream.WriteBuffer(fAlpha, SizeOf(fAlpha));
+  Stream.WriteBuffer(fFoamColor, SizeOf(fFoamColor));
+  Stream.WriteBuffer(fFoamIntensity, SizeOf(fFoamIntensity));
+  Stream.WriteBuffer(fShoreFoamDistance, SizeOf(fShoreFoamDistance));
+  Stream.WriteBuffer(fShoreFoamFeather, SizeOf(fShoreFoamFeather));
+  Stream.WriteBuffer(fShoreLineSmoothness, SizeOf(fShoreLineSmoothness));
+  Stream.WriteBuffer(fFoamNoiseScale, SizeOf(fFoamNoiseScale));
+  Stream.WriteBuffer(fCrestFoamThreshold, SizeOf(fCrestFoamThreshold));
+  Stream.WriteBuffer(fCrestFoamIntensity, SizeOf(fCrestFoamIntensity));
 end;
 
 { THeightFieldMesh }
@@ -3909,7 +3949,10 @@ var
     MapHeightScale, MapUVScale: Single;
     ReflectionStrength, WaveScale, WaveSpeed, WaveStrength: Single;
     FresnelPower, Alpha: Single;
-    TintColor, DeepColor: TVector4;
+    FoamIntensity, ShoreFoamDistance, ShoreFoamFeather: Single;
+    ShoreLineSmoothness: Single;
+    FoamNoiseScale, CrestFoamThreshold, CrestFoamIntensity: Single;
+    TintColor, DeepColor, FoamColor: TVector4;
     A, B, C: Integer;
     HeightCount: Integer;
     HeightValues: TArray<Single>;
@@ -3948,6 +3991,18 @@ var
           Stream.ReadBuffer(WaveStrength, SizeOf(WaveStrength));
           Stream.ReadBuffer(FresnelPower, SizeOf(FresnelPower));
           Stream.ReadBuffer(Alpha, SizeOf(Alpha));
+          if MeshListVersion >= 8 then
+          begin
+            Stream.ReadBuffer(FoamColor, SizeOf(FoamColor));
+            Stream.ReadBuffer(FoamIntensity, SizeOf(FoamIntensity));
+            Stream.ReadBuffer(ShoreFoamDistance, SizeOf(ShoreFoamDistance));
+            Stream.ReadBuffer(ShoreFoamFeather, SizeOf(ShoreFoamFeather));
+            if MeshListVersion >= 9 then
+              Stream.ReadBuffer(ShoreLineSmoothness, SizeOf(ShoreLineSmoothness));
+            Stream.ReadBuffer(FoamNoiseScale, SizeOf(FoamNoiseScale));
+            Stream.ReadBuffer(CrestFoamThreshold, SizeOf(CrestFoamThreshold));
+            Stream.ReadBuffer(CrestFoamIntensity, SizeOf(CrestFoamIntensity));
+          end;
           Result := TWaterPlaneMesh.Create(Width, Depth, A, B, SavedName,
             SavedStaticGeometry);
           TWaterPlaneMesh(Result).TintColor := TintColor;
@@ -3958,6 +4013,18 @@ var
           TWaterPlaneMesh(Result).WaveStrength := WaveStrength;
           TWaterPlaneMesh(Result).FresnelPower := FresnelPower;
           TWaterPlaneMesh(Result).Alpha := Alpha;
+          if MeshListVersion >= 8 then
+          begin
+            TWaterPlaneMesh(Result).FoamColor := FoamColor;
+            TWaterPlaneMesh(Result).FoamIntensity := FoamIntensity;
+            TWaterPlaneMesh(Result).ShoreFoamDistance := ShoreFoamDistance;
+            TWaterPlaneMesh(Result).ShoreFoamFeather := ShoreFoamFeather;
+            if MeshListVersion >= 9 then
+              TWaterPlaneMesh(Result).ShoreLineSmoothness := ShoreLineSmoothness;
+            TWaterPlaneMesh(Result).FoamNoiseScale := FoamNoiseScale;
+            TWaterPlaneMesh(Result).CrestFoamThreshold := CrestFoamThreshold;
+            TWaterPlaneMesh(Result).CrestFoamIntensity := CrestFoamIntensity;
+          end;
         end;
 
       mtHeightField:

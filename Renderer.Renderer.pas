@@ -155,9 +155,14 @@ type
     fWaterReflectionFBO: GLuint;
     fWaterReflectionTexture: GLuint;
     fWaterReflectionDepthRBO: GLuint;
+    fWaterDepthFBO: GLuint;
+    fWaterDepthTexture: GLuint;
     fWaterReflectionWidth: Integer;
     fWaterReflectionHeight: Integer;
+    fWaterDepthWidth: Integer;
+    fWaterDepthHeight: Integer;
     fWaterShader: TShader;
+    fWaterDepthShader: TShader;
     fWaterReflectionCameraObject: TSceneObject;
     fRenderingWaterReflection: Boolean;
     fSceneClipPlaneEnabled: Boolean;
@@ -265,8 +270,12 @@ type
     procedure UpdateShadowLightMatrix(aLightObject: TSceneObject);
     procedure DestroyShadowMap;
     procedure DestroyWaterReflection;
+    procedure DestroyWaterDepth;
     procedure SetupWaterReflection(AWidth, AHeight: Integer);
+    procedure SetupWaterDepth(AWidth, AHeight: Integer);
     procedure EnsureWaterReflectionResources;
+    procedure RenderWaterDepthPass;
+    procedure RenderSceneObjectWaterDepth(aObject: TSceneObject);
     procedure DestroyPostProcessResources;
     procedure SetupPostProcessResources(AWidth, AHeight: Integer);
     procedure SetupFullscreenQuad;
@@ -839,9 +848,14 @@ begin
   fWaterReflectionFBO := 0;
   fWaterReflectionTexture := 0;
   fWaterReflectionDepthRBO := 0;
+  fWaterDepthFBO := 0;
+  fWaterDepthTexture := 0;
   fWaterReflectionWidth := 0;
   fWaterReflectionHeight := 0;
+  fWaterDepthWidth := 0;
+  fWaterDepthHeight := 0;
   fWaterShader := nil;
+  fWaterDepthShader := nil;
   fWaterReflectionCameraObject := nil;
   fRenderingWaterReflection := False;
   fSceneClipPlaneEnabled := False;
@@ -1244,6 +1258,8 @@ end;
 
 procedure TRenderer.DestroyWaterReflection;
 begin
+  DestroyWaterDepth;
+
   if fWaterReflectionDepthRBO <> 0 then
   begin
     glDeleteRenderbuffers(1, @fWaterReflectionDepthRBO);
@@ -1265,11 +1281,32 @@ begin
   if fWaterShader <> nil then
     FreeAndNil(fWaterShader);
 
+  if fWaterDepthShader <> nil then
+    FreeAndNil(fWaterDepthShader);
+
   if fWaterReflectionCameraObject <> nil then
     FreeAndNil(fWaterReflectionCameraObject);
 
   fWaterReflectionWidth := 0;
   fWaterReflectionHeight := 0;
+end;
+
+procedure TRenderer.DestroyWaterDepth;
+begin
+  if fWaterDepthTexture <> 0 then
+  begin
+    glDeleteTextures(1, @fWaterDepthTexture);
+    fWaterDepthTexture := 0;
+  end;
+
+  if fWaterDepthFBO <> 0 then
+  begin
+    glDeleteFramebuffers(1, @fWaterDepthFBO);
+    fWaterDepthFBO := 0;
+  end;
+
+  fWaterDepthWidth := 0;
+  fWaterDepthHeight := 0;
 end;
 
 procedure TRenderer.LoadShadowShaderFromFile(const VertexFileName, FragmentFileName: string);
@@ -1282,11 +1319,25 @@ end;
 
 procedure TRenderer.LoadWaterShaderFromFile(const VertexFileName,
   FragmentFileName: string);
+var
+  DepthVertexFileName: string;
+  DepthFragmentFileName: string;
 begin
   if fWaterShader <> nil then
     FreeAndNil(fWaterShader);
 
+  if fWaterDepthShader <> nil then
+    FreeAndNil(fWaterDepthShader);
+
   fWaterShader := TShader.Create(VertexFileName, FragmentFileName);
+
+  DepthVertexFileName := IncludeTrailingPathDelimiter(
+    ExtractFilePath(VertexFileName)) + 'SceneDepth.vert';
+  DepthFragmentFileName := IncludeTrailingPathDelimiter(
+    ExtractFilePath(FragmentFileName)) + 'SceneDepth.frag';
+  if FileExists(DepthVertexFileName) and FileExists(DepthFragmentFileName) then
+    fWaterDepthShader := TShader.Create(DepthVertexFileName,
+      DepthFragmentFileName);
 end;
 
 procedure TRenderer.LoadPostProcessShaderFromFile(const VertexFileName,
@@ -1371,6 +1422,52 @@ begin
 
   if Status <> GL_FRAMEBUFFER_COMPLETE then
     raise Exception.CreateFmt('Water reflection framebuffer incomplete: %d',
+      [Status]);
+end;
+
+procedure TRenderer.SetupWaterDepth(AWidth, AHeight: Integer);
+var
+  Status: GLenum;
+begin
+  ActivateContext;
+
+  AWidth := System.Math.Max(64, AWidth);
+  AHeight := System.Math.Max(64, AHeight);
+
+  if (fWaterDepthFBO <> 0) and (fWaterDepthTexture <> 0) and
+     (fWaterDepthWidth = AWidth) and (fWaterDepthHeight = AHeight) then
+    Exit;
+
+  DestroyWaterDepth;
+
+  fWaterDepthWidth := AWidth;
+  fWaterDepthHeight := AHeight;
+
+  glGenFramebuffers(1, @fWaterDepthFBO);
+  glBindFramebuffer(GL_FRAMEBUFFER, fWaterDepthFBO);
+
+  glGenTextures(1, @fWaterDepthTexture);
+  glBindTexture(GL_TEXTURE_2D, fWaterDepthTexture);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, fWaterDepthWidth,
+    fWaterDepthHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nil);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
+    fWaterDepthTexture, 0);
+
+  glDrawBuffer(GL_NONE);
+  glReadBuffer(GL_NONE);
+
+  Status := glCheckFramebufferStatus(GL_FRAMEBUFFER);
+
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  if Status <> GL_FRAMEBUFFER_COMPLETE then
+    raise Exception.CreateFmt('Water depth framebuffer incomplete: %d',
       [Status]);
 end;
 
@@ -3012,11 +3109,148 @@ begin
   end;
 end;
 
+procedure TRenderer.RenderSceneObjectWaterDepth(aObject: TSceneObject);
+var
+  I: Integer;
+  Mesh: TMesh;
+  Meshes: TMeshList;
+  UseViewFrustum: Boolean;
+begin
+  if (aObject = nil) or aObject.IsGizmo then
+    Exit;
+  if fWaterDepthShader = nil then
+    Exit;
+  if aObject.HasGeometry and (not IsSceneObjectGeometryVisible(aObject)) then
+    Exit;
+
+  if Assigned(fActiveCamera) and Assigned(fActiveCamera.Camera) then
+    Meshes := aObject.EffectiveMeshListForCamera(fActiveCamera.Camera.Position)
+  else
+    Meshes := aObject.EffectiveMeshList;
+  if Assigned(Meshes) then
+  for I := 0 to Meshes.Count - 1 do
+  begin
+    Mesh := Meshes.Item[I];
+    if Mesh = nil then
+      Continue;
+    if (not Mesh.Visible) or Mesh.AlwaysOnTop then
+      Continue;
+    if Mesh is TWaterPlaneMesh then
+      Continue;
+
+    Mesh.ParentModelMatrix := aObject.WorldMatrix;
+    if (Mesh is THeightFieldMesh) and Assigned(fActiveCamera) and
+       Assigned(fActiveCamera.Camera) then
+      THeightFieldMesh(Mesh).LODCameraPosition := fActiveCamera.Camera.Position;
+
+    fCurrentSceneObject := aObject;
+    try
+      fWaterDepthShader.SetUniform('modelMatrix', Mesh.ModelMatrix);
+      Mesh.PrepareShader(fWaterDepthShader);
+      UseViewFrustum := fFrustumCullingEnabled and fViewFrustumValid;
+      Mesh.DrawGeometryOnlyCulled(fViewFrustumPlanes, UseViewFrustum);
+    finally
+      fCurrentSceneObject := nil;
+    end;
+  end;
+
+  for I := 0 to aObject.Count - 1 do
+    RenderSceneObjectWaterDepth(aObject.ObjectList[I]);
+end;
+
+procedure TRenderer.RenderWaterDepthPass;
+var
+  I: Integer;
+  OldFramebuffer: GLint;
+  OldViewport: array[0..3] of GLint;
+  OldDepthFunc: GLint;
+  OldCullFaceMode: GLint;
+  OldDepthTestEnabled: GLboolean;
+  OldBlendEnabled: GLboolean;
+  OldCullEnabled: GLboolean;
+  OldMultisampleEnabled: GLboolean;
+  OldDepthMask: GLboolean;
+  OldColorMask: array[0..3] of GLboolean;
+begin
+  if fWaterDepthShader = nil then
+    Exit;
+  if fSceneManager = nil then
+    Exit;
+  if fActiveCamera = nil then
+    Exit;
+  if fActiveCamera.Camera = nil then
+    Exit;
+  if (fViewport.Width <= 0) or (fViewport.Height <= 0) then
+    Exit;
+
+  SetupWaterDepth(fViewport.Width, fViewport.Height);
+  if (fWaterDepthFBO = 0) or (fWaterDepthTexture = 0) then
+    Exit;
+
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, @OldFramebuffer);
+  glGetIntegerv(GL_VIEWPORT, @OldViewport[0]);
+  glGetIntegerv(GL_DEPTH_FUNC, @OldDepthFunc);
+  glGetIntegerv(GL_CULL_FACE_MODE, @OldCullFaceMode);
+  OldDepthTestEnabled := glIsEnabled(GL_DEPTH_TEST);
+  OldBlendEnabled := glIsEnabled(GL_BLEND);
+  OldCullEnabled := glIsEnabled(GL_CULL_FACE);
+  OldMultisampleEnabled := glIsEnabled(GL_MULTISAMPLE);
+  glGetBooleanv(GL_DEPTH_WRITEMASK, @OldDepthMask);
+  glGetBooleanv(GL_COLOR_WRITEMASK, @OldColorMask[0]);
+
+  try
+    glBindFramebuffer(GL_FRAMEBUFFER, fWaterDepthFBO);
+    glViewport(0, 0, fWaterDepthWidth, fWaterDepthHeight);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LESS);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_MULTISAMPLE);
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    fWaterDepthShader.Use;
+    fWaterDepthShader.SetUniform('viewProjection',
+      fProjectionMatrix * fActiveCamera.Camera.ViewMatrix);
+
+    for I := 0 to fSceneManager.Count - 1 do
+      RenderSceneObjectWaterDepth(fSceneManager.Root.ObjectList[I]);
+  finally
+    glUseProgram(0);
+    glBindFramebuffer(GL_FRAMEBUFFER, OldFramebuffer);
+    glViewport(OldViewport[0], OldViewport[1], OldViewport[2],
+      OldViewport[3]);
+    glColorMask(OldColorMask[0], OldColorMask[1], OldColorMask[2],
+      OldColorMask[3]);
+    glDepthMask(OldDepthMask);
+    glDepthFunc(OldDepthFunc);
+    glCullFace(OldCullFaceMode);
+    if OldDepthTestEnabled = GL_TRUE then
+      glEnable(GL_DEPTH_TEST)
+    else
+      glDisable(GL_DEPTH_TEST);
+    if OldBlendEnabled = GL_TRUE then
+      glEnable(GL_BLEND)
+    else
+      glDisable(GL_BLEND);
+    if OldCullEnabled = GL_TRUE then
+      glEnable(GL_CULL_FACE)
+    else
+      glDisable(GL_CULL_FACE);
+    if OldMultisampleEnabled = GL_TRUE then
+      glEnable(GL_MULTISAMPLE)
+    else
+      glDisable(GL_MULTISAMPLE);
+  end;
+end;
+
 procedure TRenderer.RenderWaterMesh(AWaterMesh: TWaterPlaneMesh);
 var
   OldDepthTestEnabled, OldBlendEnabled, OldCullEnabled: GLboolean;
   OldDepthMask: GLboolean;
   OldCullFaceMode: GLint;
+  SceneDepthAvailable: Boolean;
 begin
   if AWaterMesh = nil then
     Exit;
@@ -3030,6 +3264,10 @@ begin
     Exit;
   if fActiveCamera.Camera = nil then
     Exit;
+
+  SceneDepthAvailable := (fWaterDepthShader <> nil) and
+    (fWaterDepthTexture <> 0) and
+    (fWaterDepthWidth > 0) and (fWaterDepthHeight > 0);
 
   OldDepthTestEnabled := glIsEnabled(GL_DEPTH_TEST);
   OldBlendEnabled := glIsEnabled(GL_BLEND);
@@ -3067,8 +3305,28 @@ begin
     Vector2(fWaterReflectionWidth, fWaterReflectionHeight));
   fWaterShader.SetUniform('reflectionViewport',
     Vector4(fViewport.X, fViewport.Y, fViewport.Width, fViewport.Height));
+  fWaterShader.SetUniform('useSceneDepth', GLint(Ord(SceneDepthAvailable)));
+  fWaterShader.SetUniform('nearPlane', GLfloat(fNearPlaneDistance));
+  fWaterShader.SetUniform('farPlane', GLfloat(fFarPlaneDistance));
+  fWaterShader.SetUniform('foamColor', Vector3(AWaterMesh.FoamColor.X,
+    AWaterMesh.FoamColor.Y, AWaterMesh.FoamColor.Z));
+  fWaterShader.SetUniform('foamIntensity', GLfloat(AWaterMesh.FoamIntensity));
+  fWaterShader.SetUniform('shoreFoamDistance',
+    GLfloat(AWaterMesh.ShoreFoamDistance));
+  fWaterShader.SetUniform('shoreFoamFeather',
+    GLfloat(AWaterMesh.ShoreFoamFeather));
+  fWaterShader.SetUniform('shoreLineSmoothness',
+    GLfloat(AWaterMesh.ShoreLineSmoothness));
+  fWaterShader.SetUniform('foamNoiseScale', GLfloat(AWaterMesh.FoamNoiseScale));
+  fWaterShader.SetUniform('crestFoamThreshold',
+    GLfloat(AWaterMesh.CrestFoamThreshold));
+  fWaterShader.SetUniform('crestFoamIntensity',
+    GLfloat(AWaterMesh.CrestFoamIntensity));
   fWaterShader.SetTexture('reflectionTexture', 0, GL_TEXTURE_2D,
     fWaterReflectionTexture);
+  if SceneDepthAvailable then
+    fWaterShader.SetTexture('sceneDepthTexture', 1, GL_TEXTURE_2D,
+      fWaterDepthTexture);
 
   try
     AWaterMesh.DrawGeometryOnlyCulled(fViewFrustumPlanes,
@@ -3121,6 +3379,7 @@ end;
 procedure TRenderer.RenderWaterMeshes;
 var
   I: Integer;
+  WaterMesh: TWaterPlaneMesh;
 begin
   if not fWaterReflectionEnabled then
     Exit;
@@ -3130,6 +3389,16 @@ begin
     Exit;
   if fSceneManager = nil then
     Exit;
+
+  WaterMesh := nil;
+  for I := 0 to fSceneManager.Count - 1 do
+    if FindFirstWaterMesh(fSceneManager.Root.ObjectList[I], WaterMesh) then
+      Break;
+
+  if WaterMesh = nil then
+    Exit;
+
+  RenderWaterDepthPass;
 
   for I := 0 to fSceneManager.Count - 1 do
     RenderSceneObjectWater(fSceneManager.Root.ObjectList[I]);

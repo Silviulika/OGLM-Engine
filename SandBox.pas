@@ -122,6 +122,14 @@ type
     WaterWaveStrength: Single;
     WaterFresnelPower: Single;
     WaterAlpha: Single;
+    WaterFoamColor: array[0..3] of Single;
+    WaterFoamIntensity: Single;
+    WaterShoreFoamDistance: Single;
+    WaterShoreFoamFeather: Single;
+    WaterShoreLineSmoothness: Single;
+    WaterFoamNoiseScale: Single;
+    WaterCrestFoamThreshold: Single;
+    WaterCrestFoamIntensity: Single;
     Position: array[0..2] of Single;
     RotationDeg: array[0..2] of Single;
     Scale: array[0..2] of Single;
@@ -12516,6 +12524,68 @@ begin
       TWaterPlaneMesh(Mesh).Alpha := F;
       NotifyInspectorMeshEdited(Mesh, False);
     end;
+
+    ImGui.Separator;
+    ImGui.Text('Foam');
+
+    C[0] := TWaterPlaneMesh(Mesh).FoamColor.X;
+    C[1] := TWaterPlaneMesh(Mesh).FoamColor.Y;
+    C[2] := TWaterPlaneMesh(Mesh).FoamColor.Z;
+    C[3] := TWaterPlaneMesh(Mesh).FoamColor.W;
+    if ImGui.ColorEdit4('Foam color', @C[0]) then
+    begin
+      TWaterPlaneMesh(Mesh).FoamColor := Vector4(C[0], C[1], C[2], C[3]);
+      NotifyInspectorMeshEdited(Mesh, False);
+    end;
+
+    F := TWaterPlaneMesh(Mesh).FoamIntensity;
+    if InspectorInputFloat('Foam intensity', @F, 0.01, 0, 5, '%.3f') then
+    begin
+      TWaterPlaneMesh(Mesh).FoamIntensity := F;
+      NotifyInspectorMeshEdited(Mesh, False);
+    end;
+
+    F := TWaterPlaneMesh(Mesh).ShoreFoamDistance;
+    if InspectorInputFloat('Shore foam distance', @F, 0.01, 0.001, 100000, '%.3f') then
+    begin
+      TWaterPlaneMesh(Mesh).ShoreFoamDistance := F;
+      NotifyInspectorMeshEdited(Mesh, False);
+    end;
+
+    F := TWaterPlaneMesh(Mesh).ShoreFoamFeather;
+    if InspectorInputFloat('Shore foam feather', @F, 0.01, 0.001, 5, '%.3f') then
+    begin
+      TWaterPlaneMesh(Mesh).ShoreFoamFeather := F;
+      NotifyInspectorMeshEdited(Mesh, False);
+    end;
+
+    F := TWaterPlaneMesh(Mesh).ShoreLineSmoothness;
+    if InspectorInputFloat('Shore line smoothness', @F, 0.05, 0, 12, '%.3f') then
+    begin
+      TWaterPlaneMesh(Mesh).ShoreLineSmoothness := F;
+      NotifyInspectorMeshEdited(Mesh, False);
+    end;
+
+    F := TWaterPlaneMesh(Mesh).FoamNoiseScale;
+    if InspectorInputFloat('Foam noise scale', @F, 0.01, 0.001, 100000, '%.3f') then
+    begin
+      TWaterPlaneMesh(Mesh).FoamNoiseScale := F;
+      NotifyInspectorMeshEdited(Mesh, False);
+    end;
+
+    F := TWaterPlaneMesh(Mesh).CrestFoamThreshold;
+    if InspectorInputFloat('Crest foam threshold', @F, 0.01, 0, 2, '%.3f') then
+    begin
+      TWaterPlaneMesh(Mesh).CrestFoamThreshold := F;
+      NotifyInspectorMeshEdited(Mesh, False);
+    end;
+
+    F := TWaterPlaneMesh(Mesh).CrestFoamIntensity;
+    if InspectorInputFloat('Crest foam intensity', @F, 0.01, 0, 5, '%.3f') then
+    begin
+      TWaterPlaneMesh(Mesh).CrestFoamIntensity := F;
+      NotifyInspectorMeshEdited(Mesh, False);
+    end;
   end
   else if Mesh is TPlaneMesh then
   begin
@@ -18941,6 +19011,17 @@ begin
   fMeshEditor.WaterWaveStrength := 0.35;
   fMeshEditor.WaterFresnelPower := 5.0;
   fMeshEditor.WaterAlpha := 0.82;
+  fMeshEditor.WaterFoamColor[0] := 0.96;
+  fMeshEditor.WaterFoamColor[1] := 0.99;
+  fMeshEditor.WaterFoamColor[2] := 0.94;
+  fMeshEditor.WaterFoamColor[3] := 1.0;
+  fMeshEditor.WaterFoamIntensity := 1.6;
+  fMeshEditor.WaterShoreFoamDistance := 0.6;
+  fMeshEditor.WaterShoreFoamFeather := 0.55;
+  fMeshEditor.WaterShoreLineSmoothness := 2.0;
+  fMeshEditor.WaterFoamNoiseScale := 0.62;
+  fMeshEditor.WaterCrestFoamThreshold := 0.28;
+  fMeshEditor.WaterCrestFoamIntensity := 1.25;
 
   case AKind of
     pkPlane:
@@ -19003,6 +19084,17 @@ begin
     fMeshEditor.WaterWaveStrength := TWaterPlaneMesh(Mesh).WaveStrength;
     fMeshEditor.WaterFresnelPower := TWaterPlaneMesh(Mesh).FresnelPower;
     fMeshEditor.WaterAlpha := TWaterPlaneMesh(Mesh).Alpha;
+    fMeshEditor.WaterFoamColor[0] := TWaterPlaneMesh(Mesh).FoamColor.X;
+    fMeshEditor.WaterFoamColor[1] := TWaterPlaneMesh(Mesh).FoamColor.Y;
+    fMeshEditor.WaterFoamColor[2] := TWaterPlaneMesh(Mesh).FoamColor.Z;
+    fMeshEditor.WaterFoamColor[3] := TWaterPlaneMesh(Mesh).FoamColor.W;
+    fMeshEditor.WaterFoamIntensity := TWaterPlaneMesh(Mesh).FoamIntensity;
+    fMeshEditor.WaterShoreFoamDistance := TWaterPlaneMesh(Mesh).ShoreFoamDistance;
+    fMeshEditor.WaterShoreFoamFeather := TWaterPlaneMesh(Mesh).ShoreFoamFeather;
+    fMeshEditor.WaterShoreLineSmoothness := TWaterPlaneMesh(Mesh).ShoreLineSmoothness;
+    fMeshEditor.WaterFoamNoiseScale := TWaterPlaneMesh(Mesh).FoamNoiseScale;
+    fMeshEditor.WaterCrestFoamThreshold := TWaterPlaneMesh(Mesh).CrestFoamThreshold;
+    fMeshEditor.WaterCrestFoamIntensity := TWaterPlaneMesh(Mesh).CrestFoamIntensity;
   end
   else if Mesh is TPlaneMesh then
   begin
@@ -19132,6 +19224,16 @@ function TSandBoxForm.CreatePrimitiveMeshFromEditor(const MeshName: string): TMe
     Water.WaveStrength := fMeshEditor.WaterWaveStrength;
     Water.FresnelPower := fMeshEditor.WaterFresnelPower;
     Water.Alpha := fMeshEditor.WaterAlpha;
+    Water.FoamColor := Vector4(fMeshEditor.WaterFoamColor[0],
+      fMeshEditor.WaterFoamColor[1], fMeshEditor.WaterFoamColor[2],
+      fMeshEditor.WaterFoamColor[3]);
+    Water.FoamIntensity := fMeshEditor.WaterFoamIntensity;
+    Water.ShoreFoamDistance := fMeshEditor.WaterShoreFoamDistance;
+    Water.ShoreFoamFeather := fMeshEditor.WaterShoreFoamFeather;
+    Water.ShoreLineSmoothness := fMeshEditor.WaterShoreLineSmoothness;
+    Water.FoamNoiseScale := fMeshEditor.WaterFoamNoiseScale;
+    Water.CrestFoamThreshold := fMeshEditor.WaterCrestFoamThreshold;
+    Water.CrestFoamIntensity := fMeshEditor.WaterCrestFoamIntensity;
   end;
 
 begin
@@ -20602,6 +20704,24 @@ begin
             @fMeshEditor.WaterFresnelPower, 0.01, 0.001, 100000, '%.3f') or Changed;
           Changed := ImGui.DragFloat('Alpha', @fMeshEditor.WaterAlpha, 0.01,
             0, 1, '%.3f') or Changed;
+          ImGui.Separator;
+          ImGui.Text('Foam');
+          Changed := ImGui.ColorEdit4('Foam Color', @fMeshEditor.WaterFoamColor[0],
+            ImGuiColorEditFlags_None) or Changed;
+          Changed := ImGui.DragFloat('Foam Intensity',
+            @fMeshEditor.WaterFoamIntensity, 0.01, 0, 5, '%.3f') or Changed;
+          Changed := ImGui.DragFloat('Shore Foam Distance',
+            @fMeshEditor.WaterShoreFoamDistance, 0.01, 0.001, 100000, '%.3f') or Changed;
+          Changed := ImGui.DragFloat('Shore Foam Feather',
+            @fMeshEditor.WaterShoreFoamFeather, 0.01, 0.001, 5, '%.3f') or Changed;
+          Changed := ImGui.DragFloat('Shore Line Smoothness',
+            @fMeshEditor.WaterShoreLineSmoothness, 0.05, 0, 12, '%.3f') or Changed;
+          Changed := ImGui.DragFloat('Foam Noise Scale',
+            @fMeshEditor.WaterFoamNoiseScale, 0.01, 0.001, 100000, '%.3f') or Changed;
+          Changed := ImGui.DragFloat('Crest Foam Threshold',
+            @fMeshEditor.WaterCrestFoamThreshold, 0.01, 0, 2, '%.3f') or Changed;
+          Changed := ImGui.DragFloat('Crest Foam Intensity',
+            @fMeshEditor.WaterCrestFoamIntensity, 0.01, 0, 5, '%.3f') or Changed;
         end;
 
       pkSphere:

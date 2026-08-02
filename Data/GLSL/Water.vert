@@ -18,6 +18,7 @@ out Vertex
     vec3 position;
     vec3 normal;
     vec2 texcoord;
+    float waveHeight;
     vec4 projectedPosition;
 } vout;
 
@@ -114,6 +115,7 @@ void main()
     vout.position = worldPosition.xyz;
     vout.normal = waveNormal;
     vout.texcoord = texcoord;
+    vout.waveHeight = waves.height;
     vout.projectedPosition = viewProjection * worldPosition;
 
     gl_Position = vout.projectedPosition;

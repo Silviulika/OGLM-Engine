@@ -222,6 +222,14 @@ type
     WaveStrength: Single;
     FresnelPower: Single;
     Alpha: Single;
+    FoamColor: TVector4;
+    FoamIntensity: Single;
+    ShoreFoamDistance: Single;
+    ShoreFoamFeather: Single;
+    ShoreLineSmoothness: Single;
+    FoamNoiseScale: Single;
+    CrestFoamThreshold: Single;
+    CrestFoamIntensity: Single;
     Position: TVector3;
     Rotation: TVector3;
     Scale:    TVector3;
