@@ -25,14 +25,19 @@ type
     EBO: GLuint;
     MorphVBO: GLuint;
     IndexCount: Integer;
+    IndexOffset: Integer;
     Step: Integer;
     SkirtEBOs: array[0..3] of GLuint;
     SkirtIndexCounts: array[0..3] of Integer;
+    SkirtIndexOffsets: array[0..3] of Integer;
+    MorphOffset: Integer;
   end;
 
   THeightFieldTile = record
     VAO: GLuint;
     VBO: GLuint;
+    VertexOffset: Integer;
+    VertexCount: Integer;
     LODs: array[0..HEIGHTFIELD_MAX_LOD_LEVELS - 1] of THeightFieldTileLOD;
     LODCount: Integer;
     CurrentLOD: Integer;
@@ -261,11 +266,16 @@ type
     fTileColumns: Integer;
     fTileRows: Integer;
     fTiles: TArray<THeightFieldTile>;
+    fTilesVAO: GLuint;
+    fTilesVBO: GLuint;
+    fTilesEBO: GLuint;
+    fTilesMorphVBO: GLuint;
     function GetHeights: TArray<Single>;
     procedure AssignHeights(const Values: TArray<Single>; HeightMapWidth,
       HeightMapDepth: Integer; Rebuild: Boolean);
     procedure ClearTiles;
     procedure BuildTiles;
+    procedure BindTileVertexAttributes(const Tile: THeightFieldTile);
     function SelectTileLOD(var Tile: THeightFieldTile): Integer;
     procedure SetTileSize(const Value: Integer);
     procedure SetLODEnabled(const Value: Boolean);
@@ -1463,6 +1473,10 @@ begin
   fLODDistance := System.Math.Max(8.0, System.Math.Max(Abs(fWidth), Abs(fDepth)) * 0.35);
   //fLODDistance := System.Math.Max(12.0, System.Math.Max(Abs(fWidth), Abs(fDepth)) * 0.50);
   fLODCameraPosition := Vector3(0, 0, 0);
+  fTilesVAO := 0;
+  fTilesVBO := 0;
+  fTilesEBO := 0;
+  fTilesMorphVBO := 0;
   AssignHeights(Heights, HeightMapWidth, HeightMapDepth, False);
   RebuildGeometry;
 end;
@@ -1659,6 +1673,27 @@ begin
     end;
   end;
 
+  if fTilesMorphVBO <> 0 then
+  begin
+    glDeleteBuffers(1, @fTilesMorphVBO);
+    fTilesMorphVBO := 0;
+  end;
+  if fTilesEBO <> 0 then
+  begin
+    glDeleteBuffers(1, @fTilesEBO);
+    fTilesEBO := 0;
+  end;
+  if fTilesVBO <> 0 then
+  begin
+    glDeleteBuffers(1, @fTilesVBO);
+    fTilesVBO := 0;
+  end;
+  if fTilesVAO <> 0 then
+  begin
+    glDeleteVertexArrays(1, @fTilesVAO);
+    fTilesVAO := 0;
+  end;
+
   SetLength(fTiles, 0);
   fTileColumns := 0;
   fTileRows := 0;
@@ -1683,12 +1718,109 @@ var
   Vertices: TArray<TVertex>;
   Indices: TArray<GLuint>;
   MorphPositions: TArray<TVector3>;
+  PackedVertices: TArray<TVertex>;
+  PackedIndices: TArray<GLuint>;
+  PackedMorphPositions: TArray<TVector3>;
   Usage: GLenum;
 
   procedure InitBounds(var Bounds: TAABB);
   begin
     Bounds.Min := Vector3(MaxSingle, MaxSingle, MaxSingle);
     Bounds.Max := Vector3(-MaxSingle, -MaxSingle, -MaxSingle);
+  end;
+
+  function AppendVertices(const Source: TArray<TVertex>): Integer;
+  var
+    OldLength: Integer;
+    Count: Integer;
+  begin
+    Result := Length(PackedVertices);
+    Count := Length(Source);
+    if Count <= 0 then
+      Exit;
+
+    OldLength := Result;
+    SetLength(PackedVertices, OldLength + Count);
+    Move(Source[0], PackedVertices[OldLength], Count * SizeOf(TVertex));
+  end;
+
+  function AppendIndices(const Source: TArray<GLuint>): Integer;
+  var
+    OldLength: Integer;
+    Count: Integer;
+  begin
+    Result := Length(PackedIndices);
+    Count := Length(Source);
+    if Count <= 0 then
+      Exit;
+
+    OldLength := Result;
+    SetLength(PackedIndices, OldLength + Count);
+    Move(Source[0], PackedIndices[OldLength], Count * SizeOf(GLuint));
+  end;
+
+  function AppendMorphPositions(const Source: TArray<TVector3>): Integer;
+  var
+    OldLength: Integer;
+    Count: Integer;
+  begin
+    Result := Length(PackedMorphPositions);
+    Count := Length(Source);
+    if Count <= 0 then
+      Exit;
+
+    OldLength := Result;
+    SetLength(PackedMorphPositions, OldLength + Count);
+    Move(Source[0], PackedMorphPositions[OldLength],
+      Count * SizeOf(TVector3));
+  end;
+
+  procedure UploadPackedTileBuffers;
+  begin
+    if (Length(PackedVertices) = 0) or (Length(PackedIndices) = 0) then
+      Exit;
+
+    glGenVertexArrays(1, @fTilesVAO);
+    glBindVertexArray(fTilesVAO);
+
+    glGenBuffers(1, @fTilesVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, fTilesVBO);
+    glBufferData(GL_ARRAY_BUFFER, Length(PackedVertices) * SizeOf(TVertex),
+      @PackedVertices[0], Usage);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex),
+      Pointer(0));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex),
+      Pointer(SizeOf(TVector3)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex),
+      Pointer(SizeOf(TVector3) * 2));
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex),
+      Pointer(SizeOf(TVector3) * 3));
+    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, SizeOf(TVertex),
+      Pointer(SizeOf(TVector3) * 4));
+
+    glGenBuffers(1, @fTilesEBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, fTilesEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+      Length(PackedIndices) * SizeOf(GLuint), @PackedIndices[0], Usage);
+
+    if Length(PackedMorphPositions) > 0 then
+    begin
+      glGenBuffers(1, @fTilesMorphVBO);
+      glBindBuffer(GL_ARRAY_BUFFER, fTilesMorphVBO);
+      glBufferData(GL_ARRAY_BUFFER,
+        Length(PackedMorphPositions) * SizeOf(TVector3),
+        @PackedMorphPositions[0], Usage);
+    end;
+
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
   end;
 
   procedure AddTriangle(var Target: TArray<GLuint>; var Offset: Integer;
@@ -1973,24 +2105,8 @@ begin
       for LocalZ := 0 to LocalDepth - 1 do
         AddLoweredSkirtVertex(LocalZ * LocalWidth + (LocalWidth - 1));
 
-      glGenVertexArrays(1, @fTiles[TileIndex].VAO);
-      glBindVertexArray(fTiles[TileIndex].VAO);
-
-      glGenBuffers(1, @fTiles[TileIndex].VBO);
-      glBindBuffer(GL_ARRAY_BUFFER, fTiles[TileIndex].VBO);
-      glBufferData(GL_ARRAY_BUFFER, Length(Vertices) * SizeOf(TVertex),
-        Vertices, Usage);
-
-      glEnableVertexAttribArray(0);
-      glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex), Pointer(0));
-      glEnableVertexAttribArray(1);
-      glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex), Pointer(SizeOf(TVector3)));
-      glEnableVertexAttribArray(2);
-      glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex), Pointer(SizeOf(TVector3) * 2));
-      glEnableVertexAttribArray(3);
-      glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex), Pointer(SizeOf(TVector3) * 3));
-      glEnableVertexAttribArray(4);
-      glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, SizeOf(TVertex), Pointer(SizeOf(TVector3) * 4));
+      fTiles[TileIndex].VertexOffset := AppendVertices(Vertices);
+      fTiles[TileIndex].VertexCount := Length(Vertices);
 
       for LODIndex := 0 to fLODCount - 1 do
       begin
@@ -2001,16 +2117,12 @@ begin
 
         fTiles[TileIndex].LODs[LODIndex].Step := LODStep;
         fTiles[TileIndex].LODs[LODIndex].IndexCount := Length(Indices);
-        glGenBuffers(1, @fTiles[TileIndex].LODs[LODIndex].EBO);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, fTiles[TileIndex].LODs[LODIndex].EBO);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, Length(Indices) * SizeOf(GLuint),
-          Indices, Usage);
+        fTiles[TileIndex].LODs[LODIndex].IndexOffset :=
+          AppendIndices(Indices);
 
         MorphPositions := BuildMorphPositions(LODStep);
-        glGenBuffers(1, @fTiles[TileIndex].LODs[LODIndex].MorphVBO);
-        glBindBuffer(GL_ARRAY_BUFFER, fTiles[TileIndex].LODs[LODIndex].MorphVBO);
-        glBufferData(GL_ARRAY_BUFFER, Length(MorphPositions) * SizeOf(TVector3),
-          MorphPositions, Usage);
+        fTiles[TileIndex].LODs[LODIndex].MorphOffset :=
+          AppendMorphPositions(MorphPositions);
 
         for EdgeIndex := 0 to 3 do
         begin
@@ -2020,22 +2132,43 @@ begin
 
           fTiles[TileIndex].LODs[LODIndex].SkirtIndexCounts[EdgeIndex] :=
             Length(Indices);
-          glGenBuffers(1,
-            @fTiles[TileIndex].LODs[LODIndex].SkirtEBOs[EdgeIndex]);
-          glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-            fTiles[TileIndex].LODs[LODIndex].SkirtEBOs[EdgeIndex]);
-          glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-            Length(Indices) * SizeOf(GLuint), Indices, Usage);
+          fTiles[TileIndex].LODs[LODIndex].SkirtIndexOffsets[EdgeIndex] :=
+            AppendIndices(Indices);
         end;
 
         fTiles[TileIndex].LODCount := LODIndex + 1;
       end;
-
-      glBindVertexArray(0);
-      glBindBuffer(GL_ARRAY_BUFFER, 0);
-      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     end;
   end;
+
+  UploadPackedTileBuffers;
+end;
+
+procedure THeightFieldMesh.BindTileVertexAttributes(
+  const Tile: THeightFieldTile);
+var
+  BaseOffset: NativeUInt;
+begin
+  if fTilesVBO = 0 then
+    Exit;
+
+  BaseOffset := NativeUInt(Tile.VertexOffset) * SizeOf(TVertex);
+  glBindBuffer(GL_ARRAY_BUFFER, fTilesVBO);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex),
+    Pointer(BaseOffset));
+  glEnableVertexAttribArray(1);
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex),
+    Pointer(BaseOffset + SizeOf(TVector3)));
+  glEnableVertexAttribArray(2);
+  glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex),
+    Pointer(BaseOffset + SizeOf(TVector3) * 2));
+  glEnableVertexAttribArray(3);
+  glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex),
+    Pointer(BaseOffset + SizeOf(TVector3) * 3));
+  glEnableVertexAttribArray(4);
+  glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, SizeOf(TVertex),
+    Pointer(BaseOffset + SizeOf(TVector3) * 4));
 end;
 
 function THeightFieldMesh.SelectTileLOD(var Tile: THeightFieldTile): Integer;
@@ -2317,35 +2450,45 @@ var
     if (NeighborLOD < 0) or (CurrentLOD <= NeighborLOD) then
       Exit;
 
-    if (Tile.LODs[CurrentLOD].SkirtEBOs[Edge] = 0) or
+    if (fTilesEBO = 0) or
        (Tile.LODs[CurrentLOD].SkirtIndexCounts[Edge] <= 0) then
       Exit;
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Tile.LODs[CurrentLOD].SkirtEBOs[Edge]);
     glDrawElements(GL_TRIANGLES, Tile.LODs[CurrentLOD].SkirtIndexCounts[Edge],
-      GL_UNSIGNED_INT, nil);
+      GL_UNSIGNED_INT, Pointer(NativeUInt(
+        Tile.LODs[CurrentLOD].SkirtIndexOffsets[Edge]) * SizeOf(GLuint)));
   end;
 
   procedure BindLODMorphAttributes(const Tile: THeightFieldTile;
     CurrentLOD: Integer; Morph: Single);
   begin
     UseMorph := (CurrentLOD >= 0) and (CurrentLOD < Tile.LODCount - 1) and
-      (Tile.LODs[CurrentLOD].MorphVBO <> 0) and (Morph > 0.0001);
+      (fTilesMorphVBO <> 0) and (Morph > 0.0001);
 
     Technique.Shader.SetUniform('heightFieldUseMorph', GLint(Ord(UseMorph)));
     Technique.Shader.SetUniform('heightFieldMorphFactor', GLfloat(Morph));
 
     if UseMorph then
     begin
-      glBindBuffer(GL_ARRAY_BUFFER, Tile.LODs[CurrentLOD].MorphVBO);
+      glBindBuffer(GL_ARRAY_BUFFER, fTilesMorphVBO);
       glEnableVertexAttribArray(5);
-      glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, SizeOf(TVector3), Pointer(0));
-    end;
+      glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, SizeOf(TVector3),
+        Pointer(NativeUInt(Tile.LODs[CurrentLOD].MorphOffset) *
+          SizeOf(TVector3)));
+    end
+    else
+      glDisableVertexAttribArray(5);
   end;
 begin
   if not fVisible then Exit;
 
   if Length(fTiles) = 0 then
+  begin
+    inherited Draw;
+    Exit;
+  end;
+
+  if (fTilesVAO = 0) or (fTilesEBO = 0) then
   begin
     inherited Draw;
     Exit;
@@ -2415,22 +2558,26 @@ begin
         LODIndex := TileLODs[I];
 
         if (LODIndex < 0) or
-           (fTiles[I].VAO = 0) or
+           (fTilesVAO = 0) or
+           (fTilesEBO = 0) or
+           (fTiles[I].VertexCount <= 0) or
            (fTiles[I].LODCount <= 0) or
-           (fTiles[I].LODs[LODIndex].EBO = 0) or
            (fTiles[I].LODs[LODIndex].IndexCount <= 0) then
           Continue;
 
-        glBindVertexArray(fTiles[I].VAO);
+        glBindVertexArray(fTilesVAO);
+        BindTileVertexAttributes(fTiles[I]);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, fTilesEBO);
         MorphFactor := fTiles[I].CurrentMorph;
         BindLODMorphAttributes(fTiles[I], LODIndex, MorphFactor);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, fTiles[I].LODs[LODIndex].EBO);
         glDrawElements(GL_TRIANGLES, fTiles[I].LODs[LODIndex].IndexCount,
-          GL_UNSIGNED_INT, nil);
+          GL_UNSIGNED_INT, Pointer(NativeUInt(
+            fTiles[I].LODs[LODIndex].IndexOffset) * SizeOf(GLuint)));
 
         for EdgeIndex := 0 to 3 do
           DrawEdgeSkirtIfNeeded(fTiles[I], LODIndex, EdgeIndex);
       end;
+      glDisableVertexAttribArray(5);
       glBindVertexArray(0);
       Technique.Shader.SetUniform('heightFieldUseMorph', GLint(0));
       Technique.Shader.SetUniform('heightFieldMorphFactor', GLfloat(0.0));
@@ -2505,19 +2652,25 @@ var
     if (NeighborLOD < 0) or (CurrentLOD <= NeighborLOD) then
       Exit;
 
-    if (Tile.LODs[CurrentLOD].SkirtEBOs[Edge] = 0) or
+    if (fTilesEBO = 0) or
        (Tile.LODs[CurrentLOD].SkirtIndexCounts[Edge] <= 0) then
       Exit;
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Tile.LODs[CurrentLOD].SkirtEBOs[Edge]);
     glDrawElements(GL_TRIANGLES, Tile.LODs[CurrentLOD].SkirtIndexCounts[Edge],
-      GL_UNSIGNED_INT, nil);
+      GL_UNSIGNED_INT, Pointer(NativeUInt(
+        Tile.LODs[CurrentLOD].SkirtIndexOffsets[Edge]) * SizeOf(GLuint)));
   end;
 begin
   if not fVisible then
     Exit;
 
   if Length(fTiles) = 0 then
+  begin
+    inherited DrawGeometryOnlyCulled(AFrustumPlanes, AUseFrustum);
+    Exit;
+  end;
+
+  if (fTilesVAO = 0) or (fTilesEBO = 0) then
   begin
     inherited DrawGeometryOnlyCulled(AFrustumPlanes, AUseFrustum);
     Exit;
@@ -2543,16 +2696,20 @@ begin
 
       LODIndex := TileLODs[I];
       if (LODIndex < 0) or
-         (fTiles[I].VAO = 0) or
+         (fTilesVAO = 0) or
+         (fTilesEBO = 0) or
+         (fTiles[I].VertexCount <= 0) or
          (fTiles[I].LODCount <= 0) or
-         (fTiles[I].LODs[LODIndex].EBO = 0) or
          (fTiles[I].LODs[LODIndex].IndexCount <= 0) then
         Continue;
 
-      glBindVertexArray(fTiles[I].VAO);
-      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, fTiles[I].LODs[LODIndex].EBO);
+      glBindVertexArray(fTilesVAO);
+      BindTileVertexAttributes(fTiles[I]);
+      glDisableVertexAttribArray(5);
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, fTilesEBO);
       glDrawElements(GL_TRIANGLES, fTiles[I].LODs[LODIndex].IndexCount,
-        GL_UNSIGNED_INT, nil);
+        GL_UNSIGNED_INT, Pointer(NativeUInt(
+          fTiles[I].LODs[LODIndex].IndexOffset) * SizeOf(GLuint)));
 
       for EdgeIndex := 0 to 3 do
         DrawEdgeSkirtIfNeeded(fTiles[I], LODIndex, EdgeIndex);
@@ -4158,6 +4315,7 @@ begin
   begin
     AShader.SetUniform('useSkinning', GLint(0));
     AShader.SetUniform('useInstanceBuffer', GLint(0));
+    AShader.SetUniform('instanceBaseOffset', GLint(0));
   end;
 end;
 

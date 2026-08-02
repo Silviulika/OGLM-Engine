@@ -69,6 +69,9 @@ type
     WindSource: TSceneObject;
     UseVertexWind: Boolean;
     Instances: TArray<TGPUInstanceRenderData>;
+    PackedFirstIndex: Integer;
+    PackedIndexCount: Integer;
+    PackedInstanceOffset: Integer;
   end;
 
   TInstancedRenderBatches = TArray<TInstancedRenderBatch>;
@@ -140,6 +143,11 @@ type
     fShadowFitPadding: Single;
     fShadowDrawCount: Integer;
     fInstanceDataBuffer: GLuint;
+    fPackedInstanceVAO: GLuint;
+    fPackedInstanceVBO: GLuint;
+    fPackedInstanceEBO: GLuint;
+    fPackedInstanceVertexBufferSize: NativeInt;
+    fPackedInstanceIndexBufferSize: NativeInt;
     fSkipInstanceDraws: Boolean;
     fBatchedInstanceObjects: TList<TSceneObject>;
 
@@ -224,8 +232,15 @@ type
     procedure CollectInstancedSceneObject(aObject: TSceneObject;
       AShadowPass: Boolean; var ABatches: TInstancedRenderBatches);
     procedure UploadInstanceData(const AInstances: TArray<TGPUInstanceRenderData>);
+    procedure SetupPackedInstanceGeometryBuffers;
+    procedure DestroyPackedInstanceGeometryBuffers;
+    function UploadPackedInstancedGeometry(var ABatches: TInstancedRenderBatches;
+      out APackedInstances: TArray<TGPUInstanceRenderData>): Boolean;
+    procedure DrawPackedInstancedGeometry(const ABatch: TInstancedRenderBatch);
     procedure RenderInstancedSceneObjects(AShadowPass: Boolean);
     procedure RenderInstancedBatch(const ABatch: TInstancedRenderBatch;
+      AShadowPass: Boolean);
+    procedure RenderPackedInstancedBatch(const ABatch: TInstancedRenderBatch;
       AShadowPass: Boolean);
     procedure CollectSceneObjectBillboards(aObject: TSceneObject;
       var Items: TBillboardRenderList);
@@ -417,7 +432,7 @@ type
 implementation
 
 uses
-  Renderer.RenderTechnique;
+  Renderer.RenderTechnique, Renderer.Skeleton;
 
 const
   LIGHT_GLYPH_TEXTURE_PATH = 'Billboards\Textures\LIGHT.tga';
@@ -813,6 +828,11 @@ begin
   fShadowFitPadding := 1.25;
   fShadowDrawCount := 0;
   fInstanceDataBuffer := 0;
+  fPackedInstanceVAO := 0;
+  fPackedInstanceVBO := 0;
+  fPackedInstanceEBO := 0;
+  fPackedInstanceVertexBufferSize := 0;
+  fPackedInstanceIndexBufferSize := 0;
   fSkipInstanceDraws := False;
   fBatchedInstanceObjects := TList<TSceneObject>.Create;
   fWaterReflectionEnabled := True;
@@ -890,6 +910,7 @@ begin
     glDeleteBuffers(1, @fInstanceDataBuffer);
     fInstanceDataBuffer := 0;
   end;
+  DestroyPackedInstanceGeometryBuffers;
   if fFullscreenVBO <> 0 then
   begin
     glDeleteBuffers(1, @fFullscreenVBO);
@@ -3319,6 +3340,233 @@ begin
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 end;
 
+procedure TRenderer.SetupPackedInstanceGeometryBuffers;
+begin
+  if fPackedInstanceVAO <> 0 then
+    Exit;
+
+  glGenVertexArrays(1, @fPackedInstanceVAO);
+  glBindVertexArray(fPackedInstanceVAO);
+
+  glGenBuffers(1, @fPackedInstanceVBO);
+  glBindBuffer(GL_ARRAY_BUFFER, fPackedInstanceVBO);
+
+  glGenBuffers(1, @fPackedInstanceEBO);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, fPackedInstanceEBO);
+
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex), Pointer(0));
+  glEnableVertexAttribArray(1);
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex),
+    Pointer(SizeOf(TVector3)));
+  glEnableVertexAttribArray(2);
+  glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex),
+    Pointer(SizeOf(TVector3) * 2));
+  glEnableVertexAttribArray(3);
+  glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, SizeOf(TVertex),
+    Pointer(SizeOf(TVector3) * 3));
+  glEnableVertexAttribArray(4);
+  glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, SizeOf(TVertex),
+    Pointer(SizeOf(TVector3) * 4));
+
+  glBindVertexArray(0);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+end;
+
+procedure TRenderer.DestroyPackedInstanceGeometryBuffers;
+begin
+  if fPackedInstanceEBO <> 0 then
+  begin
+    glDeleteBuffers(1, @fPackedInstanceEBO);
+    fPackedInstanceEBO := 0;
+  end;
+  if fPackedInstanceVBO <> 0 then
+  begin
+    glDeleteBuffers(1, @fPackedInstanceVBO);
+    fPackedInstanceVBO := 0;
+  end;
+  if fPackedInstanceVAO <> 0 then
+  begin
+    glDeleteVertexArrays(1, @fPackedInstanceVAO);
+    fPackedInstanceVAO := 0;
+  end;
+
+  fPackedInstanceVertexBufferSize := 0;
+  fPackedInstanceIndexBufferSize := 0;
+end;
+
+function TRenderer.UploadPackedInstancedGeometry(
+  var ABatches: TInstancedRenderBatches;
+  out APackedInstances: TArray<TGPUInstanceRenderData>): Boolean;
+var
+  I: Integer;
+  J: Integer;
+  VertexOffset: Integer;
+  IndexOffset: Integer;
+  InstanceOffset: Integer;
+  VertexCount: Integer;
+  IndexCount: Integer;
+  InstanceCount: Integer;
+  TotalVertices: Int64;
+  TotalIndices: Int64;
+  TotalInstances: Int64;
+  VertexBufferSize: NativeInt;
+  IndexBufferSize: NativeInt;
+  Mesh: TMesh;
+  MeshVertices: TArray<TVertex>;
+  MeshIndices: TArray<GLuint>;
+  PackedVertices: TArray<TVertex>;
+  PackedIndices: TArray<GLuint>;
+begin
+  Result := False;
+  SetLength(APackedInstances, 0);
+
+  TotalVertices := 0;
+  TotalIndices := 0;
+  TotalInstances := 0;
+
+  for I := 0 to High(ABatches) do
+  begin
+    ABatches[I].PackedFirstIndex := 0;
+    ABatches[I].PackedIndexCount := 0;
+    ABatches[I].PackedInstanceOffset := 0;
+
+    Mesh := ABatches[I].Mesh;
+    InstanceCount := Length(ABatches[I].Instances);
+    if (Mesh = nil) or (Mesh.VertexCount <= 0) or (InstanceCount <= 0) then
+      Continue;
+    if Mesh is TSkeletalMesh then
+      Exit;
+
+    VertexCount := Mesh.VertexCount;
+    IndexCount := Mesh.IndexCount;
+    if IndexCount <= 0 then
+      IndexCount := VertexCount;
+
+    if (TotalVertices + VertexCount > MaxInt) or
+       (TotalIndices + IndexCount > MaxInt) or
+       (TotalInstances + InstanceCount > MaxInt) then
+      Exit;
+
+    Inc(TotalVertices, VertexCount);
+    Inc(TotalIndices, IndexCount);
+    Inc(TotalInstances, InstanceCount);
+  end;
+
+  if (TotalVertices <= 0) or (TotalIndices <= 0) or (TotalInstances <= 0) then
+    Exit;
+
+  SetLength(PackedVertices, Integer(TotalVertices));
+  SetLength(PackedIndices, Integer(TotalIndices));
+  SetLength(APackedInstances, Integer(TotalInstances));
+
+  VertexOffset := 0;
+  IndexOffset := 0;
+  InstanceOffset := 0;
+
+  for I := 0 to High(ABatches) do
+  begin
+    Mesh := ABatches[I].Mesh;
+    InstanceCount := Length(ABatches[I].Instances);
+    if (Mesh = nil) or (Mesh.VertexCount <= 0) or (InstanceCount <= 0) then
+      Continue;
+
+    MeshVertices := Mesh.Vertices;
+    MeshIndices := Mesh.Indices;
+    VertexCount := Length(MeshVertices);
+    IndexCount := Length(MeshIndices);
+    if IndexCount <= 0 then
+      IndexCount := VertexCount;
+
+    if (VertexCount <= 0) or (IndexCount <= 0) then
+      Continue;
+
+    ABatches[I].PackedFirstIndex := IndexOffset;
+    ABatches[I].PackedIndexCount := IndexCount;
+    ABatches[I].PackedInstanceOffset := InstanceOffset;
+
+    Move(MeshVertices[0], PackedVertices[VertexOffset],
+      VertexCount * SizeOf(TVertex));
+
+    if Length(MeshIndices) > 0 then
+    begin
+      for J := 0 to Length(MeshIndices) - 1 do
+        PackedIndices[IndexOffset + J] := GLuint(VertexOffset) + MeshIndices[J];
+    end
+    else
+    begin
+      for J := 0 to VertexCount - 1 do
+        PackedIndices[IndexOffset + J] := GLuint(VertexOffset + J);
+    end;
+
+    Move(ABatches[I].Instances[0], APackedInstances[InstanceOffset],
+      InstanceCount * SizeOf(TGPUInstanceRenderData));
+
+    Inc(VertexOffset, VertexCount);
+    Inc(IndexOffset, IndexCount);
+    Inc(InstanceOffset, InstanceCount);
+  end;
+
+  SetupPackedInstanceGeometryBuffers;
+
+  VertexBufferSize := Length(PackedVertices) * SizeOf(TVertex);
+  IndexBufferSize := Length(PackedIndices) * SizeOf(GLuint);
+
+  glBindVertexArray(fPackedInstanceVAO);
+  glBindBuffer(GL_ARRAY_BUFFER, fPackedInstanceVBO);
+  if VertexBufferSize <> fPackedInstanceVertexBufferSize then
+    glBufferData(GL_ARRAY_BUFFER, VertexBufferSize, @PackedVertices[0],
+      GL_STREAM_DRAW)
+  else
+    glBufferSubData(GL_ARRAY_BUFFER, 0, VertexBufferSize,
+      @PackedVertices[0]);
+  fPackedInstanceVertexBufferSize := VertexBufferSize;
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, fPackedInstanceEBO);
+  if IndexBufferSize <> fPackedInstanceIndexBufferSize then
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, IndexBufferSize, @PackedIndices[0],
+      GL_STREAM_DRAW)
+  else
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, IndexBufferSize,
+      @PackedIndices[0]);
+  fPackedInstanceIndexBufferSize := IndexBufferSize;
+
+  glBindVertexArray(0);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+  Result := True;
+end;
+
+procedure TRenderer.DrawPackedInstancedGeometry(
+  const ABatch: TInstancedRenderBatch);
+var
+  IndexPointer: Pointer;
+begin
+  if (ABatch.Mesh = nil) or (ABatch.PackedIndexCount <= 0) or
+     (Length(ABatch.Instances) <= 0) or (fPackedInstanceVAO = 0) then
+    Exit;
+
+  if ABatch.Mesh.WireFrame then
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
+  else
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+  IndexPointer := Pointer(NativeUInt(ABatch.PackedFirstIndex) *
+    SizeOf(GLuint));
+
+  glBindVertexArray(fPackedInstanceVAO);
+  try
+    glDrawElementsInstanced(GL_TRIANGLES, ABatch.PackedIndexCount,
+      GL_UNSIGNED_INT, IndexPointer, Length(ABatch.Instances));
+  finally
+    glBindVertexArray(0);
+    if ABatch.Mesh.WireFrame then
+      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+  end;
+end;
+
 procedure TRenderer.RenderInstancedBatch(const ABatch: TInstancedRenderBatch;
   AShadowPass: Boolean);
 var
@@ -3353,6 +3601,7 @@ begin
     end;
 
     fShadowShader.SetUniform('useInstanceBuffer', GLint(1));
+    fShadowShader.SetUniform('instanceBaseOffset', GLint(0));
     ABatch.Mesh.DrawInstancedGeometryOnly(Length(ABatch.Instances));
     fShadowShader.SetUniform('useInstanceBuffer', GLint(0));
     Inc(fShadowDrawCount);
@@ -3379,7 +3628,80 @@ begin
       Technique.Shader.SetUniform('useVertexWind', GLint(0));
 
     Technique.Shader.SetUniform('useInstanceBuffer', GLint(1));
+    Technique.Shader.SetUniform('instanceBaseOffset', GLint(0));
     ABatch.Mesh.DrawInstancedGeometryOnly(Length(ABatch.Instances));
+    Technique.Shader.SetUniform('useInstanceBuffer', GLint(0));
+  finally
+    Technique.EndTechnique;
+  end;
+end;
+
+procedure TRenderer.RenderPackedInstancedBatch(
+  const ABatch: TInstancedRenderBatch; AShadowPass: Boolean);
+var
+  Technique: TRenderTechnique;
+  RenderState: TRenderTechniqueState;
+  IdentityNormal: TMatrix3;
+begin
+  if (ABatch.Mesh = nil) or (ABatch.PackedIndexCount <= 0) or
+     (Length(ABatch.Instances) <= 0) then
+    Exit;
+
+  if AShadowPass then
+  begin
+    if fShadowShader = nil then
+      Exit;
+
+    fShadowShader.SetUniform('modelMatrix', TMatrix4.Identity);
+    ABatch.Mesh.PrepareShader(fShadowShader);
+    if ABatch.UseVertexWind and Assigned(ABatch.FirstObject) then
+      ABatch.FirstObject.ApplyVertexWindUniforms(fShadowShader)
+    else
+      fShadowShader.SetUniform('useVertexWind', GLint(0));
+    ApplyShadowMaterial(ABatch.Mesh);
+
+    if ShadowMaterialNeedsTwoSided(ABatch.Mesh) then
+      glDisable(GL_CULL_FACE)
+    else
+    begin
+      glEnable(GL_CULL_FACE);
+      glCullFace(GL_BACK);
+    end;
+
+    fShadowShader.SetUniform('useInstanceBuffer', GLint(1));
+    fShadowShader.SetUniform('instanceBaseOffset',
+      GLint(ABatch.PackedInstanceOffset));
+    DrawPackedInstancedGeometry(ABatch);
+    fShadowShader.SetUniform('instanceBaseOffset', GLint(0));
+    fShadowShader.SetUniform('useInstanceBuffer', GLint(0));
+    Inc(fShadowDrawCount);
+    Exit;
+  end;
+
+  if (ABatch.Material = nil) or (ABatch.Material.Shader = nil) then
+    Exit;
+
+  Technique := TRenderTechnique.Acquire(ABatch.Material.Shader, rtkPBR);
+  RenderState := TRenderTechniqueState.ForMaterial(ABatch.Material,
+    ABatch.Mesh.MeshType);
+  Technique.State := RenderState;
+  Technique.BeginTechnique;
+  try
+    Technique.ApplyMaterial(ABatch.Material);
+    IdentityNormal := Matrix3(TMatrix4.Identity);
+    Technique.ApplyObject(TMatrix4.Identity, IdentityNormal);
+    ABatch.Mesh.PrepareShader(Technique.Shader);
+    Technique.Shader.SetUniform('terrainUVScale', GLfloat(1.0));
+    if ABatch.UseVertexWind and Assigned(ABatch.FirstObject) then
+      ABatch.FirstObject.ApplyVertexWindUniforms(Technique.Shader)
+    else
+      Technique.Shader.SetUniform('useVertexWind', GLint(0));
+
+    Technique.Shader.SetUniform('useInstanceBuffer', GLint(1));
+    Technique.Shader.SetUniform('instanceBaseOffset',
+      GLint(ABatch.PackedInstanceOffset));
+    DrawPackedInstancedGeometry(ABatch);
+    Technique.Shader.SetUniform('instanceBaseOffset', GLint(0));
     Technique.Shader.SetUniform('useInstanceBuffer', GLint(0));
   finally
     Technique.EndTechnique;
@@ -3389,6 +3711,8 @@ end;
 procedure TRenderer.RenderInstancedSceneObjects(AShadowPass: Boolean);
 var
   Batches: TInstancedRenderBatches;
+  PackedInstances: TArray<TGPUInstanceRenderData>;
+  UsePackedGeometry: Boolean;
   I: Integer;
 begin
   if (fSceneManager = nil) or (fSceneManager.Root = nil) then
@@ -3402,8 +3726,18 @@ begin
     CollectInstancedSceneObject(fSceneManager.Root.ObjectList[I], AShadowPass,
       Batches);
 
+  UsePackedGeometry := UploadPackedInstancedGeometry(Batches, PackedInstances);
+  if UsePackedGeometry then
+    UploadInstanceData(PackedInstances);
+
   for I := 0 to High(Batches) do
-    RenderInstancedBatch(Batches[I], AShadowPass);
+    if UsePackedGeometry then
+    begin
+      if Batches[I].PackedIndexCount > 0 then
+        RenderPackedInstancedBatch(Batches[I], AShadowPass);
+    end
+    else
+      RenderInstancedBatch(Batches[I], AShadowPass);
 end;
 
 procedure TRenderer.RenderSceneObject(aObject: TSceneObject);

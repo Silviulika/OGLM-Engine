@@ -42,6 +42,7 @@ uniform float heightFieldMorphFactor;
 uniform int useSkinning;
 uniform int skinMatrixCount;
 uniform int useInstanceBuffer;
+uniform int instanceBaseOffset;
 uniform int useVertexWind;
 uniform float windTime;
 uniform vec3 windDirection;
@@ -183,7 +184,7 @@ void main()
 
     if (useInstanceBuffer != 0)
     {
-        InstanceData instance = instances[gl_InstanceID];
+        InstanceData instance = instances[instanceBaseOffset + gl_InstanceID];
         effectiveModelMatrix = instance.modelMatrix;
         effectiveNormalMatrix = mat3(instance.normalMatrix);
         instanceWindRoot = instance.windRootHeight.xyz;

@@ -31,6 +31,7 @@ uniform int useSkinning;
 uniform int skinMatrixCount;
 uniform int flipAlphaCutoutV;
 uniform int useInstanceBuffer;
+uniform int instanceBaseOffset;
 uniform int useVertexWind;
 uniform int shadowWindMode;
 uniform float windTime;
@@ -194,7 +195,7 @@ void main()
 
     if (useInstanceBuffer != 0)
     {
-        InstanceData instance = instances[gl_InstanceID];
+        InstanceData instance = instances[instanceBaseOffset + gl_InstanceID];
         effectiveModelMatrix = instance.modelMatrix;
         instanceWindRoot = instance.windRootHeight.xyz;
         instanceWindHeight = instance.windRootHeight.w;
