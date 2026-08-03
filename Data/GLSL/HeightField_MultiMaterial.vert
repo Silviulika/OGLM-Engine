@@ -35,10 +35,7 @@ void main()
 
     vec4 worldPos = modelMatrix * vec4(localPosition, 1.0);
     if (useClipPlane != 0)
-        // The reflection pass places its plane 0.05 above nominal water, while
-        // the default six-wave stack can trough about 0.42 below it. Keep the
-        // clip below that animated trough plus a small rasterization margin.
-        gl_ClipDistance[0] = dot(worldPos, clipPlane) + 0.55;
+        gl_ClipDistance[0] = dot(worldPos, clipPlane);
 
     vec3 N = normalize(normalMatrix * normal);
     vec3 T = normalize(normalMatrix * tangent);

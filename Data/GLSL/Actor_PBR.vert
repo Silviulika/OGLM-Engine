@@ -196,8 +196,7 @@ void main()
     ApplyVertexWind(worldPos, instanceWindRoot, instanceWindAxis,
         instanceWindHeight, windRotationAxis, windRotationAngle);
     if (useClipPlane != 0)
-        // Match the terrain reflection overlap below the animated wave troughs.
-        gl_ClipDistance[0] = dot(worldPos, clipPlane) + 0.55;
+        gl_ClipDistance[0] = dot(worldPos, clipPlane);
 
     vout.position = worldPos.xyz;
     vout.lightSpacePosition = lightSpaceMatrix * worldPos;

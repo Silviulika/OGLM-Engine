@@ -2969,6 +2969,7 @@ var
   OldActiveCamera: TSceneObject;
   MainCamera: TCamera;
   ReflectedPosition, ReflectedTarget, ReflectedUp: TVector3;
+  ReflectionClipPadding: Single;
   OldFramebuffer: GLint;
   OldViewport: array[0..3] of GLint;
   OldDepthTestEnabled, OldBlendEnabled, OldCullEnabled: GLboolean;
@@ -3061,8 +3062,11 @@ begin
       fSkyDome.Render(fProjectionMatrix * fActiveCamera.Camera.ViewMatrix,
         fActiveCamera.Camera.Position, DeltaTime);
 
+    ReflectionClipPadding := System.Math.Min(0.24,
+      System.Math.Max(0.04, WaterMesh.WaveStrength * 0.30 + 0.03));
     fSceneClipPlaneEnabled := True;
-    fSceneClipPlane := Vector4(0.0, 1.0, 0.0, -WaterY - 0.05);
+    fSceneClipPlane := Vector4(0.0, 1.0, 0.0,
+      -WaterY + ReflectionClipPadding);
     glEnable(GL_CLIP_DISTANCE0);
     try
       for I := 0 to fSceneManager.Count - 1 do
@@ -3076,10 +3080,6 @@ begin
         glDisable(GL_CLIP_DISTANCE0);
     end;
 
-    RenderSceneBillboards;
-
-    for I := 0 to fSceneManager.Count - 1 do
-      RenderSceneObjectParticles(fSceneManager.Root.ObjectList[I]);
   finally
     fSceneClipPlaneEnabled := OldSceneClipPlaneEnabled;
     fSceneClipPlane := OldSceneClipPlane;
