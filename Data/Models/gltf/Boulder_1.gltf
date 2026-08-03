@@ -1,0 +1,159 @@
+{
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5123,
+      "count": 600,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 148,
+      "max": [
+        73.73030090332031,
+        75.07129669189453,
+        74.35030364990234
+      ],
+      "min": [
+        -66.86830139160156,
+        -74.51190185546875,
+        -67.35810089111328
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 148,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 148,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5126,
+      "count": 148,
+      "max": [
+        0.9731000065803528,
+        0.9912999868392944
+      ],
+      "min": [
+        0.02160000056028366,
+        0.015999972820281982
+      ],
+      "type": "VEC2"
+    }
+  ],
+  "asset": {
+    "generator": "Khronos glTF exporter for 3dsmax 2.00 (C)Khronos Group Inc.",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 1200,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1776,
+      "byteOffset": 1200,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1776,
+      "byteOffset": 2976,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2368,
+      "byteOffset": 4752,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1184,
+      "byteOffset": 7120,
+      "target": 34962
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 8304,
+      "uri": "Boulder_1.bin"
+    }
+  ],
+  "materials": [
+    {
+      "name": "01 - Default",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.5882353186607361,
+          0.5882353186607361,
+          0.5882353186607361,
+          1.0
+        ],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.6000000238418579
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "rock_01",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 2,
+            "POSITION": 1,
+            "TANGENT": 3,
+            "TEXCOORD_0": 4
+          },
+          "indices": 0,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "extras": {
+        "": 1
+      },
+      "mesh": 0,
+      "name": "rock_01",
+      "rotation": [
+        0.7071067690849304,
+        -0.0,
+        -0.0,
+        -0.7071067690849304
+      ],
+      "scale": [
+        0.10000000149011612,
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ]
+}
