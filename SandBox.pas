@@ -513,6 +513,7 @@ type
     PARTICLE_TEXTURE_THUMB_SIZE = 64;
     BILLBOARD_TEXTURE_THUMB_SIZE = 64;
     PARTICLE_FILE_THUMB_SIZE = 64;
+    MAX_EDITOR_LOG_LINES = 2000;
     WATER_EDITOR_MIN_SEGMENTS = 64;
     IMGUI_PROP_SCALAR_WIDTH = 120.0;
     IMGUI_PROP_VECTOR3_WIDTH = 210.0;
@@ -619,6 +620,8 @@ type
     fRotateStartAngleSet: Boolean;
     fDragStartHandlePos: TVector3;
     fInitialScale: TVector3;
+    fInitialOrientation: TQuaternion;
+    fScaleDragStartWorldMatrix: TMatrix4;
     fMeshDragStartTranslation: TVector3;
     fMeshDragStartRotationDeg: TVector3;
     fMeshDragStartScale: TVector3;
@@ -958,6 +961,20 @@ type
     procedure MeshRenderHandler(Mesh: TMesh; Shader: TShader);
     procedure GizmoMeshRenderHandler(Mesh: TMesh; Shader: TShader);
 
+    function GetSceneObjectWorldOrientation(Obj: TSceneObject): TQuaternion;
+    function GetGizmoSpaceOrientation: TQuaternion;
+    function GetGizmoAxisWorld(AxisTag: Integer): TVector3;
+    function ConstrainVectorToGizmoAxes(const Value: TVector3;
+      AxisMask: Integer): TVector3;
+    function MeshRotationMatrix(const RotationRad: TVector3): TMatrix4;
+    procedure RotateObjectAroundWorldAxis(Obj: TSceneObject;
+      const WorldAxis: TVector3; AngleRad: Single);
+    procedure RotateSelectedMeshAroundWorldAxis(const WorldAxis: TVector3;
+      AngleRad: Single);
+    function CalculateWorldSpaceScale(const InitialWorldMatrix,
+      ParentWorldMatrix, InitialRotationMatrix: TMatrix4;
+      const InitialScale: TVector3; AxisMask: Integer;
+      Factor: Single): TVector3;
     function GetGizmoTargetWorldPosition: TVector3;
     function CreateTranslateGizmo(ParentObj: TSceneObject): TSceneObject;
     function CreateRotateGizmo(ParentObj: TSceneObject): TSceneObject;
@@ -2209,6 +2226,8 @@ begin
     Exit;
 
   fLog.Add(FormatDateTime('[yyyy-mm-dd hh:nn:ss] ', Now) + Text);
+  while fLog.Count > MAX_EDITOR_LOG_LINES do
+    fLog.Delete(0);
 end;
 
 function TSandBoxForm.ImGuiWantsKeyboardCapture: Boolean;
@@ -18338,6 +18357,9 @@ begin
   if Assigned(fPhysicsWorld) then
     fPhysicsWorld.RemoveBodiesForScene(Obj, True);
 
+  if Assigned(fScriptManager) then
+    fScriptManager.DetachSceneObject(Obj, True);
+
   Obj.Free;
 
   if fLight = nil then
@@ -21056,7 +21078,12 @@ begin
   if (fSelectedObject = nil) or (fSelectedMesh = nil) then
     Exit;
 
-  fSelectedObject.UpdateWorldMatrices;
+  if Assigned(fSceneManager) then
+    fSceneManager.Update
+  else if Assigned(fRoot) then
+    fRoot.UpdateWorldMatrices
+  else
+    fSelectedObject.UpdateWorldMatrices;
   fSelectedMesh.ParentModelMatrix := fSelectedObject.WorldMatrix;
   fSelectedMesh.SetTransform(Translation,
     Vector3(DegToRad(RotationDeg.X), DegToRad(RotationDeg.Y), DegToRad(RotationDeg.Z)),
@@ -21074,13 +21101,227 @@ begin
     RequestRender;
 end;
 
+function TSandBoxForm.GetSceneObjectWorldOrientation(
+  Obj: TSceneObject): TQuaternion;
+begin
+  if Obj = nil then
+    Exit(TQuaternion.Identity);
+
+  if Obj.Parent <> nil then
+    Result := (GetSceneObjectWorldOrientation(Obj.Parent) *
+      Obj.Orientation).Normalize
+  else
+    Result := Obj.Orientation.Normalize;
+end;
+
+function TSandBoxForm.GetGizmoSpaceOrientation: TQuaternion;
+begin
+  { Editor world space is the user-visible Scene object, not the engine's
+    technical root. Scale is deliberately excluded so the gizmo remains
+    orthonormal and keeps its constant on-screen size. }
+  if fSceneWorld <> nil then
+    Result := GetSceneObjectWorldOrientation(fSceneWorld)
+  else
+    Result := TQuaternion.Identity;
+end;
+
+function TSandBoxForm.GetGizmoAxisWorld(AxisTag: Integer): TVector3;
+var
+  LocalAxis: TVector3;
+begin
+  case AxisTag of
+    GIZMO_TAG_X: LocalAxis := Vector3(1, 0, 0);
+    GIZMO_TAG_Y: LocalAxis := Vector3(0, 1, 0);
+    GIZMO_TAG_Z: LocalAxis := Vector3(0, 0, 1);
+  else
+    Exit(Vector3(0, 0, 0));
+  end;
+
+  if fGizmoMode in [gmRotate, gmScale] then
+    Result := Vector3(GetGizmoSpaceOrientation.ToMatrix *
+      Vector4(LocalAxis, 0))
+  else
+    Result := LocalAxis;
+
+  if Result.LengthSquared > 0.000001 then
+    Result.SetNormalized;
+end;
+
+function TSandBoxForm.ConstrainVectorToGizmoAxes(const Value: TVector3;
+  AxisMask: Integer): TVector3;
+var
+  Axis: TVector3;
+begin
+  Result := Vector3(0, 0, 0);
+
+  if (AxisMask and 1) <> 0 then
+  begin
+    Axis := GetGizmoAxisWorld(GIZMO_TAG_X);
+    Result := Result + Axis * Value.Dot(Axis);
+  end;
+  if (AxisMask and 2) <> 0 then
+  begin
+    Axis := GetGizmoAxisWorld(GIZMO_TAG_Y);
+    Result := Result + Axis * Value.Dot(Axis);
+  end;
+  if (AxisMask and 4) <> 0 then
+  begin
+    Axis := GetGizmoAxisWorld(GIZMO_TAG_Z);
+    Result := Result + Axis * Value.Dot(Axis);
+  end;
+end;
+
+function TSandBoxForm.MeshRotationMatrix(
+  const RotationRad: TVector3): TMatrix4;
+var
+  RotX, RotY, RotZ: TMatrix4;
+begin
+  RotX.InitRotationX(RotationRad.X);
+  RotY.InitRotationY(RotationRad.Y);
+  RotZ.InitRotationZ(RotationRad.Z);
+  Result := RotZ * RotY * RotX;
+end;
+
+procedure TSandBoxForm.RotateObjectAroundWorldAxis(Obj: TSceneObject;
+  const WorldAxis: TVector3; AngleRad: Single);
+var
+  ParentOrientation: TQuaternion;
+  LocalAxis: TVector3;
+  Delta: TQuaternion;
+begin
+  if (Obj = nil) or (WorldAxis.LengthSquared <= 0.000001) then
+    Exit;
+
+  ParentOrientation := GetSceneObjectWorldOrientation(Obj.Parent);
+  LocalAxis := Vector3(ParentOrientation.Conjugate.ToMatrix *
+    Vector4(WorldAxis, 0));
+  if LocalAxis.LengthSquared <= 0.000001 then
+    Exit;
+  LocalAxis.SetNormalized;
+
+  Delta.Init(LocalAxis, AngleRad);
+  Obj.Orientation := (Delta * Obj.Orientation).Normalize;
+  Obj.NotifyChange;
+end;
+
+procedure TSandBoxForm.RotateSelectedMeshAroundWorldAxis(
+  const WorldAxis: TVector3; AngleRad: Single);
+var
+  ParentOrientation: TQuaternion;
+  LocalAxis: TVector3;
+  Delta, CurrentOrientation, NewOrientation: TQuaternion;
+  RotationMatrix: TMatrix4;
+  NewRotationDeg: TVector3;
+begin
+  if (fSelectedObject = nil) or (fSelectedMesh = nil) or
+     (WorldAxis.LengthSquared <= 0.000001) then
+    Exit;
+
+  ParentOrientation := GetSceneObjectWorldOrientation(fSelectedObject);
+  LocalAxis := Vector3(ParentOrientation.Conjugate.ToMatrix *
+    Vector4(WorldAxis, 0));
+  if LocalAxis.LengthSquared <= 0.000001 then
+    Exit;
+  LocalAxis.SetNormalized;
+
+  RotationMatrix := MeshRotationMatrix(fSelectedMesh.Rotation);
+  CurrentOrientation.Init(RotationMatrix);
+  Delta.Init(LocalAxis, AngleRad);
+  NewOrientation := (Delta * CurrentOrientation).Normalize;
+  NewRotationDeg := QuaternionToEuler(NewOrientation) * (180.0 / Pi);
+
+  SetMeshEditorTransformValues(fSelectedMesh.Position, NewRotationDeg,
+    fSelectedMesh.Scale, False);
+end;
+
+function TSandBoxForm.CalculateWorldSpaceScale(const InitialWorldMatrix,
+  ParentWorldMatrix, InitialRotationMatrix: TMatrix4;
+  const InitialScale: TVector3; AxisMask: Integer;
+  Factor: Single): TVector3;
+var
+  ParentInverse: TMatrix4;
+  WorldColumn, ScaledWorldColumn: TVector3;
+  LocalColumn, LocalRotationAxis, WorldAxis: TVector3;
+  ComponentValue, MinimumMagnitude: Single;
+  ColumnIndex, AxisTag, AxisBit: Integer;
+begin
+  Result := InitialScale;
+  ParentInverse := ParentWorldMatrix.Inverse;
+
+  { A world-axis scale generally contains shear once converted through rotated
+    parents. Scene objects store TRS only, so project that target transform back
+    onto the original local rotation axes. This is the closest scale-only TRS
+    result and, importantly, does not make scaling rotate the object. }
+  for ColumnIndex := 0 to 2 do
+  begin
+    WorldColumn := Vector3(InitialWorldMatrix.Columns[ColumnIndex]);
+    ScaledWorldColumn := WorldColumn;
+
+    for AxisTag := GIZMO_TAG_X to GIZMO_TAG_Z do
+    begin
+      AxisBit := 1 shl AxisTag;
+      if (AxisMask and AxisBit) = 0 then
+        Continue;
+
+      WorldAxis := GetGizmoAxisWorld(AxisTag);
+      ScaledWorldColumn := ScaledWorldColumn + WorldAxis *
+        (WorldColumn.Dot(WorldAxis) * (Factor - 1.0));
+    end;
+
+    LocalColumn := Vector3(ParentInverse * Vector4(ScaledWorldColumn, 0));
+    LocalRotationAxis := Vector3(InitialRotationMatrix.Columns[ColumnIndex]);
+    if LocalRotationAxis.LengthSquared > 0.000001 then
+      LocalRotationAxis.SetNormalized;
+    ComponentValue := LocalColumn.Dot(LocalRotationAxis);
+
+    case ColumnIndex of
+      0:
+        begin
+          MinimumMagnitude := Abs(InitialScale.X) * 0.01;
+          if InitialScale.X < 0 then
+            Result.X := System.Math.Min(ComponentValue, -MinimumMagnitude)
+          else if InitialScale.X > 0 then
+            Result.X := System.Math.Max(ComponentValue, MinimumMagnitude)
+          else
+            Result.X := 0;
+        end;
+      1:
+        begin
+          MinimumMagnitude := Abs(InitialScale.Y) * 0.01;
+          if InitialScale.Y < 0 then
+            Result.Y := System.Math.Min(ComponentValue, -MinimumMagnitude)
+          else if InitialScale.Y > 0 then
+            Result.Y := System.Math.Max(ComponentValue, MinimumMagnitude)
+          else
+            Result.Y := 0;
+        end;
+      2:
+        begin
+          MinimumMagnitude := Abs(InitialScale.Z) * 0.01;
+          if InitialScale.Z < 0 then
+            Result.Z := System.Math.Min(ComponentValue, -MinimumMagnitude)
+          else if InitialScale.Z > 0 then
+            Result.Z := System.Math.Max(ComponentValue, MinimumMagnitude)
+          else
+            Result.Z := 0;
+        end;
+    end;
+  end;
+end;
+
 function TSandBoxForm.GetGizmoTargetWorldPosition: TVector3;
 var
   LocalCenter: TVector3;
 begin
+  if Assigned(fSceneManager) then
+    fSceneManager.Update
+  else if Assigned(fRoot) then
+    fRoot.UpdateWorldMatrices
+  else if Assigned(fSelectedObject) then
+    fSelectedObject.UpdateWorldMatrices;
+
   if IsMeshEditModeActive then
   begin
-    fSelectedObject.UpdateWorldMatrices;
     fSelectedMesh.ParentModelMatrix := fSelectedObject.WorldMatrix;
     LocalCenter := (fSelectedMesh.BoundingBoxMin + fSelectedMesh.BoundingBoxMax) * 0.5;
     Result := Vector3(fSelectedMesh.ModelMatrix * Vector4(LocalCenter, 1.0));
@@ -21088,10 +21329,7 @@ begin
   end;
 
   if Assigned(fSelectedObject) then
-  begin
-    fSelectedObject.UpdateWorldMatrices;
-    Result := Vector3(fSelectedObject.WorldMatrix.Columns[3]);
-  end
+    Result := Vector3(fSelectedObject.WorldMatrix.Columns[3])
   else
     Result := Vector3(0, 0, 0);
 end;
@@ -21393,7 +21631,10 @@ begin
   if Assigned(fCurrentGizmo) then
   begin
     fCurrentGizmo.Position := GetGizmoTargetWorldPosition;
-    fCurrentGizmo.Rotation := Vector3(0, 0, 0);
+    if fGizmoMode in [gmRotate, gmScale] then
+      fCurrentGizmo.Orientation := GetGizmoSpaceOrientation
+    else
+      fCurrentGizmo.Rotation := Vector3(0, 0, 0);
     UpdateGizmoScale;
     fCurrentGizmo.UpdateWorldMatrices;
   end;
@@ -21527,13 +21768,7 @@ var
 
     for Tag := GIZMO_TAG_X to GIZMO_TAG_Z do
     begin
-      case Tag of
-        GIZMO_TAG_X: AxisVec := Vector3(1, 0, 0);
-        GIZMO_TAG_Y: AxisVec := Vector3(0, 1, 0);
-        GIZMO_TAG_Z: AxisVec := Vector3(0, 0, 1);
-      else
-        AxisVec := Vector3(0, 0, 0);
-      end;
+      AxisVec := GetGizmoAxisWorld(Tag);
 
       WorldStart := Center + AxisVec * (AxisStartOffset * ScaleFactor);
       WorldEnd := Center + AxisVec * (AxisEndOffset * ScaleFactor);
@@ -21638,11 +21873,17 @@ begin
 end;
 
 function TSandBoxForm.GetGizmoPlaneNormalByTag(AxisTag: Integer): TVector3;
+var
+  AxisX, AxisY, AxisZ: TVector3;
 begin
+  AxisX := GetGizmoAxisWorld(GIZMO_TAG_X);
+  AxisY := GetGizmoAxisWorld(GIZMO_TAG_Y);
+  AxisZ := GetGizmoAxisWorld(GIZMO_TAG_Z);
+
   case AxisTag of
-    GIZMO_TAG_XY: Result := Vector3(0, 0, 1);
-    GIZMO_TAG_YZ: Result := Vector3(1, 0, 0);
-    GIZMO_TAG_XZ: Result := Vector3(0, 1, 0);
+    GIZMO_TAG_XY: Result := AxisZ;
+    GIZMO_TAG_YZ: Result := AxisX;
+    GIZMO_TAG_XZ: Result := AxisY;
   else
     begin
       if Assigned(fCamera) and Assigned(fCamera.Camera) then
@@ -21694,13 +21935,7 @@ var
   Axis: TVector3;
   ScaleFactor: Single;
 begin
-  case AxisTag of
-    GIZMO_TAG_X: Axis := Vector3(1, 0, 0);
-    GIZMO_TAG_Y: Axis := Vector3(0, 1, 0);
-    GIZMO_TAG_Z: Axis := Vector3(0, 0, 1);
-  else
-    Axis := Vector3(0, 0, 0);
-  end;
+  Axis := GetGizmoAxisWorld(AxisTag);
 
   ScaleFactor := 1.0;
   if Assigned(fCurrentGizmo) then
@@ -21735,11 +21970,17 @@ begin
 
   case AxisTag of
     GIZMO_TAG_XY:
-      Result := Center + Vector3(-PlaneOffset, PlaneOffset, 0) * ScaleFactor;
+      Result := Center +
+        (-GetGizmoAxisWorld(GIZMO_TAG_X) + GetGizmoAxisWorld(GIZMO_TAG_Y)) *
+        (PlaneOffset * ScaleFactor);
     GIZMO_TAG_YZ:
-      Result := Center + Vector3(0, PlaneOffset, -PlaneOffset) * ScaleFactor;
+      Result := Center +
+        (GetGizmoAxisWorld(GIZMO_TAG_Y) - GetGizmoAxisWorld(GIZMO_TAG_Z)) *
+        (PlaneOffset * ScaleFactor);
     GIZMO_TAG_XZ:
-      Result := Center + Vector3(-PlaneOffset, 0, -PlaneOffset) * ScaleFactor;
+      Result := Center +
+        (-GetGizmoAxisWorld(GIZMO_TAG_X) - GetGizmoAxisWorld(GIZMO_TAG_Z)) *
+        (PlaneOffset * ScaleFactor);
   else
     Result := Center;
   end;
@@ -22339,13 +22580,7 @@ begin
       fDragStartObjectPos := GetGizmoTargetWorldPosition;
       fDragAxisMask := GizmoAxisMask(Axis);
 
-      case Axis of
-        GIZMO_TAG_X: fDragAxisWorldDir := Vector3(1, 0, 0);
-        GIZMO_TAG_Y: fDragAxisWorldDir := Vector3(0, 1, 0);
-        GIZMO_TAG_Z: fDragAxisWorldDir := Vector3(0, 0, 1);
-      else
-        fDragAxisWorldDir := Vector3(0, 0, 0);
-      end;
+      fDragAxisWorldDir := GetGizmoAxisWorld(Axis);
 
       if IsSingleAxisGizmoTag(Axis) then
         fDragAxisWorldDir.SetNormalized;
@@ -22383,9 +22618,19 @@ begin
         fDragStartHandlePos := GetScaleHandleWorldPosition(Axis);
 
         if IsMeshEditModeActive then
-          fInitialScale := fMeshDragStartScale
+        begin
+          fInitialScale := fMeshDragStartScale;
+          fSelectedObject.UpdateWorldMatrices;
+          fSelectedMesh.ParentModelMatrix := fSelectedObject.WorldMatrix;
+          fScaleDragStartWorldMatrix := fSelectedMesh.ModelMatrix;
+        end
         else if Assigned(fSelectedObject) then
-          fInitialScale := fSelectedObject.Scale
+        begin
+          fInitialScale := fSelectedObject.Scale;
+          fInitialOrientation := fSelectedObject.Orientation;
+          fSelectedObject.UpdateWorldMatrices;
+          fScaleDragStartWorldMatrix := fSelectedObject.WorldMatrix;
+        end
         else
           fInitialScale := Vector3(1, 1, 1);
 
@@ -22412,33 +22657,29 @@ begin
 
           fScalePlaneStartVector := PlaneHit - fDragStartObjectPos;
 
-          if (fDragAxisMask and 1) = 0 then
-            fScalePlaneStartVector.X := 0;
-          if (fDragAxisMask and 2) = 0 then
-            fScalePlaneStartVector.Y := 0;
-          if (fDragAxisMask and 4) = 0 then
-            fScalePlaneStartVector.Z := 0;
+          fScalePlaneStartVector := ConstrainVectorToGizmoAxes(
+            fScalePlaneStartVector, fDragAxisMask);
 
           if fScalePlaneStartVector.Length <= 0.0001 then
           begin
             fScalePlaneStartVector := fDragStartHandlePos - fDragStartObjectPos;
 
-            if (fDragAxisMask and 1) = 0 then
-              fScalePlaneStartVector.X := 0;
-            if (fDragAxisMask and 2) = 0 then
-              fScalePlaneStartVector.Y := 0;
-            if (fDragAxisMask and 4) = 0 then
-              fScalePlaneStartVector.Z := 0;
+            fScalePlaneStartVector := ConstrainVectorToGizmoAxes(
+              fScalePlaneStartVector, fDragAxisMask);
           end;
 
           if fScalePlaneStartVector.Length <= 0.0001 then
           begin
             case Axis of
-              GIZMO_TAG_XY: fScalePlaneStartVector := Vector3(-1, 1, 0);
-              GIZMO_TAG_YZ: fScalePlaneStartVector := Vector3(0, 1, -1);
-              GIZMO_TAG_XZ: fScalePlaneStartVector := Vector3(-1, 0, -1);
+              GIZMO_TAG_XY: fScalePlaneStartVector :=
+                -GetGizmoAxisWorld(GIZMO_TAG_X) + GetGizmoAxisWorld(GIZMO_TAG_Y);
+              GIZMO_TAG_YZ: fScalePlaneStartVector :=
+                GetGizmoAxisWorld(GIZMO_TAG_Y) - GetGizmoAxisWorld(GIZMO_TAG_Z);
+              GIZMO_TAG_XZ: fScalePlaneStartVector :=
+                -GetGizmoAxisWorld(GIZMO_TAG_X) - GetGizmoAxisWorld(GIZMO_TAG_Z);
             else
-              fScalePlaneStartVector := Vector3(1, 1, 0);
+              fScalePlaneStartVector := GetGizmoAxisWorld(GIZMO_TAG_X) +
+                GetGizmoAxisWorld(GIZMO_TAG_Y);
             end;
           end;
 
@@ -22533,7 +22774,6 @@ var
   CurrentAngle: Single;
   AngleDelta: Single;
   RotAngle: Single;
-  MeshTranslation, MeshRotationDeg, MeshScale: TVector3;
   CurDeltaX, CurDeltaY: Integer;
   CurPixelDelta: Single;
   PixelDelta: Single;
@@ -22541,6 +22781,9 @@ var
   NewScale: TVector3;
   CurrentScalePlaneVector: TVector3;
   StartLenSq: Single;
+  WorldAxis: TVector3;
+  ParentWorldMatrix: TMatrix4;
+  InitialRotationMatrix: TMatrix4;
 
   function WorldToScreen(const P: TVector3): TPoint;
   begin
@@ -22698,26 +22941,12 @@ begin
 
       if Abs(RotAngle) > 0.001 then
       begin
+        WorldAxis := GetGizmoAxisWorld(fDraggedAxis);
         if IsMeshEditModeActive then
-        begin
-          if GetMeshEditorTransformValues(MeshTranslation, MeshRotationDeg, MeshScale) then
-          begin
-            case fDraggedAxis of
-              0: MeshRotationDeg.X := MeshRotationDeg.X + RotAngle * 180.0 / Pi;
-              1: MeshRotationDeg.Y := MeshRotationDeg.Y + RotAngle * 180.0 / Pi;
-              2: MeshRotationDeg.Z := MeshRotationDeg.Z + RotAngle * 180.0 / Pi;
-            end;
-            SetMeshEditorTransformValues(MeshTranslation, MeshRotationDeg, MeshScale, False);
-          end;
-        end
+          RotateSelectedMeshAroundWorldAxis(WorldAxis, RotAngle)
         else if Assigned(fSelectedObject) then
         begin
-          case fDraggedAxis of
-            0: fSelectedObject.Rotation := fSelectedObject.Rotation + Vector3(RotAngle, 0, 0);
-            1: fSelectedObject.Rotation := fSelectedObject.Rotation + Vector3(0, RotAngle, 0);
-            2: fSelectedObject.Rotation := fSelectedObject.Rotation + Vector3(0, 0, RotAngle);
-          end;
-          fSelectedObject.NotifyChange;
+          RotateObjectAroundWorldAxis(fSelectedObject, WorldAxis, RotAngle);
           if Assigned(fSceneManager) then
             fSceneManager.Update;
         end;
@@ -22754,12 +22983,8 @@ begin
         else
           CurrentScalePlaneVector := fScalePlaneStartVector;
 
-        if (fDragAxisMask and 1) = 0 then
-          CurrentScalePlaneVector.X := 0;
-        if (fDragAxisMask and 2) = 0 then
-          CurrentScalePlaneVector.Y := 0;
-        if (fDragAxisMask and 4) = 0 then
-          CurrentScalePlaneVector.Z := 0;
+        CurrentScalePlaneVector := ConstrainVectorToGizmoAxes(
+          CurrentScalePlaneVector, fDragAxisMask);
 
         StartLenSq := fScalePlaneStartVector.Dot(fScalePlaneStartVector);
         if StartLenSq > 0.000001 then
@@ -22776,19 +23001,29 @@ begin
       if Factor < 0.01 then
         Factor := 0.01;
 
-      NewScale := fInitialScale;
-      if (fDragAxisMask and 1) <> 0 then
-        NewScale.X := fInitialScale.X * Factor;
-      if (fDragAxisMask and 2) <> 0 then
-        NewScale.Y := fInitialScale.Y * Factor;
-      if (fDragAxisMask and 4) <> 0 then
-        NewScale.Z := fInitialScale.Z * Factor;
-
       if IsMeshEditModeActive then
+      begin
+        ParentWorldMatrix := fSelectedObject.WorldMatrix;
+        InitialRotationMatrix := MeshRotationMatrix(Vector3(
+          DegToRad(fMeshDragStartRotationDeg.X),
+          DegToRad(fMeshDragStartRotationDeg.Y),
+          DegToRad(fMeshDragStartRotationDeg.Z)));
+        NewScale := CalculateWorldSpaceScale(fScaleDragStartWorldMatrix,
+          ParentWorldMatrix, InitialRotationMatrix, fInitialScale,
+          fDragAxisMask, Factor);
         SetMeshEditorTransformValues(fMeshDragStartTranslation,
-          fMeshDragStartRotationDeg, NewScale, False)
+          fMeshDragStartRotationDeg, NewScale, False);
+      end
       else if Assigned(fSelectedObject) then
       begin
+        if fSelectedObject.Parent <> nil then
+          ParentWorldMatrix := fSelectedObject.Parent.WorldMatrix
+        else
+          ParentWorldMatrix := TMatrix4.Identity;
+        InitialRotationMatrix := fInitialOrientation.ToMatrix;
+        NewScale := CalculateWorldSpaceScale(fScaleDragStartWorldMatrix,
+          ParentWorldMatrix, InitialRotationMatrix, fInitialScale,
+          fDragAxisMask, Factor);
         fSelectedObject.Scale := NewScale;
         fSelectedObject.NotifyChange;
         if Assigned(fSceneManager) then

@@ -817,10 +817,29 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
 - function MousePlaneHit(PlanePoint: TVector3; PlaneNormal: TVector3): Boolean                         - True if the current mouse ray intersects the plane.
 - function MousePlanePoint(PlanePoint: TVector3; PlaneNormal: TVector3): TVector3                      - World-space plane intersection point for the current mouse ray, or Vector3(0) if there is no hit.
 - function ScreenPlaneHit(X: Float; Y: Float; PlanePoint: TVector3; PlaneNormal: TVector3): Boolean    - True if the screen/client pixel ray intersects the plane.
-- function ScreenPlanePoint(X: Float; Y: Float; PlanePoint: TVector3; PlaneNormal: TVector3): TVector3 - World-space plane intersection point for the screen/client pixel ray, or Vector3(0) if there is no hit.
+- function ScreenPlanePoint(X: Float; Y: Float; PlanePoint: TVector3; PlaneNormal: TVector3): TVector3  - World-space plane intersection point for the screen/client pixel ray, or Vector3(0) if there is no hit.
 - function HeightFieldLocalHeight(HeightField: Integer; LocalX: Float; LocalZ: Float): Float           - Interpolated local-space height for a THeightFieldMesh handle.
 - function HeightFieldWorldPoint(HeightField: Integer; WorldPoint: TVector3): TVector3                 - Projects WorldPoint onto the height field using the mesh transform and interpolated height.
 - function HeightFieldWorldHeight(HeightField: Integer; WorldPoint: TVector3): Float                   - World Y value of HeightFieldWorldPoint.
+- function HeightFieldBoolean(HeightField: Integer; Name: String): Boolean
+- procedure HeightFieldSetBoolean(HeightField: Integer; Name: String; Value: Boolean)
+- function HeightFieldInteger(HeightField: Integer; Name: String): Integer
+- procedure HeightFieldSetInteger(HeightField: Integer; Name: String; Value: Integer)
+- function HeightFieldFloat(HeightField: Integer; Name: String): Float
+- procedure HeightFieldSetFloat(HeightField: Integer; Name: String; Value: Float)
+- function HeightFieldVector3(HeightField: Integer; Name: String): TVector3
+- procedure HeightFieldSetVector3(HeightField: Integer; Name: String; Value: TVector3)
+- function HeightFieldString(HeightField: Integer; Name: String): String
+- procedure HeightFieldSetString(HeightField: Integer; Name: String; Value: String)
+- function HeightFieldHeightAtSample(HeightField: Integer; X: Integer; Z: Integer): Float
+- function HeightFieldNormalAtSample(HeightField: Integer; X: Integer; Z: Integer): TVector3
+- procedure HeightFieldUpsample(HeightField: Integer; Factor: Integer)
+- procedure HeightFieldRebuild(HeightField: Integer)
+  - Boolean names: LODEnabled.
+  - Integer names: TileSize, LODCount; read-only HeightMapWidth, HeightMapDepth.
+  - Float names: Width, Depth, HeightScale, UVScale, LODDistance.
+  - TVector3 names: LODCameraPosition.
+  - String names: SourceFile. Changing SourceFile records the source path; create a new height field to load different height data.
 - function MouseHeightFieldHit(HeightField: Integer): Boolean                                          - True if the current mouse ray intersects the height field mesh.
 - function MouseHeightFieldPoint(HeightField: Integer): TVector3                                       - World-space height field intersection point under the current mouse, or Vector3(0) if there is no hit.
 - function MouseHeightFieldLocalPoint(HeightField: Integer): TVector3                                  - Local-space height field intersection point under the current mouse, or Vector3(0) if there is no hit.
@@ -893,13 +912,21 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
 - function ObjectHasCamera(Obj: Integer): Boolean
 - function ObjectHasParticles(Obj: Integer): Boolean
 - function ObjectHasBillboards(Obj: Integer): Boolean
+- function ObjectHasAnimatedSprites(Obj: Integer): Boolean
 - function ObjectHasAudio(Obj: Integer): Boolean
+- function ObjectIsInstance(Obj: Integer): Boolean
+- function ObjectInstanceSource(Obj: Integer): Integer
+- function ObjectCanInstanceFrom(Obj: Integer; Source: Integer): Boolean
+- procedure ObjectMakeInstanceOf(Obj: Integer; Source: Integer)
+- procedure ObjectMakeUniqueFromInstance(Obj: Integer)
 - function ObjectMeshCount(Obj: Integer): Integer
 - function ObjectMesh(Obj: Integer; Index: Integer): Integer
 - function ObjectMeshObject(Obj: Integer; Index: Integer): TMesh
 - function ObjectAddMeshFile(Obj: Integer; FileName: String): Integer
 - function ObjectAddMeshFileObject(Obj: Integer; FileName: String): TMesh
 - function ObjectAddPlane(Obj: Integer; Width: Float; Depth: Float; WidthSegments: Integer; DepthSegments: Integer; Name: String): Integer
+- function ObjectAddWaterPlane(Obj: Integer; Width: Float; Depth: Float; WidthSegments: Integer; DepthSegments: Integer; Name: String): Integer
+- function ObjectAddHeightFieldFromFile(Obj: Integer; FileName: String; Width: Float; Depth: Float; HeightScale: Float; UVScale: Float; Name: String): Integer
 - function ObjectAddGrassCrossPlanes(Obj: Integer; Width: Float; Height: Float; PlaneCount: Integer; Name: String): Integer
 - function ObjectAddCube(Obj: Integer; Width: Float; Height: Float; Depth: Float; WidthStacks: Integer; HeightStacks: Integer; DepthStacks: Integer; Name: String): Integer
 - function ObjectAddSphere(Obj: Integer; Radius: Float; StackCount: Integer; SliceCount: Integer; Name: String): Integer
@@ -958,6 +985,8 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
 - procedure MeshSetAlwaysOnTop(Mesh: Integer; Value: Boolean)
 - function MeshTag(Mesh: Integer): Integer
 - procedure MeshSetTag(Mesh: Integer; Value: Integer)
+- function MeshTypeHeightField(): Integer
+- function MeshTypeWater(): Integer
 - function MeshTypeGrass(): Integer
 - function MeshType(Mesh: Integer): Integer
 - function MeshVertexCount(Mesh: Integer): Integer
@@ -973,6 +1002,16 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
 - function MeshApplyTransform(Mesh: Integer; Translation: TVector3; Rotation: TVector3; Scale: TVector3): Boolean
 - procedure MeshScaleUVs(Mesh: Integer; ScaleU: Float; ScaleV: Float)
 - procedure MeshRecomputeBoundingBox(Mesh: Integer)
+- function WaterPlaneInteger(Water: Integer; Name: String): Integer
+- procedure WaterPlaneSetInteger(Water: Integer; Name: String; Value: Integer)
+- function WaterPlaneFloat(Water: Integer; Name: String): Float
+- procedure WaterPlaneSetFloat(Water: Integer; Name: String; Value: Float)
+- function WaterPlaneVector4(Water: Integer; Name: String): TVector4
+- procedure WaterPlaneSetVector4(Water: Integer; Name: String; Value: TVector4)
+- procedure WaterPlaneRebuild(Water: Integer)
+  - Integer names: WidthSegments, DepthSegments.
+  - Float names: Width, Depth, ReflectionStrength, WaveScale, WaveSpeed, WaveStrength, FresnelPower, Alpha, FoamIntensity, ShoreFoamDistance, ShoreFoamFeather, ShoreLineSmoothness, FoamNoiseScale, CrestFoamThreshold, CrestFoamIntensity.
+  - TVector4 names: TintColor, DeepColor, FoamColor.
 - function ObjectParticleSystemCount(Obj: Integer): Integer
 - function ObjectParticleSystem(Obj: Integer; Index: Integer): Integer
 - function ObjectCreateParticleSystem(Obj: Integer): Integer
@@ -1018,6 +1057,30 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
 - procedure BillboardSetVector4(Billboard: Integer; Name: String; Value: TVector4)
 - function BillboardString(Billboard: Integer; Name: String): String
 - procedure BillboardSetString(Billboard: Integer; Name: String; Value: String)
+- function ObjectAnimatedSpriteCount(Obj: Integer): Integer
+- function ObjectAnimatedSprite(Obj: Integer; Index: Integer): Integer
+- function ObjectCreateAnimatedSprite(Obj: Integer): Integer
+- procedure ObjectRemoveAnimatedSprite(Obj: Integer; Index: Integer)
+- function AnimatedSpriteBlendAlpha(): Integer
+- function AnimatedSpriteBlendAdditive(): Integer
+- function AnimatedSpriteLoadTexture(Sprite: Integer; FileName: String): Boolean
+- procedure AnimatedSpriteRestart(Sprite: Integer)
+- function AnimatedSpriteBoolean(Sprite: Integer; Name: String): Boolean
+- procedure AnimatedSpriteSetBoolean(Sprite: Integer; Name: String; Value: Boolean)
+- function AnimatedSpriteInteger(Sprite: Integer; Name: String): Integer
+- procedure AnimatedSpriteSetInteger(Sprite: Integer; Name: String; Value: Integer)
+- function AnimatedSpriteFloat(Sprite: Integer; Name: String): Float
+- procedure AnimatedSpriteSetFloat(Sprite: Integer; Name: String; Value: Float)
+- function AnimatedSpriteVector3(Sprite: Integer; Name: String): TVector3
+- procedure AnimatedSpriteSetVector3(Sprite: Integer; Name: String; Value: TVector3)
+- function AnimatedSpriteVector4(Sprite: Integer; Name: String): TVector4
+- procedure AnimatedSpriteSetVector4(Sprite: Integer; Name: String; Value: TVector4)
+- function AnimatedSpriteString(Sprite: Integer; Name: String): String
+- procedure AnimatedSpriteSetString(Sprite: Integer; Name: String; Value: String)
+  - Boolean names: Enabled, Loop, Playing.
+  - Integer names: BlendMode, CurrentFrameIndex, GridColumns, GridRows, FirstFrame, FrameCount; read-only GridFrameCapacity, CurrentSheetFrameIndex, TextureID, TextureWidth, TextureHeight.
+  - Float names: Width, Height, Rotation, AlphaCutoff, FrameRate.
+  - TVector3 names: Offset. TVector4 names: Color. String names: Name, TexturePath.
 - function ObjectAudioEmitterCount(Obj: Integer): Integer
 - function ObjectAudioEmitter(Obj: Integer; Index: Integer): Integer
 - function ObjectCreateAudioEmitter(Obj: Integer): Integer
@@ -1127,6 +1190,34 @@ Generated from Engine.Scripting.pas, Engine.Gui.Scripting.pas, and DWS.FastMath.
 - procedure RendererSetShadowDistance(Distance: Float)
 - procedure RendererSetShadowArea(Area: Float)
 - procedure RendererSetShadowMapSize(Size: Integer)
+- procedure RendererResetPostEffects()
+- function RendererToneMappingLinear(): Integer
+- function RendererToneMappingExponential(): Integer
+- function RendererToneMappingReinhard(): Integer
+- function RendererToneMappingUncharted2(): Integer
+- function RendererToneMappingMGSV(): Integer
+- function RendererToneMappingUchimura(): Integer
+- function RendererToneMappingFilmic(): Integer
+- function RendererToneMappingACES(): Integer
+- function RendererToneMappingPBRNeutral(): Integer
+- function RendererToneMappingFlim(): Integer
+- function RendererToneMappingAGX(): Integer
+- function RendererBoolean(Name: String): Boolean
+- procedure RendererSetBoolean(Name: String; Value: Boolean)
+- function RendererInteger(Name: String): Integer
+- procedure RendererSetInteger(Name: String; Value: Integer)
+- function RendererFloat(Name: String): Float
+- procedure RendererSetFloat(Name: String; Value: Float)
+- function RendererVector3(Name: String): TVector3
+- procedure RendererSetVector3(Name: String; Value: TVector3)
+- function RendererVector4(Name: String): TVector4
+- procedure RendererSetVector4(Name: String; Value: TVector4)
+  - Boolean names: AntialiasingEnabled, VSyncEnabled, FrustumCullingEnabled, FogEnabled, ShadowEnabled, ShadowAutoFit, WaterReflectionEnabled, HDREnabled, GodRaysEnabled, EmptyObjectMarkersEnabled, SelectedBoundingBoxEnabled.
+  - Read-only Boolean names: SwapIntervalSupported, RenderingWaterReflection, SceneClipPlaneEnabled, HDRPostProcessActive.
+  - Integer names: SwapInterval, ToneMappingMode, GodRaySamples. Read-only: FPS, TriangleCount, AntialiasingSamples, ShadowMapCount, ShadowDrawCount.
+  - Float names: FogDensity, FogStart, FogEnd, ShadowDistance, ShadowArea, ShadowFitPadding, ToneExposure, ToneGamma, GodRayDensity, GodRayExposure, GodRayDecay, GodRayWeight, GodRayIntensity, EmptyObjectMarkerSize.
+  - TVector3 names: ShadowTarget.
+  - TVector4 names: BackgroundColor, FogColor, EmptyObjectMarkerColor, SelectedBoundingBoxColor. SceneClipPlane is read-only.
 - procedure SkyDomeResetDefaults()
 - function SkyDomeBoolean(Name: String): Boolean
 - procedure SkyDomeSetBoolean(Name: String; Value: Boolean)

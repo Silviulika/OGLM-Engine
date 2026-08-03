@@ -803,7 +803,15 @@ end;
 procedure TMaterialLibrary.SetMat(aIndex: Integer; aMaterial: TMaterial);
 begin
   if (aIndex >= 0) and (aIndex <= Length(fMaterialList) -1) then
+  begin
+    if fMaterialList[aIndex] = aMaterial then
+      Exit;
+
+    fMaterialList[aIndex].Free;
     fMaterialList[aIndex] := aMaterial;
+    if Assigned(aMaterial) then
+      aMaterial.fMaterialID := aIndex;
+  end;
 end;
 
 function TMaterialLibrary.GetCount: Integer;

@@ -112,6 +112,7 @@ type
     Width: Integer;
     Height: Integer;
     RefCount: Integer;
+    destructor Destroy; override;
   end;
 
 var
@@ -124,6 +125,17 @@ begin
   if GBillboardTextureCache = nil then
     GBillboardTextureCache := TObjectDictionary<string, TBillboardTextureCacheEntry>.Create([doOwnsValues]);
   Result := GBillboardTextureCache;
+end;
+
+destructor TBillboardTextureCacheEntry.Destroy;
+begin
+  if TextureID <> 0 then
+  begin
+    glDeleteTextures(1, @TextureID);
+    TextureID := 0;
+  end;
+
+  inherited Destroy;
 end;
 
 procedure WriteStringToStream(Stream: TStream; const Value: string);
@@ -740,7 +752,10 @@ begin
       begin
         TextureID := Entry.TextureID;
         if TextureID <> 0 then
+        begin
           glDeleteTextures(1, @TextureID);
+          Entry.TextureID := 0;
+        end;
         GBillboardTextureCache.Remove(FTextureKey);
       end;
       ReleasedFromCache := True;

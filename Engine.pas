@@ -728,6 +728,8 @@ begin
     FPhysicsWorld.Clear;
   if Assigned(FAudioEngine) then
     FAudioEngine.ClearSounds;
+  if Assigned(FScriptManager) then
+    FScriptManager.Clear;
   if Assigned(FGuiManager) then
     FGuiManager.Clear;
 
@@ -2133,9 +2135,8 @@ begin
 
   Stream := TFileStream.Create(ResolvedFileName, fmOpenRead or fmShareDenyWrite);
   try
-    FSceneManager.LoadFromStream(Stream);
-    FRoot := FSceneManager.Root;
-
+    // Release runtime objects that still point at the current scene before
+    // TSceneManager replaces and frees the old root.
     if Assigned(FPhysicsWorld) then
       FPhysicsWorld.Clear;
     if Assigned(FAudioEngine) then
@@ -2144,6 +2145,9 @@ begin
       FScriptManager.Clear;
     if Assigned(FGuiManager) then
       FGuiManager.Clear;
+
+    FSceneManager.LoadFromStream(Stream);
+    FRoot := FSceneManager.Root;
 
     if FPhysicsWorld = nil then
       FPhysicsWorld := TPhysicsWorld.Create(FRoot)

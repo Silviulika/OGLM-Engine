@@ -144,6 +144,7 @@ type
     Width: Integer;
     Height: Integer;
     RefCount: Integer;
+    destructor Destroy; override;
   end;
 
 var
@@ -156,6 +157,17 @@ begin
   if GAnimatedSpriteTextureCache = nil then
     GAnimatedSpriteTextureCache := TObjectDictionary<string, TAnimatedSpriteTextureCacheEntry>.Create([doOwnsValues]);
   Result := GAnimatedSpriteTextureCache;
+end;
+
+destructor TAnimatedSpriteTextureCacheEntry.Destroy;
+begin
+  if TextureID <> 0 then
+  begin
+    glDeleteTextures(1, @TextureID);
+    TextureID := 0;
+  end;
+
+  inherited Destroy;
 end;
 
 procedure WriteStringToStream(Stream: TStream; const Value: string);
@@ -966,7 +978,10 @@ begin
       begin
         TextureID := Entry.TextureID;
         if TextureID <> 0 then
+        begin
           glDeleteTextures(1, @TextureID);
+          Entry.TextureID := 0;
+        end;
         GAnimatedSpriteTextureCache.Remove(FTextureKey);
       end;
       ReleasedFromCache := True;

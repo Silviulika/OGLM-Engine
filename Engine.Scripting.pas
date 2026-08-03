@@ -12,6 +12,7 @@ uses
   Managers.Scene, Managers.Material,
   Renderer.Camera, Renderer.Light, Renderer.Mesh, Renderer.Mesh.Factory,
   Renderer.Renderer, Renderer.SkyDome, Renderer.Shader, Renderer.Particles, Renderer.Billboards,
+  Renderer.AnimatedSprites,
   Engine.Types, Engine.Audio, Engine.Physics, Engine.Animation, Engine.Keyboard,
   Engine.Mouse, Engine.Wind, Engine.Gui, Engine.Gui.Manager,
   Engine.Gui.Scripting;
@@ -144,6 +145,7 @@ type
     function ParticleSystemFromHandle(const AHandle: Integer): TParticleSystem;
     function OwnerOfParticleSystem(AParticleSystem: TParticleSystem): TSceneObject;
     function BillboardFromHandle(const AHandle: Integer): TBillboard;
+    function AnimatedSpriteFromHandle(const AHandle: Integer): TAnimatedSprite;
     function AudioEmitterFromHandle(const AHandle: Integer): TSceneAudioEmitter;
     function PhysicsBodyFromHandle(const AHandle: Integer): TPhysicsBody;
 
@@ -226,6 +228,8 @@ type
 
     procedure Clear;
     procedure DeleteScript(const AIndex: Integer);
+    procedure DetachSceneObject(AObject: TSceneObject;
+      ARemoveTargetScripts: Boolean = False);
     function FindByID(const AID: string): TEngineScriptAsset;
     function FindByName(const AName: string): TEngineScriptAsset;
 
@@ -298,6 +302,7 @@ type
     function WorldPositionOf(AObject: TSceneObject): TVector3;
     function DefaultObjectSpawnPosition(AParent: TSceneObject): TVector3;
     function RequireHeightFieldMesh(const AHandle: Integer): THeightFieldMesh;
+    function RequireWaterPlaneMesh(const AHandle: Integer): TWaterPlaneMesh;
     procedure ReleaseAudioEmitterRuntime(AEmitter: TSceneAudioEmitter);
     procedure ReleaseSceneObjectAudio(AObject: TSceneObject);
     procedure DestroySceneObjectForScript(AObject: TSceneObject);
@@ -384,6 +389,20 @@ type
     procedure DoHeightFieldLocalHeight(Info: TProgramInfo);
     procedure DoHeightFieldWorldPoint(Info: TProgramInfo);
     procedure DoHeightFieldWorldHeight(Info: TProgramInfo);
+    procedure DoHeightFieldBoolean(Info: TProgramInfo);
+    procedure DoHeightFieldSetBoolean(Info: TProgramInfo);
+    procedure DoHeightFieldInteger(Info: TProgramInfo);
+    procedure DoHeightFieldSetInteger(Info: TProgramInfo);
+    procedure DoHeightFieldFloat(Info: TProgramInfo);
+    procedure DoHeightFieldSetFloat(Info: TProgramInfo);
+    procedure DoHeightFieldVector3(Info: TProgramInfo);
+    procedure DoHeightFieldSetVector3(Info: TProgramInfo);
+    procedure DoHeightFieldString(Info: TProgramInfo);
+    procedure DoHeightFieldSetString(Info: TProgramInfo);
+    procedure DoHeightFieldHeightAtSample(Info: TProgramInfo);
+    procedure DoHeightFieldNormalAtSample(Info: TProgramInfo);
+    procedure DoHeightFieldUpsample(Info: TProgramInfo);
+    procedure DoHeightFieldRebuild(Info: TProgramInfo);
     procedure DoMouseHeightFieldHit(Info: TProgramInfo);
     procedure DoMouseHeightFieldPoint(Info: TProgramInfo);
     procedure DoMouseHeightFieldLocalPoint(Info: TProgramInfo);
@@ -458,7 +477,13 @@ type
     procedure DoObjectHasCamera(Info: TProgramInfo);
     procedure DoObjectHasParticles(Info: TProgramInfo);
     procedure DoObjectHasBillboards(Info: TProgramInfo);
+    procedure DoObjectHasAnimatedSprites(Info: TProgramInfo);
     procedure DoObjectHasAudio(Info: TProgramInfo);
+    procedure DoObjectIsInstance(Info: TProgramInfo);
+    procedure DoObjectInstanceSource(Info: TProgramInfo);
+    procedure DoObjectCanInstanceFrom(Info: TProgramInfo);
+    procedure DoObjectMakeInstanceOf(Info: TProgramInfo);
+    procedure DoObjectMakeUniqueFromInstance(Info: TProgramInfo);
 
     procedure DoObjectMeshCount(Info: TProgramInfo);
     procedure DoObjectMesh(Info: TProgramInfo);
@@ -466,6 +491,8 @@ type
     procedure DoObjectAddMeshFile(Info: TProgramInfo);
     procedure DoObjectAddMeshFileObject(Info: TProgramInfo);
     procedure DoObjectAddPlane(Info: TProgramInfo);
+    procedure DoObjectAddWaterPlane(Info: TProgramInfo);
+    procedure DoObjectAddHeightFieldFromFile(Info: TProgramInfo);
     procedure DoObjectAddGrassCrossPlanes(Info: TProgramInfo);
     procedure DoObjectAddCube(Info: TProgramInfo);
     procedure DoObjectAddSphere(Info: TProgramInfo);
@@ -525,6 +552,8 @@ type
     procedure DoMeshSetAlwaysOnTop(Info: TProgramInfo);
     procedure DoMeshTag(Info: TProgramInfo);
     procedure DoMeshSetTag(Info: TProgramInfo);
+    procedure DoMeshTypeHeightField(Info: TProgramInfo);
+    procedure DoMeshTypeWater(Info: TProgramInfo);
     procedure DoMeshTypeGrass(Info: TProgramInfo);
     procedure DoMeshType(Info: TProgramInfo);
     procedure DoMeshVertexCount(Info: TProgramInfo);
@@ -540,6 +569,13 @@ type
     procedure DoMeshApplyTransform(Info: TProgramInfo);
     procedure DoMeshScaleUVs(Info: TProgramInfo);
     procedure DoMeshRecomputeBoundingBox(Info: TProgramInfo);
+    procedure DoWaterPlaneInteger(Info: TProgramInfo);
+    procedure DoWaterPlaneSetInteger(Info: TProgramInfo);
+    procedure DoWaterPlaneFloat(Info: TProgramInfo);
+    procedure DoWaterPlaneSetFloat(Info: TProgramInfo);
+    procedure DoWaterPlaneVector4(Info: TProgramInfo);
+    procedure DoWaterPlaneSetVector4(Info: TProgramInfo);
+    procedure DoWaterPlaneRebuild(Info: TProgramInfo);
 
     procedure DoObjectParticleSystemCount(Info: TProgramInfo);
     procedure DoObjectParticleSystem(Info: TProgramInfo);
@@ -587,6 +623,27 @@ type
     procedure DoBillboardSetVector4(Info: TProgramInfo);
     procedure DoBillboardString(Info: TProgramInfo);
     procedure DoBillboardSetString(Info: TProgramInfo);
+
+    procedure DoObjectAnimatedSpriteCount(Info: TProgramInfo);
+    procedure DoObjectAnimatedSprite(Info: TProgramInfo);
+    procedure DoObjectCreateAnimatedSprite(Info: TProgramInfo);
+    procedure DoObjectRemoveAnimatedSprite(Info: TProgramInfo);
+    procedure DoAnimatedSpriteBlendAlpha(Info: TProgramInfo);
+    procedure DoAnimatedSpriteBlendAdditive(Info: TProgramInfo);
+    procedure DoAnimatedSpriteLoadTexture(Info: TProgramInfo);
+    procedure DoAnimatedSpriteRestart(Info: TProgramInfo);
+    procedure DoAnimatedSpriteBoolean(Info: TProgramInfo);
+    procedure DoAnimatedSpriteSetBoolean(Info: TProgramInfo);
+    procedure DoAnimatedSpriteInteger(Info: TProgramInfo);
+    procedure DoAnimatedSpriteSetInteger(Info: TProgramInfo);
+    procedure DoAnimatedSpriteFloat(Info: TProgramInfo);
+    procedure DoAnimatedSpriteSetFloat(Info: TProgramInfo);
+    procedure DoAnimatedSpriteVector3(Info: TProgramInfo);
+    procedure DoAnimatedSpriteSetVector3(Info: TProgramInfo);
+    procedure DoAnimatedSpriteVector4(Info: TProgramInfo);
+    procedure DoAnimatedSpriteSetVector4(Info: TProgramInfo);
+    procedure DoAnimatedSpriteString(Info: TProgramInfo);
+    procedure DoAnimatedSpriteSetString(Info: TProgramInfo);
 
     procedure DoObjectAudioEmitterCount(Info: TProgramInfo);
     procedure DoObjectAudioEmitter(Info: TProgramInfo);
@@ -702,6 +759,28 @@ type
     procedure DoRendererSetShadowDistance(Info: TProgramInfo);
     procedure DoRendererSetShadowArea(Info: TProgramInfo);
     procedure DoRendererSetShadowMapSize(Info: TProgramInfo);
+    procedure DoRendererResetPostEffects(Info: TProgramInfo);
+    procedure DoRendererToneMappingLinear(Info: TProgramInfo);
+    procedure DoRendererToneMappingExponential(Info: TProgramInfo);
+    procedure DoRendererToneMappingReinhard(Info: TProgramInfo);
+    procedure DoRendererToneMappingUncharted2(Info: TProgramInfo);
+    procedure DoRendererToneMappingMGSV(Info: TProgramInfo);
+    procedure DoRendererToneMappingUchimura(Info: TProgramInfo);
+    procedure DoRendererToneMappingFilmic(Info: TProgramInfo);
+    procedure DoRendererToneMappingACES(Info: TProgramInfo);
+    procedure DoRendererToneMappingPBRNeutral(Info: TProgramInfo);
+    procedure DoRendererToneMappingFlim(Info: TProgramInfo);
+    procedure DoRendererToneMappingAGX(Info: TProgramInfo);
+    procedure DoRendererBoolean(Info: TProgramInfo);
+    procedure DoRendererSetBoolean(Info: TProgramInfo);
+    procedure DoRendererInteger(Info: TProgramInfo);
+    procedure DoRendererSetInteger(Info: TProgramInfo);
+    procedure DoRendererFloat(Info: TProgramInfo);
+    procedure DoRendererSetFloat(Info: TProgramInfo);
+    procedure DoRendererVector3(Info: TProgramInfo);
+    procedure DoRendererSetVector3(Info: TProgramInfo);
+    procedure DoRendererVector4(Info: TProgramInfo);
+    procedure DoRendererSetVector4(Info: TProgramInfo);
     procedure DoSkyDomeResetDefaults(Info: TProgramInfo);
     procedure DoSkyDomeBoolean(Info: TProgramInfo);
     procedure DoSkyDomeSetBoolean(Info: TProgramInfo);
@@ -1006,6 +1085,7 @@ const
   SCRIPT_TEXT_SCRIPT_BEGIN = '--- Script ---';
   SCRIPT_TEXT_SCRIPT_END = '--- End Script ---';
   SCRIPT_TEXT_SOURCE_BEGIN = '--- Source ---';
+  MAX_SCRIPT_PROGRAM_CACHE_ENTRIES = 64;
   SCRIPT_SOURCE_KEY: array[0..15] of Byte =
     ($4F, $47, $4C, $2D, $4D, $45, $2D, $53,
      $43, $52, $49, $50, $54, $2D, $30, $33);
@@ -1915,6 +1995,73 @@ begin
   ResetRuntimeState;
 end;
 
+procedure TEngineScriptManager.DetachSceneObject(AObject: TSceneObject;
+  ARemoveTargetScripts: Boolean);
+var
+  I: Integer;
+  Script: TEngineScriptAsset;
+  ScriptTarget: TSceneObject;
+  TargetName: string;
+  TargetPrefix: string;
+  DeleteAsset: Boolean;
+  RemovedAsset: Boolean;
+begin
+  if AObject = nil then
+    Exit;
+
+  TargetName := TargetNameFor(stkSceneObject, AObject);
+  if TargetName <> '' then
+    TargetPrefix := TargetName + '/'
+  else
+    TargetPrefix := '';
+  RemovedAsset := False;
+
+  ResetSceneObjectScriptRuntime(AObject);
+
+  for I := FScripts.Count - 1 downto 0 do
+  begin
+    Script := FScripts[I];
+    if (Script = nil) or (Script.TargetKind <> stkSceneObject) then
+      Continue;
+
+    DeleteAsset := False;
+    if Script.RuntimeTarget is TSceneObject then
+    begin
+      ScriptTarget := TSceneObject(Script.RuntimeTarget);
+      if (ScriptTarget = AObject) or ScriptTarget.IsDescendantOf(AObject) then
+      begin
+        Script.RuntimeTarget := nil;
+        DeleteAsset := ARemoveTargetScripts and (Script.TargetName <> '');
+      end;
+    end;
+
+    if (not DeleteAsset) and ARemoveTargetScripts and
+       (Script.TargetName <> '') and (TargetName <> '') then
+    begin
+      DeleteAsset := SameText(Script.TargetName, TargetName) or
+        ((TargetPrefix <> '') and
+         SameText(Copy(Script.TargetName, 1, Length(TargetPrefix)), TargetPrefix));
+    end;
+
+    if DeleteAsset then
+    begin
+      FScripts.Delete(I);
+      RemovedAsset := True;
+    end;
+  end;
+
+  if FContext.CurrentTarget is TSceneObject then
+  begin
+    ScriptTarget := TSceneObject(FContext.CurrentTarget);
+    if (ScriptTarget = AObject) or ScriptTarget.IsDescendantOf(AObject) then
+      FContext.CurrentTarget := nil;
+  end;
+
+  FContext.ClearHandles;
+  if RemovedAsset then
+    ClearProgramCache;
+end;
+
 function TEngineScriptManager.FindByID(const AID: string): TEngineScriptAsset;
 var
   Script: TEngineScriptAsset;
@@ -2279,6 +2426,12 @@ begin
   // source string is a safe cache key for both normal and lifecycle execution.
   if FProgramCache.TryGetValue(AProgramSource, AProgram) then
     Exit(TEngineScriptExecutionResult.Ok);
+
+  // Script editing/reloading can produce many unique generated source strings
+  // in one editor session. Keep the cache bounded so old compiled programs
+  // cannot accumulate indefinitely.
+  if FProgramCache.Count >= MAX_SCRIPT_PROGRAM_CACHE_ENTRIES then
+    ClearProgramCache;
 
   AProgram := FDWS.Compile(AProgramSource);
   if AProgram.Msgs.HasErrors then
@@ -2751,6 +2904,9 @@ begin
   for I := 0 to AObject.BillboardCount - 1 do
     Forget(AObject.BillboardItem[I]);
 
+  for I := 0 to AObject.AnimatedSpriteCount - 1 do
+    Forget(AObject.AnimatedSpriteItem[I]);
+
   for I := 0 to AObject.AudioEmitterCount - 1 do
     Forget(AObject.AudioEmitterItem[I]);
 
@@ -2878,6 +3034,17 @@ begin
     Exit(TBillboard(Obj));
 
   raise Exception.CreateFmt('Invalid billboard handle: %d', [AHandle]);
+end;
+
+function TEngineScriptContext.AnimatedSpriteFromHandle(
+  const AHandle: Integer): TAnimatedSprite;
+var
+  Obj: TObject;
+begin
+  if FObjects.TryGetValue(AHandle, Obj) and (Obj is TAnimatedSprite) then
+    Exit(TAnimatedSprite(Obj));
+
+  raise Exception.CreateFmt('Invalid animated sprite handle: %d', [AHandle]);
 end;
 
 function TEngineScriptContext.AudioEmitterFromHandle(
@@ -3795,6 +3962,18 @@ begin
   raise Exception.CreateFmt('Mesh handle %d is not a height field mesh.', [AHandle]);
 end;
 
+function TdwsEngineUnit.RequireWaterPlaneMesh(
+  const AHandle: Integer): TWaterPlaneMesh;
+var
+  Mesh: TMesh;
+begin
+  Mesh := FContext.MeshFromHandle(AHandle);
+  if Mesh is TWaterPlaneMesh then
+    Exit(TWaterPlaneMesh(Mesh));
+
+  raise Exception.CreateFmt('Mesh handle %d is not a water plane mesh.', [AHandle]);
+end;
+
 procedure TdwsEngineUnit.ReleaseAudioEmitterRuntime(AEmitter: TSceneAudioEmitter);
 var
   Sound: TBassSound;
@@ -4676,6 +4855,196 @@ begin
   Info.ResultAsFloat := WorldPoint.Y;
 end;
 
+procedure TdwsEngineUnit.DoHeightFieldBoolean(Info: TProgramInfo);
+var
+  HeightField: THeightFieldMesh;
+  Name: string;
+begin
+  HeightField := RequireHeightFieldMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'LODEnabled') then
+    Info.ResultAsBoolean := HeightField.LODEnabled
+  else
+    raise Exception.CreateFmt('Unknown height field boolean property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoHeightFieldSetBoolean(Info: TProgramInfo);
+var
+  HeightField: THeightFieldMesh;
+  Name: string;
+begin
+  HeightField := RequireHeightFieldMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'LODEnabled') then
+    HeightField.LODEnabled := Info.ParamAsBoolean[2]
+  else
+    raise Exception.CreateFmt('Unknown writable height field boolean property: %s', [Name]);
+  NotifyMeshChanged(HeightField);
+end;
+
+procedure TdwsEngineUnit.DoHeightFieldInteger(Info: TProgramInfo);
+var
+  HeightField: THeightFieldMesh;
+  Name: string;
+begin
+  HeightField := RequireHeightFieldMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'TileSize') then
+    Info.ResultAsInteger := HeightField.TileSize
+  else if SameText(Name, 'LODCount') then
+    Info.ResultAsInteger := HeightField.LODCount
+  else if SameText(Name, 'HeightMapWidth') then
+    Info.ResultAsInteger := HeightField.HeightMapWidth
+  else if SameText(Name, 'HeightMapDepth') then
+    Info.ResultAsInteger := HeightField.HeightMapDepth
+  else
+    raise Exception.CreateFmt('Unknown height field integer property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoHeightFieldSetInteger(Info: TProgramInfo);
+var
+  HeightField: THeightFieldMesh;
+  Name: string;
+begin
+  HeightField := RequireHeightFieldMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'TileSize') then
+    HeightField.TileSize := Info.ParamAsInteger[2]
+  else if SameText(Name, 'LODCount') then
+    HeightField.LODCount := Info.ParamAsInteger[2]
+  else
+    raise Exception.CreateFmt('Unknown writable height field integer property: %s', [Name]);
+  NotifyMeshChanged(HeightField);
+end;
+
+procedure TdwsEngineUnit.DoHeightFieldFloat(Info: TProgramInfo);
+var
+  HeightField: THeightFieldMesh;
+  Name: string;
+begin
+  HeightField := RequireHeightFieldMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'Width') then
+    Info.ResultAsFloat := HeightField.Width
+  else if SameText(Name, 'Depth') then
+    Info.ResultAsFloat := HeightField.Depth
+  else if SameText(Name, 'HeightScale') then
+    Info.ResultAsFloat := HeightField.HeightScale
+  else if SameText(Name, 'UVScale') then
+    Info.ResultAsFloat := HeightField.UVScale
+  else if SameText(Name, 'LODDistance') then
+    Info.ResultAsFloat := HeightField.LODDistance
+  else
+    raise Exception.CreateFmt('Unknown height field float property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoHeightFieldSetFloat(Info: TProgramInfo);
+var
+  HeightField: THeightFieldMesh;
+  Name: string;
+  Value: Single;
+begin
+  HeightField := RequireHeightFieldMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  Value := Info.ParamAsFloat[2];
+  if SameText(Name, 'Width') then
+    HeightField.Width := Value
+  else if SameText(Name, 'Depth') then
+    HeightField.Depth := Value
+  else if SameText(Name, 'HeightScale') then
+    HeightField.HeightScale := Value
+  else if SameText(Name, 'UVScale') then
+    HeightField.UVScale := Value
+  else if SameText(Name, 'LODDistance') then
+    HeightField.LODDistance := Value
+  else
+    raise Exception.CreateFmt('Unknown writable height field float property: %s', [Name]);
+  NotifyMeshChanged(HeightField);
+end;
+
+procedure TdwsEngineUnit.DoHeightFieldVector3(Info: TProgramInfo);
+var
+  HeightField: THeightFieldMesh;
+  Name: string;
+begin
+  HeightField := RequireHeightFieldMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'LODCameraPosition') then
+    SetResultVector3(Info, HeightField.LODCameraPosition)
+  else
+    raise Exception.CreateFmt('Unknown height field TVector3 property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoHeightFieldSetVector3(Info: TProgramInfo);
+var
+  HeightField: THeightFieldMesh;
+  Name: string;
+begin
+  HeightField := RequireHeightFieldMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'LODCameraPosition') then
+    HeightField.LODCameraPosition := ParamAsVector3(Info, 2)
+  else
+    raise Exception.CreateFmt('Unknown writable height field TVector3 property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoHeightFieldString(Info: TProgramInfo);
+var
+  HeightField: THeightFieldMesh;
+  Name: string;
+begin
+  HeightField := RequireHeightFieldMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'SourceFile') then
+    Info.ResultAsString := HeightField.SourceFile
+  else
+    raise Exception.CreateFmt('Unknown height field string property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoHeightFieldSetString(Info: TProgramInfo);
+var
+  HeightField: THeightFieldMesh;
+  Name: string;
+begin
+  HeightField := RequireHeightFieldMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'SourceFile') then
+    HeightField.SourceFile := Info.ParamAsString[2]
+  else
+    raise Exception.CreateFmt('Unknown writable height field string property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoHeightFieldHeightAtSample(Info: TProgramInfo);
+begin
+  Info.ResultAsFloat := RequireHeightFieldMesh(Info.ParamAsInteger[0]).HeightAtSample(
+    Info.ParamAsInteger[1], Info.ParamAsInteger[2]);
+end;
+
+procedure TdwsEngineUnit.DoHeightFieldNormalAtSample(Info: TProgramInfo);
+begin
+  SetResultVector3(Info,
+    RequireHeightFieldMesh(Info.ParamAsInteger[0]).NormalAtSample(
+      Info.ParamAsInteger[1], Info.ParamAsInteger[2]));
+end;
+
+procedure TdwsEngineUnit.DoHeightFieldUpsample(Info: TProgramInfo);
+var
+  HeightField: THeightFieldMesh;
+begin
+  HeightField := RequireHeightFieldMesh(Info.ParamAsInteger[0]);
+  HeightField.UpsampleHeights(Info.ParamAsInteger[1]);
+  NotifyMeshChanged(HeightField, True);
+end;
+
+procedure TdwsEngineUnit.DoHeightFieldRebuild(Info: TProgramInfo);
+var
+  HeightField: THeightFieldMesh;
+begin
+  HeightField := RequireHeightFieldMesh(Info.ParamAsInteger[0]);
+  HeightField.RebuildGeometry;
+  NotifyMeshChanged(HeightField, True);
+end;
+
 procedure TdwsEngineUnit.DoMouseHeightFieldHit(Info: TProgramInfo);
 var
   WorldPoint, LocalPoint: TVector3;
@@ -5307,9 +5676,54 @@ begin
   Info.ResultAsBoolean := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]).HasBillboard;
 end;
 
+procedure TdwsEngineUnit.DoObjectHasAnimatedSprites(Info: TProgramInfo);
+begin
+  Info.ResultAsBoolean :=
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]).HasAnimatedSprite;
+end;
+
 procedure TdwsEngineUnit.DoObjectHasAudio(Info: TProgramInfo);
 begin
   Info.ResultAsBoolean := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]).HasAudio;
+end;
+
+procedure TdwsEngineUnit.DoObjectIsInstance(Info: TProgramInfo);
+begin
+  Info.ResultAsBoolean :=
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]).IsInstance;
+end;
+
+procedure TdwsEngineUnit.DoObjectInstanceSource(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := FContext.HandleOf(
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]).InstanceSource);
+end;
+
+procedure TdwsEngineUnit.DoObjectCanInstanceFrom(Info: TProgramInfo);
+begin
+  Info.ResultAsBoolean :=
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]).CanInstanceFrom(
+      FContext.SceneObjectFromHandle(Info.ParamAsInteger[1]));
+end;
+
+procedure TdwsEngineUnit.DoObjectMakeInstanceOf(Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+  I: Integer;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  if not Obj.CanInstanceFrom(
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[1])) then
+    raise Exception.Create('Object cannot be instanced from the requested source.');
+
+  for I := 0 to Obj.MeshList.Count - 1 do
+    FContext.Forget(Obj.MeshList.Item[I]);
+  Obj.MakeInstanceOf(FContext.SceneObjectFromHandle(Info.ParamAsInteger[1]));
+end;
+
+procedure TdwsEngineUnit.DoObjectMakeUniqueFromInstance(Info: TProgramInfo);
+begin
+  FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]).MakeUniqueFromInstance;
 end;
 
 procedure TdwsEngineUnit.DoObjectMeshCount(Info: TProgramInfo);
@@ -5351,6 +5765,29 @@ begin
     FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]),
     TMeshFactory.CreatePlane(Info.ParamAsFloat[1], Info.ParamAsFloat[2],
       Info.ParamAsInteger[3], Info.ParamAsInteger[4], Info.ParamAsString[5]));
+end;
+
+procedure TdwsEngineUnit.DoObjectAddWaterPlane(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := AddMeshToObject(
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]),
+    TMeshFactory.CreateWaterPlane(Info.ParamAsFloat[1], Info.ParamAsFloat[2],
+      Info.ParamAsInteger[3], Info.ParamAsInteger[4], Info.ParamAsString[5]));
+end;
+
+procedure TdwsEngineUnit.DoObjectAddHeightFieldFromFile(Info: TProgramInfo);
+var
+  Mesh: TMesh;
+begin
+  Mesh := TMeshFactory.CreateHeightFieldFromFile(Info.ParamAsString[1],
+    Info.ParamAsFloat[2], Info.ParamAsFloat[3], Info.ParamAsFloat[4],
+    Info.ParamAsFloat[5], Info.ParamAsString[6]);
+  if Mesh = nil then
+    raise Exception.CreateFmt('Height field image file was not found: %s',
+      [Info.ParamAsString[1]]);
+
+  Info.ResultAsInteger := AddMeshToObject(
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]), Mesh);
 end;
 
 procedure TdwsEngineUnit.DoObjectAddGrassCrossPlanes(Info: TProgramInfo);
@@ -7124,6 +7561,16 @@ begin
   NotifyMeshChanged(Mesh);
 end;
 
+procedure TdwsEngineUnit.DoMeshTypeHeightField(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(Engine.Types.mtHeightField);
+end;
+
+procedure TdwsEngineUnit.DoMeshTypeWater(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(Engine.Types.mtWater);
+end;
+
 procedure TdwsEngineUnit.DoMeshTypeGrass(Info: TProgramInfo);
 begin
   Info.ResultAsInteger := Ord(Engine.Types.mtGrass);
@@ -7220,6 +7667,134 @@ var
 begin
   Mesh := FContext.MeshFromHandle(Info.ParamAsInteger[0]);
   NotifyMeshChanged(Mesh, True);
+end;
+
+procedure TdwsEngineUnit.DoWaterPlaneInteger(Info: TProgramInfo);
+var
+  Water: TWaterPlaneMesh;
+  Name: string;
+begin
+  Water := RequireWaterPlaneMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'WidthSegments') then
+    Info.ResultAsInteger := Water.WidthSegments
+  else if SameText(Name, 'DepthSegments') then
+    Info.ResultAsInteger := Water.DepthSegments
+  else
+    raise Exception.CreateFmt('Unknown water plane integer property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoWaterPlaneSetInteger(Info: TProgramInfo);
+var
+  Water: TWaterPlaneMesh;
+  Name: string;
+begin
+  Water := RequireWaterPlaneMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'WidthSegments') then
+    Water.WidthSegments := Info.ParamAsInteger[2]
+  else if SameText(Name, 'DepthSegments') then
+    Water.DepthSegments := Info.ParamAsInteger[2]
+  else
+    raise Exception.CreateFmt('Unknown writable water plane integer property: %s', [Name]);
+  NotifyMeshChanged(Water, True);
+end;
+
+procedure TdwsEngineUnit.DoWaterPlaneFloat(Info: TProgramInfo);
+var
+  Water: TWaterPlaneMesh;
+  Name: string;
+begin
+  Water := RequireWaterPlaneMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'Width') then Info.ResultAsFloat := Water.Width
+  else if SameText(Name, 'Depth') then Info.ResultAsFloat := Water.Depth
+  else if SameText(Name, 'ReflectionStrength') then Info.ResultAsFloat := Water.ReflectionStrength
+  else if SameText(Name, 'WaveScale') then Info.ResultAsFloat := Water.WaveScale
+  else if SameText(Name, 'WaveSpeed') then Info.ResultAsFloat := Water.WaveSpeed
+  else if SameText(Name, 'WaveStrength') then Info.ResultAsFloat := Water.WaveStrength
+  else if SameText(Name, 'FresnelPower') then Info.ResultAsFloat := Water.FresnelPower
+  else if SameText(Name, 'Alpha') then Info.ResultAsFloat := Water.Alpha
+  else if SameText(Name, 'FoamIntensity') then Info.ResultAsFloat := Water.FoamIntensity
+  else if SameText(Name, 'ShoreFoamDistance') then Info.ResultAsFloat := Water.ShoreFoamDistance
+  else if SameText(Name, 'ShoreFoamFeather') then Info.ResultAsFloat := Water.ShoreFoamFeather
+  else if SameText(Name, 'ShoreLineSmoothness') then Info.ResultAsFloat := Water.ShoreLineSmoothness
+  else if SameText(Name, 'FoamNoiseScale') then Info.ResultAsFloat := Water.FoamNoiseScale
+  else if SameText(Name, 'CrestFoamThreshold') then Info.ResultAsFloat := Water.CrestFoamThreshold
+  else if SameText(Name, 'CrestFoamIntensity') then Info.ResultAsFloat := Water.CrestFoamIntensity
+  else
+    raise Exception.CreateFmt('Unknown water plane float property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoWaterPlaneSetFloat(Info: TProgramInfo);
+var
+  Water: TWaterPlaneMesh;
+  Name: string;
+  Value: Single;
+  GeometryChanged: Boolean;
+begin
+  Water := RequireWaterPlaneMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  Value := Info.ParamAsFloat[2];
+  GeometryChanged := SameText(Name, 'Width') or SameText(Name, 'Depth');
+  if SameText(Name, 'Width') then Water.Width := Value
+  else if SameText(Name, 'Depth') then Water.Depth := Value
+  else if SameText(Name, 'ReflectionStrength') then Water.ReflectionStrength := Value
+  else if SameText(Name, 'WaveScale') then Water.WaveScale := Value
+  else if SameText(Name, 'WaveSpeed') then Water.WaveSpeed := Value
+  else if SameText(Name, 'WaveStrength') then Water.WaveStrength := Value
+  else if SameText(Name, 'FresnelPower') then Water.FresnelPower := Value
+  else if SameText(Name, 'Alpha') then Water.Alpha := Value
+  else if SameText(Name, 'FoamIntensity') then Water.FoamIntensity := Value
+  else if SameText(Name, 'ShoreFoamDistance') then Water.ShoreFoamDistance := Value
+  else if SameText(Name, 'ShoreFoamFeather') then Water.ShoreFoamFeather := Value
+  else if SameText(Name, 'ShoreLineSmoothness') then Water.ShoreLineSmoothness := Value
+  else if SameText(Name, 'FoamNoiseScale') then Water.FoamNoiseScale := Value
+  else if SameText(Name, 'CrestFoamThreshold') then Water.CrestFoamThreshold := Value
+  else if SameText(Name, 'CrestFoamIntensity') then Water.CrestFoamIntensity := Value
+  else
+    raise Exception.CreateFmt('Unknown writable water plane float property: %s', [Name]);
+  NotifyMeshChanged(Water, GeometryChanged);
+end;
+
+procedure TdwsEngineUnit.DoWaterPlaneVector4(Info: TProgramInfo);
+var
+  Water: TWaterPlaneMesh;
+  Name: string;
+begin
+  Water := RequireWaterPlaneMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'TintColor') then SetResultVector4(Info, Water.TintColor)
+  else if SameText(Name, 'DeepColor') then SetResultVector4(Info, Water.DeepColor)
+  else if SameText(Name, 'FoamColor') then SetResultVector4(Info, Water.FoamColor)
+  else
+    raise Exception.CreateFmt('Unknown water plane TVector4 property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoWaterPlaneSetVector4(Info: TProgramInfo);
+var
+  Water: TWaterPlaneMesh;
+  Name: string;
+  Value: TVector4;
+begin
+  Water := RequireWaterPlaneMesh(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  Value := ParamAsVector4(Info, 2);
+  if SameText(Name, 'TintColor') then Water.TintColor := Value
+  else if SameText(Name, 'DeepColor') then Water.DeepColor := Value
+  else if SameText(Name, 'FoamColor') then Water.FoamColor := Value
+  else
+    raise Exception.CreateFmt('Unknown writable water plane TVector4 property: %s', [Name]);
+  NotifyMeshChanged(Water);
+end;
+
+procedure TdwsEngineUnit.DoWaterPlaneRebuild(Info: TProgramInfo);
+var
+  Water: TWaterPlaneMesh;
+begin
+  Water := RequireWaterPlaneMesh(Info.ParamAsInteger[0]);
+  Water.RebuildGeometry;
+  NotifyMeshChanged(Water, True);
 end;
 
 procedure TdwsEngineUnit.DoMeshCleanup(ExternalObject: TObject);
@@ -8072,6 +8647,238 @@ begin
     raise Exception.CreateFmt('Unknown billboard string property: %s', [Name]);
 end;
 
+procedure TdwsEngineUnit.DoObjectAnimatedSpriteCount(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger :=
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]).AnimatedSpriteCount;
+end;
+
+procedure TdwsEngineUnit.DoObjectAnimatedSprite(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := FContext.HandleOf(
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]).AnimatedSpriteItem[
+      Info.ParamAsInteger[1]]);
+end;
+
+procedure TdwsEngineUnit.DoObjectCreateAnimatedSprite(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := FContext.HandleOf(
+    FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]).AddAnimatedSprite);
+end;
+
+procedure TdwsEngineUnit.DoObjectRemoveAnimatedSprite(Info: TProgramInfo);
+var
+  Obj: TSceneObject;
+  Sprite: TAnimatedSprite;
+  Index: Integer;
+begin
+  Obj := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]);
+  Index := Info.ParamAsInteger[1];
+  Sprite := Obj.AnimatedSpriteItem[Index];
+  if Obj.RemoveAnimatedSprite(Index) then
+    FContext.Forget(Sprite);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteBlendAlpha(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(asAlpha);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteBlendAdditive(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(asAdditive);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteLoadTexture(Info: TProgramInfo);
+begin
+  Info.ResultAsBoolean :=
+    FContext.AnimatedSpriteFromHandle(Info.ParamAsInteger[0]).LoadTexture(
+      Info.ParamAsString[1]);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteRestart(Info: TProgramInfo);
+begin
+  FContext.AnimatedSpriteFromHandle(Info.ParamAsInteger[0]).Restart;
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteBoolean(Info: TProgramInfo);
+var
+  Sprite: TAnimatedSprite;
+  Name: string;
+begin
+  Sprite := FContext.AnimatedSpriteFromHandle(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'Enabled') then Info.ResultAsBoolean := Sprite.Enabled
+  else if SameText(Name, 'Loop') then Info.ResultAsBoolean := Sprite.Loop
+  else if SameText(Name, 'Playing') then Info.ResultAsBoolean := Sprite.Playing
+  else
+    raise Exception.CreateFmt('Unknown animated sprite boolean property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteSetBoolean(Info: TProgramInfo);
+var
+  Sprite: TAnimatedSprite;
+  Name: string;
+begin
+  Sprite := FContext.AnimatedSpriteFromHandle(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'Enabled') then Sprite.Enabled := Info.ParamAsBoolean[2]
+  else if SameText(Name, 'Loop') then Sprite.Loop := Info.ParamAsBoolean[2]
+  else if SameText(Name, 'Playing') then Sprite.Playing := Info.ParamAsBoolean[2]
+  else
+    raise Exception.CreateFmt('Unknown writable animated sprite boolean property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteInteger(Info: TProgramInfo);
+var
+  Sprite: TAnimatedSprite;
+  Name: string;
+begin
+  Sprite := FContext.AnimatedSpriteFromHandle(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'BlendMode') then Info.ResultAsInteger := Ord(Sprite.BlendMode)
+  else if SameText(Name, 'CurrentFrameIndex') then Info.ResultAsInteger := Sprite.CurrentFrameIndex
+  else if SameText(Name, 'GridColumns') then Info.ResultAsInteger := Sprite.GridColumns
+  else if SameText(Name, 'GridRows') then Info.ResultAsInteger := Sprite.GridRows
+  else if SameText(Name, 'FirstFrame') then Info.ResultAsInteger := Sprite.FirstFrame
+  else if SameText(Name, 'FrameCount') then Info.ResultAsInteger := Sprite.FrameCount
+  else if SameText(Name, 'GridFrameCapacity') then Info.ResultAsInteger := Sprite.GridFrameCapacity
+  else if SameText(Name, 'CurrentSheetFrameIndex') then Info.ResultAsInteger := Sprite.CurrentSheetFrameIndex
+  else if SameText(Name, 'TextureID') then Info.ResultAsInteger := Sprite.TextureID
+  else if SameText(Name, 'TextureWidth') then Info.ResultAsInteger := Sprite.TextureWidth
+  else if SameText(Name, 'TextureHeight') then Info.ResultAsInteger := Sprite.TextureHeight
+  else
+    raise Exception.CreateFmt('Unknown animated sprite integer property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteSetInteger(Info: TProgramInfo);
+var
+  Sprite: TAnimatedSprite;
+  Name: string;
+begin
+  Sprite := FContext.AnimatedSpriteFromHandle(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'BlendMode') then
+    Sprite.BlendMode := TAnimatedSpriteBlendMode(EnsureRange(
+      Info.ParamAsInteger[2], Ord(Low(TAnimatedSpriteBlendMode)),
+      Ord(High(TAnimatedSpriteBlendMode))))
+  else if SameText(Name, 'CurrentFrameIndex') then Sprite.CurrentFrameIndex := Info.ParamAsInteger[2]
+  else if SameText(Name, 'GridColumns') then Sprite.GridColumns := Info.ParamAsInteger[2]
+  else if SameText(Name, 'GridRows') then Sprite.GridRows := Info.ParamAsInteger[2]
+  else if SameText(Name, 'FirstFrame') then Sprite.FirstFrame := Info.ParamAsInteger[2]
+  else if SameText(Name, 'FrameCount') then Sprite.FrameCount := Info.ParamAsInteger[2]
+  else
+    raise Exception.CreateFmt('Unknown writable animated sprite integer property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteFloat(Info: TProgramInfo);
+var
+  Sprite: TAnimatedSprite;
+  Name: string;
+begin
+  Sprite := FContext.AnimatedSpriteFromHandle(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'Width') then Info.ResultAsFloat := Sprite.Width
+  else if SameText(Name, 'Height') then Info.ResultAsFloat := Sprite.Height
+  else if SameText(Name, 'Rotation') then Info.ResultAsFloat := Sprite.Rotation
+  else if SameText(Name, 'AlphaCutoff') then Info.ResultAsFloat := Sprite.AlphaCutoff
+  else if SameText(Name, 'FrameRate') then Info.ResultAsFloat := Sprite.FrameRate
+  else
+    raise Exception.CreateFmt('Unknown animated sprite float property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteSetFloat(Info: TProgramInfo);
+var
+  Sprite: TAnimatedSprite;
+  Name: string;
+  Value: Single;
+begin
+  Sprite := FContext.AnimatedSpriteFromHandle(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  Value := Info.ParamAsFloat[2];
+  if SameText(Name, 'Width') then Sprite.Width := Value
+  else if SameText(Name, 'Height') then Sprite.Height := Value
+  else if SameText(Name, 'Rotation') then Sprite.Rotation := Value
+  else if SameText(Name, 'AlphaCutoff') then Sprite.AlphaCutoff := Value
+  else if SameText(Name, 'FrameRate') then Sprite.FrameRate := Value
+  else
+    raise Exception.CreateFmt('Unknown writable animated sprite float property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteVector3(Info: TProgramInfo);
+var
+  Sprite: TAnimatedSprite;
+  Name: string;
+begin
+  Sprite := FContext.AnimatedSpriteFromHandle(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'Offset') then SetResultVector3(Info, Sprite.Offset)
+  else
+    raise Exception.CreateFmt('Unknown animated sprite TVector3 property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteSetVector3(Info: TProgramInfo);
+var
+  Sprite: TAnimatedSprite;
+  Name: string;
+begin
+  Sprite := FContext.AnimatedSpriteFromHandle(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'Offset') then Sprite.Offset := ParamAsVector3(Info, 2)
+  else
+    raise Exception.CreateFmt('Unknown writable animated sprite TVector3 property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteVector4(Info: TProgramInfo);
+var
+  Sprite: TAnimatedSprite;
+  Name: string;
+begin
+  Sprite := FContext.AnimatedSpriteFromHandle(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'Color') then SetResultVector4(Info, Sprite.Color)
+  else
+    raise Exception.CreateFmt('Unknown animated sprite TVector4 property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteSetVector4(Info: TProgramInfo);
+var
+  Sprite: TAnimatedSprite;
+  Name: string;
+begin
+  Sprite := FContext.AnimatedSpriteFromHandle(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'Color') then Sprite.Color := ParamAsVector4(Info, 2)
+  else
+    raise Exception.CreateFmt('Unknown writable animated sprite TVector4 property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteString(Info: TProgramInfo);
+var
+  Sprite: TAnimatedSprite;
+  Name: string;
+begin
+  Sprite := FContext.AnimatedSpriteFromHandle(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'Name') then Info.ResultAsString := Sprite.Name
+  else if SameText(Name, 'TexturePath') then Info.ResultAsString := Sprite.TexturePath
+  else
+    raise Exception.CreateFmt('Unknown animated sprite string property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoAnimatedSpriteSetString(Info: TProgramInfo);
+var
+  Sprite: TAnimatedSprite;
+  Name: string;
+begin
+  Sprite := FContext.AnimatedSpriteFromHandle(Info.ParamAsInteger[0]);
+  Name := Info.ParamAsString[1];
+  if SameText(Name, 'Name') then Sprite.Name := Info.ParamAsString[2]
+  else if SameText(Name, 'TexturePath') then Sprite.TexturePath := Info.ParamAsString[2]
+  else
+    raise Exception.CreateFmt('Unknown writable animated sprite string property: %s', [Name]);
+end;
+
 procedure TdwsEngineUnit.DoObjectAudioEmitterCount(Info: TProgramInfo);
 begin
   Info.ResultAsInteger := FContext.SceneObjectFromHandle(Info.ParamAsInteger[0]).AudioEmitterCount;
@@ -8898,6 +9705,263 @@ begin
     FContext.Renderer.SetupShadowMap(Max(64, Info.ParamAsInteger[0]));
 end;
 
+procedure TdwsEngineUnit.DoRendererResetPostEffects(Info: TProgramInfo);
+begin
+  RequireRenderer.ResetPostEffectsToDefaults;
+end;
+
+procedure TdwsEngineUnit.DoRendererToneMappingLinear(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(tmLinear);
+end;
+
+procedure TdwsEngineUnit.DoRendererToneMappingExponential(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(tmExponential);
+end;
+
+procedure TdwsEngineUnit.DoRendererToneMappingReinhard(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(tmReinhard);
+end;
+
+procedure TdwsEngineUnit.DoRendererToneMappingUncharted2(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(tmUncharted2);
+end;
+
+procedure TdwsEngineUnit.DoRendererToneMappingMGSV(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(tmMGSV);
+end;
+
+procedure TdwsEngineUnit.DoRendererToneMappingUchimura(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(tmUchimura);
+end;
+
+procedure TdwsEngineUnit.DoRendererToneMappingFilmic(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(tmFilmic);
+end;
+
+procedure TdwsEngineUnit.DoRendererToneMappingACES(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(tmACES);
+end;
+
+procedure TdwsEngineUnit.DoRendererToneMappingPBRNeutral(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(tmPBRNeutral);
+end;
+
+procedure TdwsEngineUnit.DoRendererToneMappingFlim(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(tmFlim);
+end;
+
+procedure TdwsEngineUnit.DoRendererToneMappingAGX(Info: TProgramInfo);
+begin
+  Info.ResultAsInteger := Ord(tmAGX);
+end;
+
+procedure TdwsEngineUnit.DoRendererBoolean(Info: TProgramInfo);
+var
+  Renderer: TRenderer;
+  Name: string;
+begin
+  Renderer := RequireRenderer;
+  Name := Info.ParamAsString[0];
+  if SameText(Name, 'AntialiasingEnabled') then Info.ResultAsBoolean := Renderer.AntialiasingEnabled
+  else if SameText(Name, 'SwapIntervalSupported') then Info.ResultAsBoolean := Renderer.SwapIntervalSupported
+  else if SameText(Name, 'VSyncEnabled') then Info.ResultAsBoolean := Renderer.VSyncEnabled
+  else if SameText(Name, 'FrustumCullingEnabled') then Info.ResultAsBoolean := Renderer.FrustumCullingEnabled
+  else if SameText(Name, 'FogEnabled') then Info.ResultAsBoolean := Renderer.FogEnabled
+  else if SameText(Name, 'ShadowEnabled') then Info.ResultAsBoolean := Renderer.ShadowEnabled
+  else if SameText(Name, 'ShadowAutoFit') then Info.ResultAsBoolean := Renderer.ShadowAutoFit
+  else if SameText(Name, 'WaterReflectionEnabled') then Info.ResultAsBoolean := Renderer.WaterReflectionEnabled
+  else if SameText(Name, 'RenderingWaterReflection') then Info.ResultAsBoolean := Renderer.RenderingWaterReflection
+  else if SameText(Name, 'SceneClipPlaneEnabled') then Info.ResultAsBoolean := Renderer.SceneClipPlaneEnabled
+  else if SameText(Name, 'HDRPostProcessActive') then Info.ResultAsBoolean := Renderer.HDRPostProcessActive
+  else if SameText(Name, 'HDREnabled') then Info.ResultAsBoolean := Renderer.HDREnabled
+  else if SameText(Name, 'GodRaysEnabled') then Info.ResultAsBoolean := Renderer.GodRaysEnabled
+  else if SameText(Name, 'EmptyObjectMarkersEnabled') then Info.ResultAsBoolean := Renderer.EmptyObjectMarkersEnabled
+  else if SameText(Name, 'SelectedBoundingBoxEnabled') then Info.ResultAsBoolean := Renderer.SelectedBoundingBoxEnabled
+  else
+    raise Exception.CreateFmt('Unknown renderer boolean property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoRendererSetBoolean(Info: TProgramInfo);
+var
+  Renderer: TRenderer;
+  Name: string;
+  Value: Boolean;
+begin
+  Renderer := RequireRenderer;
+  Name := Info.ParamAsString[0];
+  Value := Info.ParamAsBoolean[1];
+  if SameText(Name, 'AntialiasingEnabled') then Renderer.AntialiasingEnabled := Value
+  else if SameText(Name, 'VSyncEnabled') then Renderer.VSyncEnabled := Value
+  else if SameText(Name, 'FrustumCullingEnabled') then Renderer.FrustumCullingEnabled := Value
+  else if SameText(Name, 'FogEnabled') then Renderer.FogEnabled := Value
+  else if SameText(Name, 'ShadowEnabled') then Renderer.ShadowEnabled := Value
+  else if SameText(Name, 'ShadowAutoFit') then Renderer.ShadowAutoFit := Value
+  else if SameText(Name, 'WaterReflectionEnabled') then Renderer.WaterReflectionEnabled := Value
+  else if SameText(Name, 'HDREnabled') then Renderer.HDREnabled := Value
+  else if SameText(Name, 'GodRaysEnabled') then Renderer.GodRaysEnabled := Value
+  else if SameText(Name, 'EmptyObjectMarkersEnabled') then Renderer.EmptyObjectMarkersEnabled := Value
+  else if SameText(Name, 'SelectedBoundingBoxEnabled') then Renderer.SelectedBoundingBoxEnabled := Value
+  else
+    raise Exception.CreateFmt('Unknown writable renderer boolean property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoRendererInteger(Info: TProgramInfo);
+var
+  Renderer: TRenderer;
+  Name: string;
+begin
+  Renderer := RequireRenderer;
+  Name := Info.ParamAsString[0];
+  if SameText(Name, 'FPS') then Info.ResultAsInteger := Renderer.FPS
+  else if SameText(Name, 'TriangleCount') then Info.ResultAsInteger := Renderer.TriangleCount
+  else if SameText(Name, 'AntialiasingSamples') then Info.ResultAsInteger := Renderer.AntialiasingSamples
+  else if SameText(Name, 'SwapInterval') then Info.ResultAsInteger := Renderer.SwapInterval
+  else if SameText(Name, 'ShadowMapCount') then Info.ResultAsInteger := Renderer.ShadowMapCount
+  else if SameText(Name, 'ShadowDrawCount') then Info.ResultAsInteger := Renderer.ShadowDrawCount
+  else if SameText(Name, 'ToneMappingMode') then Info.ResultAsInteger := Ord(Renderer.ToneMappingMode)
+  else if SameText(Name, 'GodRaySamples') then Info.ResultAsInteger := Renderer.GodRaySamples
+  else
+    raise Exception.CreateFmt('Unknown renderer integer property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoRendererSetInteger(Info: TProgramInfo);
+var
+  Renderer: TRenderer;
+  Name: string;
+begin
+  Renderer := RequireRenderer;
+  Name := Info.ParamAsString[0];
+  if SameText(Name, 'SwapInterval') then
+    Renderer.SwapInterval := Info.ParamAsInteger[1]
+  else if SameText(Name, 'ToneMappingMode') then
+    Renderer.ToneMappingMode := TToneMappingMode(EnsureRange(
+      Info.ParamAsInteger[1], Ord(Low(TToneMappingMode)),
+      Ord(High(TToneMappingMode))))
+  else if SameText(Name, 'GodRaySamples') then
+    Renderer.GodRaySamples := EnsureRange(Info.ParamAsInteger[1], 1, 128)
+  else
+    raise Exception.CreateFmt('Unknown writable renderer integer property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoRendererFloat(Info: TProgramInfo);
+var
+  Renderer: TRenderer;
+  Name: string;
+begin
+  Renderer := RequireRenderer;
+  Name := Info.ParamAsString[0];
+  if SameText(Name, 'FogDensity') then Info.ResultAsFloat := Renderer.FogDensity
+  else if SameText(Name, 'FogStart') then Info.ResultAsFloat := Renderer.FogStart
+  else if SameText(Name, 'FogEnd') then Info.ResultAsFloat := Renderer.FogEnd
+  else if SameText(Name, 'ShadowDistance') then Info.ResultAsFloat := Renderer.ShadowDistance
+  else if SameText(Name, 'ShadowArea') then Info.ResultAsFloat := Renderer.ShadowArea
+  else if SameText(Name, 'ShadowFitPadding') then Info.ResultAsFloat := Renderer.ShadowFitPadding
+  else if SameText(Name, 'ToneExposure') then Info.ResultAsFloat := Renderer.ToneExposure
+  else if SameText(Name, 'ToneGamma') then Info.ResultAsFloat := Renderer.ToneGamma
+  else if SameText(Name, 'GodRayDensity') then Info.ResultAsFloat := Renderer.GodRayDensity
+  else if SameText(Name, 'GodRayExposure') then Info.ResultAsFloat := Renderer.GodRayExposure
+  else if SameText(Name, 'GodRayDecay') then Info.ResultAsFloat := Renderer.GodRayDecay
+  else if SameText(Name, 'GodRayWeight') then Info.ResultAsFloat := Renderer.GodRayWeight
+  else if SameText(Name, 'GodRayIntensity') then Info.ResultAsFloat := Renderer.GodRayIntensity
+  else if SameText(Name, 'EmptyObjectMarkerSize') then Info.ResultAsFloat := Renderer.EmptyObjectMarkerSize
+  else
+    raise Exception.CreateFmt('Unknown renderer float property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoRendererSetFloat(Info: TProgramInfo);
+var
+  Renderer: TRenderer;
+  Name: string;
+  Value: Single;
+begin
+  Renderer := RequireRenderer;
+  Name := Info.ParamAsString[0];
+  Value := Info.ParamAsFloat[1];
+  if SameText(Name, 'FogDensity') then Renderer.FogDensity := Max(0.0, Value)
+  else if SameText(Name, 'FogStart') then Renderer.FogStart := Value
+  else if SameText(Name, 'FogEnd') then Renderer.FogEnd := Value
+  else if SameText(Name, 'ShadowDistance') then Renderer.ShadowDistance := Max(0.1, Value)
+  else if SameText(Name, 'ShadowArea') then Renderer.ShadowArea := Max(0.1, Value)
+  else if SameText(Name, 'ShadowFitPadding') then Renderer.ShadowFitPadding := Max(0.0, Value)
+  else if SameText(Name, 'ToneExposure') then Renderer.ToneExposure := EnsureRange(Value, 0.0, 16.0)
+  else if SameText(Name, 'ToneGamma') then Renderer.ToneGamma := EnsureRange(Value, 0.1, 5.0)
+  else if SameText(Name, 'GodRayDensity') then Renderer.GodRayDensity := EnsureRange(Value, 0.0, 3.0)
+  else if SameText(Name, 'GodRayExposure') then Renderer.GodRayExposure := EnsureRange(Value, 0.0, 4.0)
+  else if SameText(Name, 'GodRayDecay') then Renderer.GodRayDecay := EnsureRange(Value, 0.0, 1.0)
+  else if SameText(Name, 'GodRayWeight') then Renderer.GodRayWeight := EnsureRange(Value, 0.0, 2.0)
+  else if SameText(Name, 'GodRayIntensity') then Renderer.GodRayIntensity := EnsureRange(Value, 0.0, 8.0)
+  else if SameText(Name, 'EmptyObjectMarkerSize') then Renderer.EmptyObjectMarkerSize := Max(0.0, Value)
+  else
+    raise Exception.CreateFmt('Unknown writable renderer float property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoRendererVector3(Info: TProgramInfo);
+var
+  Renderer: TRenderer;
+  Name: string;
+begin
+  Renderer := RequireRenderer;
+  Name := Info.ParamAsString[0];
+  if SameText(Name, 'ShadowTarget') then SetResultVector3(Info, Renderer.ShadowTarget)
+  else
+    raise Exception.CreateFmt('Unknown renderer TVector3 property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoRendererSetVector3(Info: TProgramInfo);
+var
+  Renderer: TRenderer;
+  Name: string;
+begin
+  Renderer := RequireRenderer;
+  Name := Info.ParamAsString[0];
+  if SameText(Name, 'ShadowTarget') then Renderer.ShadowTarget := ParamAsVector3(Info, 1)
+  else
+    raise Exception.CreateFmt('Unknown writable renderer TVector3 property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoRendererVector4(Info: TProgramInfo);
+var
+  Renderer: TRenderer;
+  Name: string;
+begin
+  Renderer := RequireRenderer;
+  Name := Info.ParamAsString[0];
+  if SameText(Name, 'BackgroundColor') then SetResultVector4(Info, Renderer.BackgroundColor)
+  else if SameText(Name, 'FogColor') then SetResultVector4(Info, Renderer.FogColor)
+  else if SameText(Name, 'SceneClipPlane') then SetResultVector4(Info, Renderer.SceneClipPlane)
+  else if SameText(Name, 'EmptyObjectMarkerColor') then SetResultVector4(Info, Renderer.EmptyObjectMarkerColor)
+  else if SameText(Name, 'SelectedBoundingBoxColor') then SetResultVector4(Info, Renderer.SelectedBoundingBoxColor)
+  else
+    raise Exception.CreateFmt('Unknown renderer TVector4 property: %s', [Name]);
+end;
+
+procedure TdwsEngineUnit.DoRendererSetVector4(Info: TProgramInfo);
+var
+  Renderer: TRenderer;
+  Name: string;
+  Value: TVector4;
+begin
+  Renderer := RequireRenderer;
+  Name := Info.ParamAsString[0];
+  Value := ParamAsVector4(Info, 1);
+  if SameText(Name, 'BackgroundColor') then Renderer.BackgroundColor := Value
+  else if SameText(Name, 'FogColor') then Renderer.FogColor := Value
+  else if SameText(Name, 'EmptyObjectMarkerColor') then Renderer.EmptyObjectMarkerColor := Value
+  else if SameText(Name, 'SelectedBoundingBoxColor') then Renderer.SelectedBoundingBoxColor := Value
+  else
+    raise Exception.CreateFmt('Unknown writable renderer TVector4 property: %s', [Name]);
+end;
+
 procedure TdwsEngineUnit.DoSkyDomeResetDefaults(Info: TProgramInfo);
 begin
   RequireSkyDome.ResetEarthDefaults;
@@ -9637,6 +10701,20 @@ begin
   RegisterEngineFunction('HeightFieldLocalHeight', 'Float', ['HeightField', 'LocalX', 'LocalZ'], ['Integer', 'Float', 'Float'], DoHeightFieldLocalHeight);
   RegisterEngineFunction('HeightFieldWorldPoint', 'TVector3', ['HeightField', 'WorldPoint'], ['Integer', 'TVector3'], DoHeightFieldWorldPoint);
   RegisterEngineFunction('HeightFieldWorldHeight', 'Float', ['HeightField', 'WorldPoint'], ['Integer', 'TVector3'], DoHeightFieldWorldHeight);
+  RegisterEngineFunction('HeightFieldBoolean', 'Boolean', ['HeightField', 'Name'], ['Integer', 'String'], DoHeightFieldBoolean);
+  RegisterEngineFunction('HeightFieldSetBoolean', '', ['HeightField', 'Name', 'Value'], ['Integer', 'String', 'Boolean'], DoHeightFieldSetBoolean);
+  RegisterEngineFunction('HeightFieldInteger', 'Integer', ['HeightField', 'Name'], ['Integer', 'String'], DoHeightFieldInteger);
+  RegisterEngineFunction('HeightFieldSetInteger', '', ['HeightField', 'Name', 'Value'], ['Integer', 'String', 'Integer'], DoHeightFieldSetInteger);
+  RegisterEngineFunction('HeightFieldFloat', 'Float', ['HeightField', 'Name'], ['Integer', 'String'], DoHeightFieldFloat);
+  RegisterEngineFunction('HeightFieldSetFloat', '', ['HeightField', 'Name', 'Value'], ['Integer', 'String', 'Float'], DoHeightFieldSetFloat);
+  RegisterEngineFunction('HeightFieldVector3', 'TVector3', ['HeightField', 'Name'], ['Integer', 'String'], DoHeightFieldVector3);
+  RegisterEngineFunction('HeightFieldSetVector3', '', ['HeightField', 'Name', 'Value'], ['Integer', 'String', 'TVector3'], DoHeightFieldSetVector3);
+  RegisterEngineFunction('HeightFieldString', 'String', ['HeightField', 'Name'], ['Integer', 'String'], DoHeightFieldString);
+  RegisterEngineFunction('HeightFieldSetString', '', ['HeightField', 'Name', 'Value'], ['Integer', 'String', 'String'], DoHeightFieldSetString);
+  RegisterEngineFunction('HeightFieldHeightAtSample', 'Float', ['HeightField', 'X', 'Z'], ['Integer', 'Integer', 'Integer'], DoHeightFieldHeightAtSample);
+  RegisterEngineFunction('HeightFieldNormalAtSample', 'TVector3', ['HeightField', 'X', 'Z'], ['Integer', 'Integer', 'Integer'], DoHeightFieldNormalAtSample);
+  RegisterEngineFunction('HeightFieldUpsample', '', ['HeightField', 'Factor'], ['Integer', 'Integer'], DoHeightFieldUpsample);
+  RegisterEngineFunction('HeightFieldRebuild', '', ['HeightField'], ['Integer'], DoHeightFieldRebuild);
   RegisterEngineFunction('MouseHeightFieldHit', 'Boolean', ['HeightField'], ['Integer'], DoMouseHeightFieldHit);
   RegisterEngineFunction('MouseHeightFieldPoint', 'TVector3', ['HeightField'], ['Integer'], DoMouseHeightFieldPoint);
   RegisterEngineFunction('MouseHeightFieldLocalPoint', 'TVector3', ['HeightField'], ['Integer'], DoMouseHeightFieldLocalPoint);
@@ -9711,7 +10789,13 @@ begin
   RegisterEngineFunction('ObjectHasCamera', 'Boolean', ['Obj'], ['Integer'], DoObjectHasCamera);
   RegisterEngineFunction('ObjectHasParticles', 'Boolean', ['Obj'], ['Integer'], DoObjectHasParticles);
   RegisterEngineFunction('ObjectHasBillboards', 'Boolean', ['Obj'], ['Integer'], DoObjectHasBillboards);
+  RegisterEngineFunction('ObjectHasAnimatedSprites', 'Boolean', ['Obj'], ['Integer'], DoObjectHasAnimatedSprites);
   RegisterEngineFunction('ObjectHasAudio', 'Boolean', ['Obj'], ['Integer'], DoObjectHasAudio);
+  RegisterEngineFunction('ObjectIsInstance', 'Boolean', ['Obj'], ['Integer'], DoObjectIsInstance);
+  RegisterEngineFunction('ObjectInstanceSource', 'Integer', ['Obj'], ['Integer'], DoObjectInstanceSource);
+  RegisterEngineFunction('ObjectCanInstanceFrom', 'Boolean', ['Obj', 'Source'], ['Integer', 'Integer'], DoObjectCanInstanceFrom);
+  RegisterEngineFunction('ObjectMakeInstanceOf', '', ['Obj', 'Source'], ['Integer', 'Integer'], DoObjectMakeInstanceOf);
+  RegisterEngineFunction('ObjectMakeUniqueFromInstance', '', ['Obj'], ['Integer'], DoObjectMakeUniqueFromInstance);
 
   RegisterEngineFunction('ObjectMeshCount', 'Integer', ['Obj'], ['Integer'], DoObjectMeshCount);
   RegisterEngineFunction('ObjectMesh', 'Integer', ['Obj', 'Index'], ['Integer', 'Integer'], DoObjectMesh);
@@ -9719,6 +10803,8 @@ begin
   RegisterEngineFunction('ObjectAddMeshFile', 'Integer', ['Obj', 'FileName'], ['Integer', 'String'], DoObjectAddMeshFile);
   RegisterEngineFunction('ObjectAddMeshFileObject', 'TMesh', ['Obj', 'FileName'], ['Integer', 'String'], DoObjectAddMeshFileObject);
   RegisterEngineFunction('ObjectAddPlane', 'Integer', ['Obj', 'Width', 'Depth', 'WidthSegments', 'DepthSegments', 'Name'], ['Integer', 'Float', 'Float', 'Integer', 'Integer', 'String'], DoObjectAddPlane);
+  RegisterEngineFunction('ObjectAddWaterPlane', 'Integer', ['Obj', 'Width', 'Depth', 'WidthSegments', 'DepthSegments', 'Name'], ['Integer', 'Float', 'Float', 'Integer', 'Integer', 'String'], DoObjectAddWaterPlane);
+  RegisterEngineFunction('ObjectAddHeightFieldFromFile', 'Integer', ['Obj', 'FileName', 'Width', 'Depth', 'HeightScale', 'UVScale', 'Name'], ['Integer', 'String', 'Float', 'Float', 'Float', 'Float', 'String'], DoObjectAddHeightFieldFromFile);
   RegisterEngineFunction('ObjectAddGrassCrossPlanes', 'Integer', ['Obj', 'Width', 'Height', 'PlaneCount', 'Name'], ['Integer', 'Float', 'Float', 'Integer', 'String'], DoObjectAddGrassCrossPlanes);
   RegisterEngineFunction('ObjectAddCube', 'Integer', ['Obj', 'Width', 'Height', 'Depth', 'WidthStacks', 'HeightStacks', 'DepthStacks', 'Name'], ['Integer', 'Float', 'Float', 'Float', 'Integer', 'Integer', 'Integer', 'String'], DoObjectAddCube);
   RegisterEngineFunction('ObjectAddSphere', 'Integer', ['Obj', 'Radius', 'StackCount', 'SliceCount', 'Name'], ['Integer', 'Float', 'Integer', 'Integer', 'String'], DoObjectAddSphere);
@@ -9778,6 +10864,8 @@ begin
   RegisterEngineFunction('MeshSetAlwaysOnTop', '', ['Mesh', 'Value'], ['Integer', 'Boolean'], DoMeshSetAlwaysOnTop);
   RegisterEngineFunction('MeshTag', 'Integer', ['Mesh'], ['Integer'], DoMeshTag);
   RegisterEngineFunction('MeshSetTag', '', ['Mesh', 'Value'], ['Integer', 'Integer'], DoMeshSetTag);
+  RegisterEngineFunction('MeshTypeHeightField', 'Integer', [], [], DoMeshTypeHeightField);
+  RegisterEngineFunction('MeshTypeWater', 'Integer', [], [], DoMeshTypeWater);
   RegisterEngineFunction('MeshTypeGrass', 'Integer', [], [], DoMeshTypeGrass);
   RegisterEngineFunction('MeshType', 'Integer', ['Mesh'], ['Integer'], DoMeshType);
   RegisterEngineFunction('MeshVertexCount', 'Integer', ['Mesh'], ['Integer'], DoMeshVertexCount);
@@ -9793,6 +10881,13 @@ begin
   RegisterEngineFunction('MeshApplyTransform', 'Boolean', ['Mesh', 'Translation', 'Rotation', 'Scale'], ['Integer', 'TVector3', 'TVector3', 'TVector3'], DoMeshApplyTransform);
   RegisterEngineFunction('MeshScaleUVs', '', ['Mesh', 'ScaleU', 'ScaleV'], ['Integer', 'Float', 'Float'], DoMeshScaleUVs);
   RegisterEngineFunction('MeshRecomputeBoundingBox', '', ['Mesh'], ['Integer'], DoMeshRecomputeBoundingBox);
+  RegisterEngineFunction('WaterPlaneInteger', 'Integer', ['Water', 'Name'], ['Integer', 'String'], DoWaterPlaneInteger);
+  RegisterEngineFunction('WaterPlaneSetInteger', '', ['Water', 'Name', 'Value'], ['Integer', 'String', 'Integer'], DoWaterPlaneSetInteger);
+  RegisterEngineFunction('WaterPlaneFloat', 'Float', ['Water', 'Name'], ['Integer', 'String'], DoWaterPlaneFloat);
+  RegisterEngineFunction('WaterPlaneSetFloat', '', ['Water', 'Name', 'Value'], ['Integer', 'String', 'Float'], DoWaterPlaneSetFloat);
+  RegisterEngineFunction('WaterPlaneVector4', 'TVector4', ['Water', 'Name'], ['Integer', 'String'], DoWaterPlaneVector4);
+  RegisterEngineFunction('WaterPlaneSetVector4', '', ['Water', 'Name', 'Value'], ['Integer', 'String', 'TVector4'], DoWaterPlaneSetVector4);
+  RegisterEngineFunction('WaterPlaneRebuild', '', ['Water'], ['Integer'], DoWaterPlaneRebuild);
 
   RegisterEngineFunction('ObjectParticleSystemCount', 'Integer', ['Obj'], ['Integer'], DoObjectParticleSystemCount);
   RegisterEngineFunction('ObjectParticleSystem', 'Integer', ['Obj', 'Index'], ['Integer', 'Integer'], DoObjectParticleSystem);
@@ -9840,6 +10935,27 @@ begin
   RegisterEngineFunction('BillboardSetVector4', '', ['Billboard', 'Name', 'Value'], ['Integer', 'String', 'TVector4'], DoBillboardSetVector4);
   RegisterEngineFunction('BillboardString', 'String', ['Billboard', 'Name'], ['Integer', 'String'], DoBillboardString);
   RegisterEngineFunction('BillboardSetString', '', ['Billboard', 'Name', 'Value'], ['Integer', 'String', 'String'], DoBillboardSetString);
+
+  RegisterEngineFunction('ObjectAnimatedSpriteCount', 'Integer', ['Obj'], ['Integer'], DoObjectAnimatedSpriteCount);
+  RegisterEngineFunction('ObjectAnimatedSprite', 'Integer', ['Obj', 'Index'], ['Integer', 'Integer'], DoObjectAnimatedSprite);
+  RegisterEngineFunction('ObjectCreateAnimatedSprite', 'Integer', ['Obj'], ['Integer'], DoObjectCreateAnimatedSprite);
+  RegisterEngineFunction('ObjectRemoveAnimatedSprite', '', ['Obj', 'Index'], ['Integer', 'Integer'], DoObjectRemoveAnimatedSprite);
+  RegisterEngineFunction('AnimatedSpriteBlendAlpha', 'Integer', [], [], DoAnimatedSpriteBlendAlpha);
+  RegisterEngineFunction('AnimatedSpriteBlendAdditive', 'Integer', [], [], DoAnimatedSpriteBlendAdditive);
+  RegisterEngineFunction('AnimatedSpriteLoadTexture', 'Boolean', ['Sprite', 'FileName'], ['Integer', 'String'], DoAnimatedSpriteLoadTexture);
+  RegisterEngineFunction('AnimatedSpriteRestart', '', ['Sprite'], ['Integer'], DoAnimatedSpriteRestart);
+  RegisterEngineFunction('AnimatedSpriteBoolean', 'Boolean', ['Sprite', 'Name'], ['Integer', 'String'], DoAnimatedSpriteBoolean);
+  RegisterEngineFunction('AnimatedSpriteSetBoolean', '', ['Sprite', 'Name', 'Value'], ['Integer', 'String', 'Boolean'], DoAnimatedSpriteSetBoolean);
+  RegisterEngineFunction('AnimatedSpriteInteger', 'Integer', ['Sprite', 'Name'], ['Integer', 'String'], DoAnimatedSpriteInteger);
+  RegisterEngineFunction('AnimatedSpriteSetInteger', '', ['Sprite', 'Name', 'Value'], ['Integer', 'String', 'Integer'], DoAnimatedSpriteSetInteger);
+  RegisterEngineFunction('AnimatedSpriteFloat', 'Float', ['Sprite', 'Name'], ['Integer', 'String'], DoAnimatedSpriteFloat);
+  RegisterEngineFunction('AnimatedSpriteSetFloat', '', ['Sprite', 'Name', 'Value'], ['Integer', 'String', 'Float'], DoAnimatedSpriteSetFloat);
+  RegisterEngineFunction('AnimatedSpriteVector3', 'TVector3', ['Sprite', 'Name'], ['Integer', 'String'], DoAnimatedSpriteVector3);
+  RegisterEngineFunction('AnimatedSpriteSetVector3', '', ['Sprite', 'Name', 'Value'], ['Integer', 'String', 'TVector3'], DoAnimatedSpriteSetVector3);
+  RegisterEngineFunction('AnimatedSpriteVector4', 'TVector4', ['Sprite', 'Name'], ['Integer', 'String'], DoAnimatedSpriteVector4);
+  RegisterEngineFunction('AnimatedSpriteSetVector4', '', ['Sprite', 'Name', 'Value'], ['Integer', 'String', 'TVector4'], DoAnimatedSpriteSetVector4);
+  RegisterEngineFunction('AnimatedSpriteString', 'String', ['Sprite', 'Name'], ['Integer', 'String'], DoAnimatedSpriteString);
+  RegisterEngineFunction('AnimatedSpriteSetString', '', ['Sprite', 'Name', 'Value'], ['Integer', 'String', 'String'], DoAnimatedSpriteSetString);
 
   RegisterEngineFunction('ObjectAudioEmitterCount', 'Integer', ['Obj'], ['Integer'], DoObjectAudioEmitterCount);
   RegisterEngineFunction('ObjectAudioEmitter', 'Integer', ['Obj', 'Index'], ['Integer', 'Integer'], DoObjectAudioEmitter);
@@ -9955,6 +11071,28 @@ begin
   RegisterEngineFunction('RendererSetShadowDistance', '', ['Distance'], ['Float'], DoRendererSetShadowDistance);
   RegisterEngineFunction('RendererSetShadowArea', '', ['Area'], ['Float'], DoRendererSetShadowArea);
   RegisterEngineFunction('RendererSetShadowMapSize', '', ['Size'], ['Integer'], DoRendererSetShadowMapSize);
+  RegisterEngineFunction('RendererResetPostEffects', '', [], [], DoRendererResetPostEffects);
+  RegisterEngineFunction('RendererToneMappingLinear', 'Integer', [], [], DoRendererToneMappingLinear);
+  RegisterEngineFunction('RendererToneMappingExponential', 'Integer', [], [], DoRendererToneMappingExponential);
+  RegisterEngineFunction('RendererToneMappingReinhard', 'Integer', [], [], DoRendererToneMappingReinhard);
+  RegisterEngineFunction('RendererToneMappingUncharted2', 'Integer', [], [], DoRendererToneMappingUncharted2);
+  RegisterEngineFunction('RendererToneMappingMGSV', 'Integer', [], [], DoRendererToneMappingMGSV);
+  RegisterEngineFunction('RendererToneMappingUchimura', 'Integer', [], [], DoRendererToneMappingUchimura);
+  RegisterEngineFunction('RendererToneMappingFilmic', 'Integer', [], [], DoRendererToneMappingFilmic);
+  RegisterEngineFunction('RendererToneMappingACES', 'Integer', [], [], DoRendererToneMappingACES);
+  RegisterEngineFunction('RendererToneMappingPBRNeutral', 'Integer', [], [], DoRendererToneMappingPBRNeutral);
+  RegisterEngineFunction('RendererToneMappingFlim', 'Integer', [], [], DoRendererToneMappingFlim);
+  RegisterEngineFunction('RendererToneMappingAGX', 'Integer', [], [], DoRendererToneMappingAGX);
+  RegisterEngineFunction('RendererBoolean', 'Boolean', ['Name'], ['String'], DoRendererBoolean);
+  RegisterEngineFunction('RendererSetBoolean', '', ['Name', 'Value'], ['String', 'Boolean'], DoRendererSetBoolean);
+  RegisterEngineFunction('RendererInteger', 'Integer', ['Name'], ['String'], DoRendererInteger);
+  RegisterEngineFunction('RendererSetInteger', '', ['Name', 'Value'], ['String', 'Integer'], DoRendererSetInteger);
+  RegisterEngineFunction('RendererFloat', 'Float', ['Name'], ['String'], DoRendererFloat);
+  RegisterEngineFunction('RendererSetFloat', '', ['Name', 'Value'], ['String', 'Float'], DoRendererSetFloat);
+  RegisterEngineFunction('RendererVector3', 'TVector3', ['Name'], ['String'], DoRendererVector3);
+  RegisterEngineFunction('RendererSetVector3', '', ['Name', 'Value'], ['String', 'TVector3'], DoRendererSetVector3);
+  RegisterEngineFunction('RendererVector4', 'TVector4', ['Name'], ['String'], DoRendererVector4);
+  RegisterEngineFunction('RendererSetVector4', '', ['Name', 'Value'], ['String', 'TVector4'], DoRendererSetVector4);
   RegisterEngineFunction('SkyDomeResetDefaults', '', [], [], DoSkyDomeResetDefaults);
   RegisterEngineFunction('SkyDomeBoolean', 'Boolean', ['Name'], ['String'], DoSkyDomeBoolean);
   RegisterEngineFunction('SkyDomeSetBoolean', '', ['Name', 'Value'], ['String', 'Boolean'], DoSkyDomeSetBoolean);
