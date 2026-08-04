@@ -9935,6 +9935,11 @@ end;
 procedure TSandBoxForm.DrawImGuiToolbar;
 var
   ToolbarWidth: Single;
+  PhysicsButtonWidth: Single;
+  ResetButtonWidth: Single;
+  PhysicsControlsWidth: Single;
+  PhysicsControlsX: Single;
+  PhysicsButtonLabel: AnsiString;
   CanEditSelectedObject: Boolean;
   HasSelectedBillboard: Boolean;
   HasSelectedAnimatedSprite: Boolean;
@@ -9948,7 +9953,7 @@ begin
     HasSelectedAnimatedSprite := fSelectedObject.AnimatedSpriteCount > 0;
   end;
 
-  ToolbarWidth := System.Math.Min(520.0, System.Math.Max(360.0,
+  ToolbarWidth := System.Math.Min(700.0, System.Math.Max(360.0,
     EditorViewportWidth - 32.0));
   ImGui.SetNextWindowPos(ImVec2.New((EditorViewportWidth - ToolbarWidth) * 0.5,
     8), ImGuiCond_Always);
@@ -9966,6 +9971,30 @@ begin
     ImGui.SameLine;
     if ImGui.Button('Tools') then
       ImGui.OpenPopup('ToolbarToolsPopup');
+
+    PhysicsButtonWidth := 136.0;
+    ResetButtonWidth := 64.0;
+    PhysicsControlsWidth := PhysicsButtonWidth + 8.0 + ResetButtonWidth;
+    PhysicsControlsX := ToolbarWidth - PhysicsControlsWidth - 16.0;
+    if fPhysicsRunning then
+      PhysicsButtonLabel := 'Pause Physics##ToolbarPhysics'
+    else
+      PhysicsButtonLabel := 'Simulate Physics##ToolbarPhysics';
+    if ImGui.GetCursorPosX < PhysicsControlsX then
+      ImGui.SameLine(PhysicsControlsX)
+    else
+      ImGui.SameLine;
+    if ImGui.Button(PhysicsButtonLabel, ImVec2.New(PhysicsButtonWidth, 0)) then
+    begin
+      if fPhysicsRunning then
+        PausePhysicsSimulation
+      else
+        StartPhysicsSimulation;
+    end;
+    ImGui.SameLine;
+    if ImGui.Button('Reset##ToolbarPhysicsReset',
+      ImVec2.New(ResetButtonWidth, 0)) then
+      ResetPhysicsSimulation;
 
     if ImGui.BeginPopup('ToolbarScenePopup') then
     begin
@@ -23201,11 +23230,6 @@ begin
     VK_F10:
       begin
         StopPhysicsSimulation;
-        Key := 0;
-      end;
-    VK_F11:
-      begin
-        ResetPhysicsSimulation;
         Key := 0;
       end;
     VK_DELETE:
