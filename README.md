@@ -54,7 +54,7 @@ Most Pascal dependencies are configured as Git submodules in `.gitmodules`.
 Clone with submodules:
 
 ```bat
-git clone --recurse-submodules <https://github.com/Silviulika/OGLM-Engine.git>
+git clone --recurse-submodules https://github.com/Silviulika/OGLM-Engine.git
 ```
 
 For an existing checkout, initialize or refresh them with:
