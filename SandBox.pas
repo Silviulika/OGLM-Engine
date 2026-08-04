@@ -38,7 +38,8 @@ uses
   Engine.Types, Engine.Physics, Managers.Material, Renderer.Camera, Engine.Generators,
   Managers.Scene, Renderer.Renderer, Utility.Functions, Engine.Time,
   Renderer.Mesh.Factory, Renderer.Mesh.List, Engine.Paths, Engine.Audio,
-  Engine.Animation, Engine.Wind, Engine.Scripting, Engine, Loader.GLTF;
+  Engine.Animation, Engine.Wind, Engine.Scripting, Engine, Engine.Mouse,
+  Loader.GLTF;
 
 type
   TPrimitiveKind = (
@@ -165,6 +166,47 @@ type
     RotationDeg: array[0..2] of Single;
     Scale: array[0..2] of Single;
     Maps: TArray<THeightFieldMapInfo>;
+    LastError: string;
+  end;
+
+  TTerrainEditTool = (
+    tetAdd,
+    tetSubtract,
+    tetGrow,
+    tetErode,
+    tetSmooth,
+    tetAverage,
+    tetFlatten,
+    tetZero,
+    tetSeaLevel
+  );
+
+  TTerrainBrushShape = (
+    tbsCircle,
+    tbsSquare
+  );
+
+  TTerrainBrushFalloff = (
+    tbfSmooth,
+    tbfLinear,
+    tbfConstant
+  );
+
+  TTerrainEditState = record
+    Active: Boolean;
+    Painting: Boolean;
+    HoverValid: Boolean;
+    Tool: TTerrainEditTool;
+    BrushShape: TTerrainBrushShape;
+    Falloff: TTerrainBrushFalloff;
+    Radius: Single;
+    Strength: Single;
+    TargetHeight: Single;
+    SeaLevel: Single;
+    LastMouseX: Integer;
+    LastMouseY: Integer;
+    HitWorld: TVector3;
+    HitLocal: TVector3;
     LastError: string;
   end;
 
@@ -662,6 +704,7 @@ type
 
     fMeshEditor: TMeshImState;
     fHeightFieldPicker: THeightFieldImState;
+    fTerrainEditor: TTerrainEditState;
     fMaterialEditor: TMaterialEditorImState;
     fTextureBrowser: TTextureBrowserState;
     fMaterialFileBrowser: TMaterialFileBrowserState;
@@ -1037,6 +1080,8 @@ type
     procedure DrawImGuiLog;
     procedure DrawImGuiMeshEditor;
     procedure DrawImGuiHeightFieldBrowser;
+    procedure DrawImGuiTerrainEditor;
+    procedure DrawTerrainBrushGizmo;
 
     procedure SelectObjectFromImGui(Obj: TSceneObject);
     procedure FocusCameraOnSceneObject(Obj: TSceneObject);
@@ -1066,6 +1111,16 @@ type
     procedure DeleteSelectedAnimatedSprite;
     procedure DeleteSelectedAudioEmitter;
     procedure SetGizmoModeFromToolbar(AMode: TGizmoMode);
+    function SelectedTerrainMesh: THeightFieldMesh;
+    function TerrainEditModeActive: Boolean;
+    procedure SetTerrainEditModeActive(const AActive: Boolean);
+    procedure ResetTerrainBrushHit;
+    function UpdateTerrainBrushHit(X, Y: Integer): Boolean;
+    function ProjectWorldToViewport(const WorldPoint: TVector3;
+      out ScreenPoint: TVector2): Boolean;
+    procedure UpdateTerrainEditing(const DeltaTime: Double);
+    function ApplyTerrainBrush(HeightField: THeightFieldMesh;
+      const CenterLocal: TVector3; DeltaTime: Single; Invert: Boolean): Boolean;
 
     function MaterialLibraryDisplayName(ALib: TMaterialLibrary; Index: Integer): string;
     function MaterialDisplayName(AMat: TMaterial; Index: Integer): string;
@@ -1998,6 +2053,21 @@ begin
   fImGuiMouseCaptured := False;
   fImGuiKeyboardCaptured := False;
   fImGuiMouseBlockScene := False;
+  fTerrainEditor.Active := False;
+  fTerrainEditor.Painting := False;
+  fTerrainEditor.HoverValid := False;
+  fTerrainEditor.Tool := tetAdd;
+  fTerrainEditor.BrushShape := tbsCircle;
+  fTerrainEditor.Falloff := tbfSmooth;
+  fTerrainEditor.Radius := 4.0;
+  fTerrainEditor.Strength := 2.0;
+  fTerrainEditor.TargetHeight := 0.0;
+  fTerrainEditor.SeaLevel := 0.0;
+  fTerrainEditor.LastMouseX := -1;
+  fTerrainEditor.LastMouseY := -1;
+  fTerrainEditor.HitWorld := Vector3(0, 0, 0);
+  fTerrainEditor.HitLocal := Vector3(0, 0, 0);
+  fTerrainEditor.LastError := '';
   fRenderer.OnBeforeSceneRender := RenderEditorGrid;
   fRenderer.OnBeforePresent := RenderImGuiEditor;
 
@@ -9899,6 +9969,7 @@ end;
 
 procedure TSandBoxForm.DrawImGuiEditor;
 begin
+  DrawTerrainBrushGizmo;
   DrawImGuiToolbar;
   DrawImGuiViewportToolbar;
   DrawImGuiSceneTree;
@@ -9914,6 +9985,7 @@ begin
   DrawImGuiLog;
   DrawImGuiMaterialEditor;
   DrawImGuiMeshEditor;
+  DrawImGuiTerrainEditor;
   if Assigned(fGuiEditor) then
     fGuiEditor.Draw;
   if Assigned(fGuiDesigner) then
@@ -10114,6 +10186,9 @@ begin
       if ImGui.MenuItem('Particle Editor', nil, fParticleEditorActive) then
         OpenParticleEditor;
 
+      if ImGui.MenuItem('Terrain Editor', nil, fTerrainEditor.Active) then
+        SetTerrainEditModeActive(not fTerrainEditor.Active);
+
       if Assigned(fGuiEditor) and
         ImGui.MenuItem('GUI Layout Editor', nil, fGuiEditor.Active) then
       begin
@@ -10167,6 +10242,7 @@ procedure TSandBoxForm.DrawImGuiViewportToolbar;
 var
   SceneWireframe: Boolean;
   GridEnabled: Boolean;
+  TerrainActive: Boolean;
   ModeValue: Integer;
 begin
   ImGui.SetNextWindowPos(ImVec2.New(8, 8), ImGuiCond_Always);
@@ -10185,6 +10261,11 @@ begin
     ImGui.SameLine;
     if ImGui.RadioButton('Scale##ViewportTool', @ModeValue, Ord(gmScale)) then
       SetGizmoModeFromToolbar(gmScale);
+
+    ImGui.SameLine;
+    TerrainActive := fTerrainEditor.Active;
+    if ImGui.Checkbox('Terrain##ViewportTool', @TerrainActive) then
+      SetTerrainEditModeActive(TerrainActive);
 
     if Assigned(fSceneManager) then
     begin
@@ -16105,6 +16186,13 @@ begin
             BeginEditSelectedMeshFromImGui;
         end;
 
+        if fSelectedMesh is THeightFieldMesh then
+        begin
+          ImGui.SameLine;
+          if ImGui.Button('Terrain Edit') then
+            SetTerrainEditModeActive(True);
+        end;
+
         ImGui.Text(PAnsiChar(AnsiString('Selected mesh: ' + fSelectedMesh.Name)));
 
         if (not fSelectedObject.IsInstance) and
@@ -18426,6 +18514,469 @@ begin
   RequestRender;
 end;
 
+function TerrainEditToolName(ATool: TTerrainEditTool): string;
+begin
+  case ATool of
+    tetAdd: Result := 'Add / Raise';
+    tetSubtract: Result := 'Subtract / Lower';
+    tetGrow: Result := 'Grow';
+    tetErode: Result := 'Erode';
+    tetSmooth: Result := 'Smooth';
+    tetAverage: Result := 'Average';
+    tetFlatten: Result := 'Flatten';
+    tetZero: Result := 'Zero';
+    tetSeaLevel: Result := 'Sea Level';
+  else
+    Result := 'Unknown';
+  end;
+end;
+
+function TerrainBrushShapeName(AShape: TTerrainBrushShape): string;
+begin
+  case AShape of
+    tbsCircle: Result := 'Circle';
+    tbsSquare: Result := 'Square';
+  else
+    Result := 'Unknown';
+  end;
+end;
+
+function TerrainBrushFalloffName(AFalloff: TTerrainBrushFalloff): string;
+begin
+  case AFalloff of
+    tbfSmooth: Result := 'Smooth';
+    tbfLinear: Result := 'Linear';
+    tbfConstant: Result := 'Constant';
+  else
+    Result := 'Unknown';
+  end;
+end;
+
+function TSandBoxForm.SelectedTerrainMesh: THeightFieldMesh;
+begin
+  Result := nil;
+  if Assigned(fSelectedObject) and fSelectedObject.IsInstance then
+    Exit;
+  if fSelectedMesh is THeightFieldMesh then
+    Result := THeightFieldMesh(fSelectedMesh);
+end;
+
+function TSandBoxForm.TerrainEditModeActive: Boolean;
+begin
+  Result := fTerrainEditor.Active;
+end;
+
+procedure TSandBoxForm.SetTerrainEditModeActive(const AActive: Boolean);
+begin
+  if fTerrainEditor.Active = AActive then
+    Exit;
+
+  fTerrainEditor.Active := AActive;
+  fTerrainEditor.Painting := False;
+  ResetTerrainBrushHit;
+
+  if AActive then
+  begin
+    if SelectedTerrainMesh = nil then
+      fTerrainEditor.LastError := 'Select a height field mesh first.'
+    else
+      fTerrainEditor.LastError := '';
+  end
+  else
+    fTerrainEditor.LastError := '';
+
+  RefreshGizmo;
+  RequestRender;
+end;
+
+procedure TSandBoxForm.ResetTerrainBrushHit;
+begin
+  fTerrainEditor.HoverValid := False;
+  fTerrainEditor.HitWorld := Vector3(0, 0, 0);
+  fTerrainEditor.HitLocal := Vector3(0, 0, 0);
+end;
+
+function TSandBoxForm.UpdateTerrainBrushHit(X, Y: Integer): Boolean;
+var
+  HeightField: THeightFieldMesh;
+  WorldPoint, LocalPoint: TVector3;
+  Distance: Single;
+begin
+  Result := False;
+  fTerrainEditor.LastMouseX := X;
+  fTerrainEditor.LastMouseY := Y;
+  ResetTerrainBrushHit;
+
+  if not fTerrainEditor.Active then
+    Exit;
+
+  HeightField := SelectedTerrainMesh;
+  if HeightField = nil then
+  begin
+    fTerrainEditor.LastError := 'Select a height field mesh first.';
+    Exit;
+  end;
+
+  if (fRenderer = nil) or (X < 0) or (Y < 0) or
+     (X >= EditorViewportWidth) or (Y >= EditorViewportHeight) then
+    Exit;
+
+  if Assigned(fSceneManager) then
+    fSceneManager.Update
+  else if Assigned(fSelectedObject) then
+    fSelectedObject.UpdateWorldMatrices;
+
+  if Assigned(fSelectedObject) then
+    HeightField.ParentModelMatrix := fSelectedObject.WorldMatrix;
+
+  Result := TMouse.TryScreenHeightFieldHit(fRenderer, HeightField, X, Y,
+    WorldPoint, LocalPoint, Distance);
+  if Result then
+  begin
+    fTerrainEditor.HoverValid := True;
+    fTerrainEditor.HitWorld := WorldPoint;
+    fTerrainEditor.HitLocal := LocalPoint;
+    fTerrainEditor.LastError := '';
+  end;
+end;
+
+function TSandBoxForm.ProjectWorldToViewport(const WorldPoint: TVector3;
+  out ScreenPoint: TVector2): Boolean;
+var
+  RenderCamera: TSceneObject;
+  Clip: TVector4;
+  NDC: TVector3;
+begin
+  Result := False;
+  ScreenPoint := Vector2(0, 0);
+
+  if (fRenderer = nil) or (EditorViewportWidth <= 0) or
+     (EditorViewportHeight <= 0) then
+    Exit;
+
+  RenderCamera := fRenderer.ActiveCamera;
+  if RenderCamera = nil then
+    RenderCamera := fCamera;
+  if (RenderCamera = nil) or (RenderCamera.Camera = nil) then
+    Exit;
+
+  Clip := fRenderer.ProjectionMatrix *
+    (RenderCamera.Camera.ViewMatrix * Vector4(WorldPoint, 1.0));
+  if Clip.W <= 0.00001 then
+    Exit;
+
+  NDC := Vector3(Clip.X / Clip.W, Clip.Y / Clip.W, Clip.Z / Clip.W);
+  if (NDC.Z < -1.0) or (NDC.Z > 1.0) then
+    Exit;
+
+  ScreenPoint.X := (NDC.X * 0.5 + 0.5) * EditorViewportWidth;
+  ScreenPoint.Y := (1.0 - (NDC.Y * 0.5 + 0.5)) * EditorViewportHeight;
+  Result := True;
+end;
+
+procedure TSandBoxForm.UpdateTerrainEditing(const DeltaTime: Double);
+var
+  HeightField: THeightFieldMesh;
+begin
+  if not fTerrainEditor.Active then
+    Exit;
+
+  if SelectedTerrainMesh = nil then
+  begin
+    fTerrainEditor.Painting := False;
+    ResetTerrainBrushHit;
+    Exit;
+  end;
+
+  if (fTerrainEditor.LastMouseX >= 0) and (fTerrainEditor.LastMouseY >= 0) then
+    UpdateTerrainBrushHit(fTerrainEditor.LastMouseX, fTerrainEditor.LastMouseY);
+
+  if not fTerrainEditor.Painting then
+    Exit;
+
+  HeightField := SelectedTerrainMesh;
+  if (HeightField = nil) or (not fTerrainEditor.HoverValid) then
+    Exit;
+
+  ApplyTerrainBrush(HeightField, fTerrainEditor.HitLocal,
+    Single(System.Math.Max(0.0001, System.Math.Min(0.1, DeltaTime))),
+    (Word(GetAsyncKeyState(VK_SHIFT)) and $8000) <> 0);
+end;
+
+function TSandBoxForm.ApplyTerrainBrush(HeightField: THeightFieldMesh;
+  const CenterLocal: TVector3; DeltaTime: Single; Invert: Boolean): Boolean;
+var
+  OriginalHeights: TArray<Single>;
+  NewHeights: TArray<Single>;
+  WidthSamples, DepthSamples: Integer;
+  X, Z: Integer;
+  MinX, MaxX, MinZ, MaxZ: Integer;
+  RadiusSamplesX, RadiusSamplesZ: Integer;
+  CenterSampleX, CenterSampleZ: Integer;
+  StepX, StepZ: Single;
+  Radius, Strength, HeightScale: Single;
+  TerrainWidth, TerrainDepth: Single;
+  Amount, Blend: Single;
+  AverageSum, AverageWeight, BrushAverage: Single;
+
+  function ClampInt(Value, MinValue, MaxValue: Integer): Integer;
+  begin
+    if Value < MinValue then
+      Result := MinValue
+    else if Value > MaxValue then
+      Result := MaxValue
+    else
+      Result := Value;
+  end;
+
+  function StoredToLocal(const Value: Single): Single;
+  begin
+    Result := Value * HeightScale;
+  end;
+
+  function LocalToStored(const Value: Single): Single;
+  begin
+    Result := Value / HeightScale;
+  end;
+
+  function HeightIndex(const AX, AZ: Integer): Integer;
+  begin
+    Result := ClampInt(AZ, 0, DepthSamples - 1) * WidthSamples +
+      ClampInt(AX, 0, WidthSamples - 1);
+  end;
+
+  function LocalHeightAt(const AX, AZ: Integer): Single;
+  begin
+    Result := StoredToLocal(OriginalHeights[HeightIndex(AX, AZ)]);
+  end;
+
+  function SampleLocalX(const AX: Integer): Single;
+  begin
+    Result := -TerrainWidth * 0.5 + AX * StepX;
+  end;
+
+  function SampleLocalZ(const AZ: Integer): Single;
+  begin
+    Result := -TerrainDepth * 0.5 + AZ * StepZ;
+  end;
+
+  function BrushInfluence(const AX, AZ: Integer): Single;
+  var
+    DX, DZ, D, T: Single;
+  begin
+    DX := SampleLocalX(AX) - CenterLocal.X;
+    DZ := SampleLocalZ(AZ) - CenterLocal.Z;
+
+    case fTerrainEditor.BrushShape of
+      tbsSquare:
+        D := System.Math.Max(Abs(DX), Abs(DZ));
+    else
+      D := Sqrt(DX * DX + DZ * DZ);
+    end;
+
+    if D > Radius then
+      Exit(0.0);
+
+    if Radius <= 0.0001 then
+      T := 1.0
+    else
+      T := 1.0 - (D / Radius);
+
+    T := System.Math.Min(1.0, System.Math.Max(0.0, T));
+    case fTerrainEditor.Falloff of
+      tbfConstant: Result := 1.0;
+      tbfLinear: Result := T;
+    else
+      Result := T * T * (3.0 - 2.0 * T);
+    end;
+  end;
+
+  function NeighborAverage(const AX, AZ: Integer): Single;
+  var
+    NX, NZ, Count: Integer;
+    Sum: Single;
+  begin
+    Sum := 0.0;
+    Count := 0;
+    for NZ := AZ - 1 to AZ + 1 do
+      for NX := AX - 1 to AX + 1 do
+      begin
+        Sum := Sum + LocalHeightAt(NX, NZ);
+        Inc(Count);
+      end;
+    if Count > 0 then
+      Result := Sum / Count
+    else
+      Result := LocalHeightAt(AX, AZ);
+  end;
+
+  function NeighborExtreme(const AX, AZ: Integer; WantMax: Boolean): Single;
+  var
+    NX, NZ: Integer;
+    Value: Single;
+  begin
+    Result := LocalHeightAt(AX, AZ);
+    for NZ := AZ - 1 to AZ + 1 do
+      for NX := AX - 1 to AX + 1 do
+      begin
+        Value := LocalHeightAt(NX, NZ);
+        if WantMax then
+          Result := System.Math.Max(Result, Value)
+        else
+          Result := System.Math.Min(Result, Value);
+      end;
+  end;
+
+  function BrushTargetHeight(const AX, AZ: Integer; CurrentHeight: Single): Single;
+  var
+    GrowMode: Boolean;
+  begin
+    Result := CurrentHeight;
+    case fTerrainEditor.Tool of
+      tetSmooth:
+        Result := NeighborAverage(AX, AZ);
+      tetAverage:
+        Result := BrushAverage;
+      tetFlatten:
+        Result := fTerrainEditor.TargetHeight;
+      tetZero:
+        Result := 0.0;
+      tetSeaLevel:
+        Result := fTerrainEditor.SeaLevel;
+      tetGrow, tetErode:
+        begin
+          GrowMode := fTerrainEditor.Tool = tetGrow;
+          if Invert then
+            GrowMode := not GrowMode;
+          Result := NeighborExtreme(AX, AZ, GrowMode);
+        end;
+    end;
+  end;
+
+var
+  Influence: Single;
+  CurrentHeight, TargetHeight, NewHeight: Single;
+  Index: Integer;
+begin
+  Result := False;
+  if HeightField = nil then
+    Exit;
+
+  WidthSamples := HeightField.HeightMapWidth;
+  DepthSamples := HeightField.HeightMapDepth;
+  if (WidthSamples < 2) or (DepthSamples < 2) then
+    Exit;
+
+  Radius := System.Math.Max(0.001, fTerrainEditor.Radius);
+  Strength := System.Math.Max(0.0, fTerrainEditor.Strength);
+  if Strength <= 0.0 then
+    Exit;
+
+  HeightScale := HeightField.HeightScale;
+  if Abs(HeightScale) <= 0.000001 then
+    HeightScale := 1.0;
+
+  TerrainWidth := HeightField.Width;
+  TerrainDepth := HeightField.Depth;
+  if Abs(TerrainWidth) <= 0.000001 then
+    TerrainWidth := 1.0;
+  if Abs(TerrainDepth) <= 0.000001 then
+    TerrainDepth := 1.0;
+
+  StepX := TerrainWidth / (WidthSamples - 1);
+  StepZ := TerrainDepth / (DepthSamples - 1);
+  if Abs(StepX) <= 0.000001 then
+    StepX := 1.0;
+  if Abs(StepZ) <= 0.000001 then
+    StepZ := 1.0;
+
+  OriginalHeights := HeightField.Heights;
+  if Length(OriginalHeights) <> WidthSamples * DepthSamples then
+    Exit;
+  NewHeights := Copy(OriginalHeights, 0, Length(OriginalHeights));
+
+  CenterSampleX := Round(((CenterLocal.X / TerrainWidth) + 0.5) *
+    (WidthSamples - 1));
+  CenterSampleZ := Round(((CenterLocal.Z / TerrainDepth) + 0.5) *
+    (DepthSamples - 1));
+
+  RadiusSamplesX := Ceil(Radius / Abs(StepX)) + 1;
+  RadiusSamplesZ := Ceil(Radius / Abs(StepZ)) + 1;
+  MinX := ClampInt(CenterSampleX - RadiusSamplesX, 0, WidthSamples - 1);
+  MaxX := ClampInt(CenterSampleX + RadiusSamplesX, 0, WidthSamples - 1);
+  MinZ := ClampInt(CenterSampleZ - RadiusSamplesZ, 0, DepthSamples - 1);
+  MaxZ := ClampInt(CenterSampleZ + RadiusSamplesZ, 0, DepthSamples - 1);
+
+  AverageSum := 0.0;
+  AverageWeight := 0.0;
+  for Z := MinZ to MaxZ do
+    for X := MinX to MaxX do
+    begin
+      Influence := BrushInfluence(X, Z);
+      if Influence <= 0.0 then
+        Continue;
+      AverageSum := AverageSum + LocalHeightAt(X, Z) * Influence;
+      AverageWeight := AverageWeight + Influence;
+    end;
+
+  if AverageWeight > 0.0 then
+    BrushAverage := AverageSum / AverageWeight
+  else
+    BrushAverage := CenterLocal.Y;
+
+  Amount := Strength * DeltaTime;
+  Blend := System.Math.Min(1.0, Amount);
+
+  for Z := MinZ to MaxZ do
+    for X := MinX to MaxX do
+    begin
+      Influence := BrushInfluence(X, Z);
+      if Influence <= 0.0 then
+        Continue;
+
+      Index := Z * WidthSamples + X;
+      CurrentHeight := StoredToLocal(OriginalHeights[Index]);
+
+      case fTerrainEditor.Tool of
+        tetAdd:
+          begin
+            if Invert then
+              NewHeight := CurrentHeight - Amount * Influence
+            else
+              NewHeight := CurrentHeight + Amount * Influence;
+          end;
+
+        tetSubtract:
+          begin
+            if Invert then
+              NewHeight := CurrentHeight + Amount * Influence
+            else
+              NewHeight := CurrentHeight - Amount * Influence;
+          end;
+
+      else
+        begin
+          TargetHeight := BrushTargetHeight(X, Z, CurrentHeight);
+          NewHeight := CurrentHeight + (TargetHeight - CurrentHeight) *
+            System.Math.Min(1.0, Blend * Influence);
+        end;
+      end;
+
+      if not SameValue(NewHeight, CurrentHeight, 0.000001) then
+      begin
+        NewHeights[Index] := LocalToStored(NewHeight);
+        Result := True;
+      end;
+    end;
+
+  if not Result then
+    Exit;
+
+  ActivateMainRenderContext;
+  HeightField.SetHeights(NewHeights, WidthSamples, DepthSamples);
+  NotifyInspectorMeshEdited(HeightField, True);
+end;
+
 procedure TSandBoxForm.SelectMeshIndex(const MeshIndex: Integer);
 var
   Meshes: TMeshList;
@@ -20040,6 +20591,286 @@ begin
     ResetHeightFieldBrowser;
 end;
 
+procedure TSandBoxForm.DrawImGuiTerrainEditor;
+var
+  OpenWindow: Boolean;
+  HeightField: THeightFieldMesh;
+  Changed: Boolean;
+  I: Integer;
+  Selected: Boolean;
+begin
+  if not fTerrainEditor.Active then
+    Exit;
+
+  ImGui.SetNextWindowSize(ImVec2.New(360, 430), ImGuiCond_FirstUseEver);
+  ImGui.SetNextWindowPos(ImVec2.New(EditorViewportWidth - 720, 90),
+    ImGuiCond_FirstUseEver);
+
+  OpenWindow := True;
+  if ImGui.Begin_('Terrain Editor', @OpenWindow) then
+  begin
+    HeightField := SelectedTerrainMesh;
+    if HeightField = nil then
+    begin
+      if Assigned(fSelectedObject) and fSelectedObject.IsInstance then
+        ImGui.TextWrapped('Selected object is an instance. Make it unique before editing terrain.')
+      else
+        ImGui.TextWrapped('Select a height field mesh to edit terrain.');
+    end
+    else
+    begin
+      fTerrainEditor.LastError := '';
+      ImGui.Text(PAnsiChar(AnsiString('Mesh: ' + HeightField.Name)));
+      ImGui.Text(PAnsiChar(AnsiString(Format('Samples: %d x %d',
+        [HeightField.HeightMapWidth, HeightField.HeightMapDepth]))));
+
+      ImGui.Separator;
+      if ImGui.BeginCombo('Tool', AnsiString(TerrainEditToolName(
+        fTerrainEditor.Tool))) then
+      begin
+        for I := Ord(Low(TTerrainEditTool)) to Ord(High(TTerrainEditTool)) do
+        begin
+          Selected := I = Ord(fTerrainEditor.Tool);
+          if ImGui.Selectable(AnsiString(TerrainEditToolName(
+            TTerrainEditTool(I))), Selected) then
+          begin
+            fTerrainEditor.Tool := TTerrainEditTool(I);
+            RequestRender;
+          end;
+        end;
+        ImGui.EndCombo;
+      end;
+
+      Changed := False;
+      ImGui.PushItemWidth(IMGUI_PROP_SCALAR_WIDTH);
+      Changed := ImGui.DragFloat('Radius', @fTerrainEditor.Radius, 0.05,
+        0.01, 100000, '%.2f') or Changed;
+      Changed := ImGui.DragFloat('Strength', @fTerrainEditor.Strength, 0.05,
+        0.0, 100000, '%.2f') or Changed;
+      Changed := ImGui.DragFloat('Flatten height',
+        @fTerrainEditor.TargetHeight, 0.05, -100000, 100000, '%.2f') or Changed;
+      Changed := ImGui.DragFloat('Sea level', @fTerrainEditor.SeaLevel, 0.05,
+        -100000, 100000, '%.2f') or Changed;
+      ImGui.PopItemWidth;
+
+      if Changed then
+      begin
+        fTerrainEditor.Radius := System.Math.Max(0.01,
+          fTerrainEditor.Radius);
+        fTerrainEditor.Strength := System.Math.Max(0.0,
+          fTerrainEditor.Strength);
+        RequestRender;
+      end;
+
+      if fTerrainEditor.HoverValid then
+      begin
+        if ImGui.Button('Use Cursor Height##TerrainFlatten') then
+        begin
+          fTerrainEditor.TargetHeight := fTerrainEditor.HitLocal.Y;
+          RequestRender;
+        end;
+        ImGui.SameLine;
+        if ImGui.Button('Sea = Cursor##TerrainSea') then
+        begin
+          fTerrainEditor.SeaLevel := fTerrainEditor.HitLocal.Y;
+          RequestRender;
+        end;
+      end;
+
+      ImGui.Separator;
+      ImGui.Text('Brush');
+      if ImGui.BeginCombo('Shape', AnsiString(TerrainBrushShapeName(
+        fTerrainEditor.BrushShape))) then
+      begin
+        for I := Ord(Low(TTerrainBrushShape)) to Ord(High(TTerrainBrushShape)) do
+        begin
+          Selected := I = Ord(fTerrainEditor.BrushShape);
+          if ImGui.Selectable(AnsiString(TerrainBrushShapeName(
+            TTerrainBrushShape(I))), Selected) then
+          begin
+            fTerrainEditor.BrushShape := TTerrainBrushShape(I);
+            RequestRender;
+          end;
+        end;
+        ImGui.EndCombo;
+      end;
+
+      if ImGui.BeginCombo('Falloff', AnsiString(TerrainBrushFalloffName(
+        fTerrainEditor.Falloff))) then
+      begin
+        for I := Ord(Low(TTerrainBrushFalloff)) to Ord(High(TTerrainBrushFalloff)) do
+        begin
+          Selected := I = Ord(fTerrainEditor.Falloff);
+          if ImGui.Selectable(AnsiString(TerrainBrushFalloffName(
+            TTerrainBrushFalloff(I))), Selected) then
+          begin
+            fTerrainEditor.Falloff := TTerrainBrushFalloff(I);
+            RequestRender;
+          end;
+        end;
+        ImGui.EndCombo;
+      end;
+
+      ImGui.Separator;
+      if fTerrainEditor.HoverValid then
+        ImGui.Text(PAnsiChar(AnsiString(Format('Cursor: %.2f, %.2f, %.2f',
+          [fTerrainEditor.HitLocal.X, fTerrainEditor.HitLocal.Y,
+           fTerrainEditor.HitLocal.Z]))))
+      else
+        ImGui.TextDisabled('Cursor: no terrain hit');
+    end;
+
+    if fTerrainEditor.LastError <> '' then
+    begin
+      ImGui.Separator;
+      ImGui.TextWrapped(PAnsiChar(AnsiString(fTerrainEditor.LastError)));
+    end;
+
+    ImGui.Separator;
+    if ImGui.Button('Close##TerrainEditor') then
+      SetTerrainEditModeActive(False);
+  end;
+  ImGui.End_;
+
+  if not OpenWindow then
+    SetTerrainEditModeActive(False);
+end;
+
+procedure TSandBoxForm.DrawTerrainBrushGizmo;
+const
+  SEGMENT_COUNT = 72;
+var
+  HeightField: THeightFieldMesh;
+  DrawList: PImDrawList;
+  Flags: ImGuiWindowFlags;
+  I: Integer;
+  LocalPoint, WorldPoint: TVector3;
+  ScreenPoint, PreviousPoint: TVector2;
+  HasPrevious: Boolean;
+  Radius, Angle, T, Frac: Single;
+  Side: Integer;
+  Color, CenterColor: ImU32;
+  Thickness: Single;
+
+  function PerimeterPoint(Index: Integer): TVector3;
+  begin
+    Result := fTerrainEditor.HitLocal;
+    Radius := System.Math.Max(0.01, fTerrainEditor.Radius);
+
+    case fTerrainEditor.BrushShape of
+      tbsSquare:
+        begin
+          T := (Index / SEGMENT_COUNT) * 4.0;
+          Side := Trunc(T);
+          Frac := T - Side;
+          if Side > 3 then
+          begin
+            Side := 3;
+            Frac := 1.0;
+          end;
+
+          case Side of
+            0:
+              begin
+                Result.X := fTerrainEditor.HitLocal.X - Radius +
+                  Radius * 2.0 * Frac;
+                Result.Z := fTerrainEditor.HitLocal.Z - Radius;
+              end;
+            1:
+              begin
+                Result.X := fTerrainEditor.HitLocal.X + Radius;
+                Result.Z := fTerrainEditor.HitLocal.Z - Radius +
+                  Radius * 2.0 * Frac;
+              end;
+            2:
+              begin
+                Result.X := fTerrainEditor.HitLocal.X + Radius -
+                  Radius * 2.0 * Frac;
+                Result.Z := fTerrainEditor.HitLocal.Z + Radius;
+              end;
+          else
+            begin
+              Result.X := fTerrainEditor.HitLocal.X - Radius;
+              Result.Z := fTerrainEditor.HitLocal.Z + Radius -
+                Radius * 2.0 * Frac;
+            end;
+          end;
+        end;
+    else
+      begin
+        Angle := (Index / SEGMENT_COUNT) * Pi * 2.0;
+        Result.X := fTerrainEditor.HitLocal.X + Cos(Angle) * Radius;
+        Result.Z := fTerrainEditor.HitLocal.Z + Sin(Angle) * Radius;
+      end;
+    end;
+
+    Result.Y := HeightField.InterpolatedHeight(Result.X, Result.Z);
+  end;
+
+begin
+  if (not fTerrainEditor.Active) or (not fTerrainEditor.HoverValid) then
+    Exit;
+
+  HeightField := SelectedTerrainMesh;
+  if HeightField = nil then
+    Exit;
+
+  if Assigned(fSelectedObject) then
+    HeightField.ParentModelMatrix := fSelectedObject.WorldMatrix;
+
+  Flags := ImGuiWindowFlags_NoDecoration or ImGuiWindowFlags_NoInputs or
+    ImGuiWindowFlags_NoBackground or ImGuiWindowFlags_NoSavedSettings or
+    ImGuiWindowFlags_NoMove or ImGuiWindowFlags_NoResize;
+
+  ImGui.SetNextWindowPos(ImVec2.New(0, 0), ImGuiCond_Always);
+  ImGui.SetNextWindowSize(ImVec2.New(EditorViewportWidth, EditorViewportHeight),
+    ImGuiCond_Always);
+
+  if ImGui.Begin_('TerrainBrushGizmo##Overlay', nil, Flags) then
+  begin
+    DrawList := ImGui.GetWindowDrawList;
+    if DrawList <> nil then
+    begin
+      if fTerrainEditor.Painting then
+      begin
+        Color := ImGui.ColorConvertFloat4ToU32(ImVec4.New(0.25, 0.95, 0.42, 1.0));
+        CenterColor := ImGui.ColorConvertFloat4ToU32(ImVec4.New(1.0, 1.0, 1.0, 0.95));
+        Thickness := 3.0;
+      end
+      else
+      begin
+        Color := ImGui.ColorConvertFloat4ToU32(ImVec4.New(0.20, 0.72, 1.0, 0.82));
+        CenterColor := ImGui.ColorConvertFloat4ToU32(ImVec4.New(1.0, 1.0, 1.0, 0.72));
+        Thickness := 2.0;
+      end;
+
+      HasPrevious := False;
+      for I := 0 to SEGMENT_COUNT do
+      begin
+        LocalPoint := PerimeterPoint(I);
+        WorldPoint := Vector3(HeightField.ModelMatrix * Vector4(LocalPoint, 1.0));
+        if ProjectWorldToViewport(WorldPoint, ScreenPoint) then
+        begin
+          if HasPrevious then
+            DrawList^.AddLine(ImVec2.New(PreviousPoint.X, PreviousPoint.Y),
+              ImVec2.New(ScreenPoint.X, ScreenPoint.Y), Color, Thickness);
+          PreviousPoint := ScreenPoint;
+          HasPrevious := True;
+        end
+        else
+          HasPrevious := False;
+      end;
+
+      WorldPoint := Vector3(HeightField.ModelMatrix *
+        Vector4(fTerrainEditor.HitLocal, 1.0));
+      if ProjectWorldToViewport(WorldPoint, ScreenPoint) then
+        DrawList^.AddCircleFilled(ImVec2.New(ScreenPoint.X, ScreenPoint.Y),
+          3.0, CenterColor, 12);
+    end;
+  end;
+  ImGui.End_;
+end;
+
 procedure TSandBoxForm.PrepareImportedMeshList(Meshes: TMeshList;
   ALib: TMaterialLibrary);
 var
@@ -21629,7 +22460,7 @@ procedure TSandBoxForm.RefreshGizmo;
 var
   NeedRebuild: Boolean;
 begin
-  if (fSelectedObject = nil) or fSelectedObject.IsGizmo or (fRoot = nil) or
+  if TerrainEditModeActive or (fSelectedObject = nil) or fSelectedObject.IsGizmo or (fRoot = nil) or
      (fSelectedObject = fSceneWorld) or (fSelectedObject = fCamera) then
   begin
     if Assigned(fCurrentGizmo) then
@@ -22442,6 +23273,7 @@ procedure TSandBoxForm.DoProgress(Sender: TObject; const DeltaTime, NewTime: Dou
 begin
   try
     UpdateScene(DeltaTime, NewTime);
+    UpdateTerrainEditing(DeltaTime);
     ProcessRenderTextureCapture;
 
     if fEngine <> nil then
@@ -22586,6 +23418,22 @@ begin
 
   if Button = mbLeft then
   begin
+    if TerrainEditModeActive then
+    begin
+      if UpdateTerrainBrushHit(X, Y) then
+      begin
+        fTerrainEditor.Painting := True;
+        ApplyTerrainBrush(SelectedTerrainMesh, fTerrainEditor.HitLocal,
+          1.0 / 60.0, ssShift in Shift);
+        SetCapture(Handle);
+        RequestRender;
+        Exit;
+      end;
+
+      RequestRender;
+      Exit;
+    end;
+
     RefreshGizmo;
     Hit := False;
 
@@ -22843,6 +23691,14 @@ begin
       RequestRender;
       Exit;
     end;
+  end;
+
+  if TerrainEditModeActive and (not fMouseDown) and (not fPanActive) and
+     (not fDraggingGizmo) then
+  begin
+    UpdateTerrainBrushHit(X, Y);
+    RequestRender;
+    Exit;
   end;
 
   if Assigned(fGuiDesigner) and
@@ -23130,6 +23986,23 @@ begin
       RequestRender;
       Exit;
     end;
+  end;
+
+  if (Button = mbLeft) and fTerrainEditor.Painting then
+  begin
+    fTerrainEditor.Painting := False;
+    UpdateTerrainBrushHit(X, Y);
+    ReleaseCapture;
+    RequestRender;
+    Exit;
+  end;
+
+  if (Button = mbLeft) and TerrainEditModeActive then
+  begin
+    UpdateTerrainBrushHit(X, Y);
+    ReleaseCapture;
+    RequestRender;
+    Exit;
   end;
 
   if Assigned(fGuiDesigner) and
