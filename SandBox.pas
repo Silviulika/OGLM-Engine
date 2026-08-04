@@ -39,9 +39,14 @@ uses
   Managers.Scene, Renderer.Renderer, Utility.Functions, Engine.Time,
   Renderer.Mesh.Factory, Renderer.Mesh.List, Engine.Paths, Engine.Audio,
   Engine.Animation, Engine.Wind, Engine.Scripting, Engine, Engine.Mouse,
-  Loader.GLTF;
+Loader.GLTF;
+
+const
+  TERRAIN_PAINT_LAYER_COUNT = 5;
+  TERRAIN_MASK_DEFAULT_RESOLUTION = 512;
 
 type
+
   TPrimitiveKind = (
     pkCube,
     pkPlane,
@@ -178,7 +183,8 @@ type
     tetAverage,
     tetFlatten,
     tetZero,
-    tetSeaLevel
+    tetSeaLevel,
+    tetTexturePaint
   );
 
   TTerrainBrushShape = (
@@ -192,6 +198,16 @@ type
     tbfConstant
   );
 
+  TTerrainMaskLayerState = record
+    Valid: Boolean;
+    Dirty: Boolean;
+    Width: Integer;
+    Height: Integer;
+    TextureIndex: Integer;
+    FileName: string;
+    Pixels: TBytes;
+  end;
+
   TTerrainEditState = record
     Active: Boolean;
     Painting: Boolean;
@@ -203,6 +219,13 @@ type
     Strength: Single;
     TargetHeight: Single;
     SeaLevel: Single;
+    TextureOpacity: Single;
+    PaintLayer: Integer;
+    PaintNormalize: Boolean;
+    MaskResolution: Integer;
+    MaskMaterial: TMaterial;
+    MaskMesh: THeightFieldMesh;
+    MaskLayers: array[0..TERRAIN_PAINT_LAYER_COUNT - 1] of TTerrainMaskLayerState;
     LastMouseX: Integer;
     LastMouseY: Integer;
     HitWorld: TVector3;
@@ -548,6 +571,7 @@ type
   private const
     GIZMO_MATERIAL_NAME = 'GizmoColorMaterial';
     DEFAULT_PBR_MATERIAL_NAME = 'DefaultPBRMaterial';
+    DEFAULT_TERRAIN_MATERIAL_NAME = 'DefaultTerrainMaterial';
     DEFAULT_GRASS_MATERIAL_NAME = 'DefaultGrassMaterial';
     HEIGHTFIELD_THUMB_SIZE = 64;
     MATERIAL_TEXTURE_THUMB_SIZE = 64;
@@ -737,6 +761,7 @@ type
     function EnsureDefaultMaterialLibrary: TMaterialLibrary;
     function DefaultRenderableMaterialName: string;
     function EnsureDefaultGrassMaterialName: string;
+    function EnsureDefaultHeightFieldMaterialName: string;
     function IsEditorOnlyMaterial(AMaterial: TMaterial): Boolean;
     procedure AssignShaderToMaterial(AMaterial: TMaterial);
     procedure EnsureGizmoMaterial;
@@ -1112,6 +1137,7 @@ type
     procedure DeleteSelectedAudioEmitter;
     procedure SetGizmoModeFromToolbar(AMode: TGizmoMode);
     function SelectedTerrainMesh: THeightFieldMesh;
+    function SelectedTerrainMaterial(HeightField: THeightFieldMesh): TMaterial;
     function TerrainEditModeActive: Boolean;
     procedure SetTerrainEditModeActive(const AActive: Boolean);
     procedure ResetTerrainBrushHit;
@@ -1119,7 +1145,24 @@ type
     function ProjectWorldToViewport(const WorldPoint: TVector3;
       out ScreenPoint: TVector2): Boolean;
     procedure UpdateTerrainEditing(const DeltaTime: Double);
+    function TerrainMaskUniformName(ALayer: Integer): string;
+    function TerrainLayerTextureSummary(AMaterial: TMaterial; ALayer: Integer): string;
+    function FindTerrainMaskTextureIndex(AMaterial: TMaterial; ALayer: Integer): Integer;
+    function TerrainMaskFileName(HeightField: THeightFieldMesh;
+      AMaterial: TMaterial; ALayer: Integer): string;
+    function TryLoadTerrainMaskPixels(const AFileName: string;
+      out Pixels: TBytes; out AWidth, AHeight: Integer): Boolean;
+    function SaveTerrainMaskPixels(const AFileName: string;
+      const Pixels: TBytes; AWidth, AHeight: Integer): Boolean;
+    procedure ClearTerrainPaintMaskCache;
+    procedure FlushTerrainPaintMasks;
+    function UploadTerrainMaskLayer(AMaterial: TMaterial; ALayer: Integer;
+      var AMask: TTerrainMaskLayerState): Boolean;
+    function EnsureTerrainPaintMasks(HeightField: THeightFieldMesh;
+      AMaterial: TMaterial): Boolean;
     function ApplyTerrainBrush(HeightField: THeightFieldMesh;
+      const CenterLocal: TVector3; DeltaTime: Single; Invert: Boolean): Boolean;
+    function ApplyTerrainTextureBrush(HeightField: THeightFieldMesh;
       const CenterLocal: TVector3; DeltaTime: Single; Invert: Boolean): Boolean;
 
     function MaterialLibraryDisplayName(ALib: TMaterialLibrary; Index: Integer): string;
@@ -2063,6 +2106,12 @@ begin
   fTerrainEditor.Strength := 2.0;
   fTerrainEditor.TargetHeight := 0.0;
   fTerrainEditor.SeaLevel := 0.0;
+  fTerrainEditor.TextureOpacity := 2.0;
+  fTerrainEditor.PaintLayer := 1;
+  fTerrainEditor.PaintNormalize := True;
+  fTerrainEditor.MaskResolution := TERRAIN_MASK_DEFAULT_RESOLUTION;
+  fTerrainEditor.MaskMaterial := nil;
+  fTerrainEditor.MaskMesh := nil;
   fTerrainEditor.LastMouseX := -1;
   fTerrainEditor.LastMouseY := -1;
   fTerrainEditor.HitWorld := Vector3(0, 0, 0);
@@ -2122,6 +2171,9 @@ end;
 
 procedure TSandBoxForm.ShutdownEditor;
 begin
+  FlushTerrainPaintMasks;
+  ClearTerrainPaintMaskCache;
+
   if Assigned(Timer) then
   begin
     Timer.Enabled := False;
@@ -2415,6 +2467,39 @@ begin
   begin
     Mat.Materialtype := Managers.Material.mtGrass;
     AssignShaderToMaterial(Mat);
+  end;
+end;
+
+function TSandBoxForm.EnsureDefaultHeightFieldMaterialName: string;
+var
+  Lib: TMaterialLibrary;
+  Mat: TMaterial;
+begin
+  Result := DEFAULT_TERRAIN_MATERIAL_NAME;
+  Lib := EnsureDefaultMaterialLibrary;
+  if Lib = nil then
+    Exit('');
+
+  Mat := Lib.GetMaterial(DEFAULT_TERRAIN_MATERIAL_NAME);
+  if Mat = nil then
+  begin
+    Mat := TMaterial.Create(mtHeightFieldMaterial);
+    try
+      Mat.Name := DEFAULT_TERRAIN_MATERIAL_NAME;
+      AssignShaderToMaterial(Mat);
+      AddDefaultHeightFieldTextures(Mat);
+      Lib.AddMaterial(Mat);
+      Mat := nil;
+    finally
+      Mat.Free;
+    end;
+  end
+  else
+  begin
+    Mat.Materialtype := mtHeightFieldMaterial;
+    AssignShaderToMaterial(Mat);
+    if Mat.Count = 0 then
+      AddDefaultHeightFieldTextures(Mat);
   end;
 end;
 
@@ -18526,6 +18611,7 @@ begin
     tetFlatten: Result := 'Flatten';
     tetZero: Result := 'Zero';
     tetSeaLevel: Result := 'Sea Level';
+    tetTexturePaint: Result := 'Texture Paint';
   else
     Result := 'Unknown';
   end;
@@ -18561,6 +18647,40 @@ begin
     Result := THeightFieldMesh(fSelectedMesh);
 end;
 
+function TSandBoxForm.SelectedTerrainMaterial(
+  HeightField: THeightFieldMesh): TMaterial;
+var
+  Lib: TMaterialLibrary;
+  I: Integer;
+  MaterialName: string;
+begin
+  Result := nil;
+  if HeightField = nil then
+    Exit;
+
+  Lib := HeightField.MaterialLibrary;
+  if (Lib = nil) and (MaterialLibraries <> nil) and
+     (Trim(HeightField.MaterialLibraryName) <> '') then
+    Lib := MaterialLibraries.GetMaterialLibrary(HeightField.MaterialLibraryName);
+
+  if Lib = nil then
+    Exit;
+
+  MaterialName := Trim(HeightField.LibMaterialname);
+  if MaterialName <> '' then
+  begin
+    for I := 0 to Lib.Count - 1 do
+      if Assigned(Lib.Material[I]) and SameText(Lib.Material[I].Name,
+        MaterialName) then
+        Exit(Lib.Material[I]);
+  end;
+
+  for I := 0 to Lib.Count - 1 do
+    if Assigned(Lib.Material[I]) and
+       (Lib.Material[I].Materialtype = mtHeightFieldMaterial) then
+      Exit(Lib.Material[I]);
+end;
+
 function TSandBoxForm.TerrainEditModeActive: Boolean;
 begin
   Result := fTerrainEditor.Active;
@@ -18583,7 +18703,11 @@ begin
       fTerrainEditor.LastError := '';
   end
   else
+  begin
+    FlushTerrainPaintMasks;
+    ClearTerrainPaintMaskCache;
     fTerrainEditor.LastError := '';
+  end;
 
   RefreshGizmo;
   RequestRender;
@@ -18698,9 +18822,14 @@ begin
   if (HeightField = nil) or (not fTerrainEditor.HoverValid) then
     Exit;
 
-  ApplyTerrainBrush(HeightField, fTerrainEditor.HitLocal,
-    Single(System.Math.Max(0.0001, System.Math.Min(0.1, DeltaTime))),
-    (Word(GetAsyncKeyState(VK_SHIFT)) and $8000) <> 0);
+  if fTerrainEditor.Tool = tetTexturePaint then
+    ApplyTerrainTextureBrush(HeightField, fTerrainEditor.HitLocal,
+      Single(System.Math.Max(0.0001, System.Math.Min(0.1, DeltaTime))),
+      (Word(GetAsyncKeyState(VK_SHIFT)) and $8000) <> 0)
+  else
+    ApplyTerrainBrush(HeightField, fTerrainEditor.HitLocal,
+      Single(System.Math.Max(0.0001, System.Math.Min(0.1, DeltaTime))),
+      (Word(GetAsyncKeyState(VK_SHIFT)) and $8000) <> 0);
 end;
 
 function TSandBoxForm.ApplyTerrainBrush(HeightField: THeightFieldMesh;
@@ -18975,6 +19104,687 @@ begin
   ActivateMainRenderContext;
   HeightField.SetHeights(NewHeights, WidthSamples, DepthSamples);
   NotifyInspectorMeshEdited(HeightField, True);
+end;
+
+function TSandBoxForm.TerrainMaskUniformName(ALayer: Integer): string;
+begin
+  if ALayer < 0 then
+    ALayer := 0
+  else if ALayer >= TERRAIN_PAINT_LAYER_COUNT then
+    ALayer := TERRAIN_PAINT_LAYER_COUNT - 1;
+
+  Result := Format('alphaTexture%d', [ALayer]);
+end;
+
+function TSandBoxForm.TerrainLayerTextureSummary(AMaterial: TMaterial;
+  ALayer: Integer): string;
+const
+  Singles: array[0..4] of string = (
+    'albedoTexture',
+    'normalTexture',
+    'heightTexture',
+    'metalnessTexture',
+    'roughnessTexture'
+  );
+  Arrays: array[0..4] of string = (
+    'albedoTextures',
+    'normalTextures',
+    'heightTextures',
+    'metalnessTextures',
+    'roughnessTextures'
+  );
+var
+  I, J: Integer;
+  NameLower: string;
+  TargetA, TargetB: string;
+  FilePart: string;
+begin
+  Result := '';
+  if (AMaterial = nil) or (ALayer < 0) or
+     (ALayer >= TERRAIN_PAINT_LAYER_COUNT) then
+    Exit;
+
+  for J := 0 to High(Singles) do
+  begin
+    TargetA := LowerCase(Singles[J] + IntToStr(ALayer));
+    TargetB := LowerCase(Arrays[J] + '[' + IntToStr(ALayer) + ']');
+    for I := 0 to AMaterial.Count - 1 do
+    begin
+      NameLower := LowerCase(Trim(AMaterial.TextureList[I].Texture.Name));
+      if (NameLower = TargetA) or (NameLower = TargetB) then
+      begin
+        FilePart := ExtractFileName(AMaterial.TextureList[I].Path);
+        if FilePart = '' then
+          FilePart := '<empty>';
+        if Result <> '' then
+          Result := Result + ' | ';
+        Result := Result + Copy(Singles[J], 1,
+          Length(Singles[J]) - Length('Texture')) + ': ' + FilePart;
+        Break;
+      end;
+    end;
+  end;
+
+  if Result = '' then
+    Result := 'No texture set assigned';
+end;
+
+function TSandBoxForm.FindTerrainMaskTextureIndex(AMaterial: TMaterial;
+  ALayer: Integer): Integer;
+const
+  Singles: array[0..4] of string = (
+    'alphaTexture',
+    'maskTexture',
+    'blendTexture',
+    'blendMap',
+    'splatMap'
+  );
+  Arrays: array[0..4] of string = (
+    'alphaTextures',
+    'maskTextures',
+    'blendTextures',
+    'blendMaps',
+    'splatMaps'
+  );
+var
+  I, J: Integer;
+  NameLower: string;
+  TargetA, TargetB: string;
+begin
+  Result := -1;
+  if (AMaterial = nil) or (ALayer < 0) or
+     (ALayer >= TERRAIN_PAINT_LAYER_COUNT) then
+    Exit;
+
+  for I := 0 to AMaterial.Count - 1 do
+  begin
+    NameLower := LowerCase(Trim(AMaterial.TextureList[I].Texture.Name));
+    for J := 0 to High(Singles) do
+    begin
+      TargetA := LowerCase(Singles[J] + IntToStr(ALayer));
+      TargetB := LowerCase(Arrays[J] + '[' + IntToStr(ALayer) + ']');
+      if (NameLower = TargetA) or (NameLower = TargetB) then
+        Exit(I);
+    end;
+  end;
+end;
+
+function TSandBoxForm.TerrainMaskFileName(HeightField: THeightFieldMesh;
+  AMaterial: TMaterial; ALayer: Integer): string;
+var
+  MeshPart: string;
+  MaterialPart: string;
+  FileName: string;
+
+  function SafePart(const Value, Fallback: string): string;
+  var
+    I: Integer;
+    C: Char;
+    LastWasUnderscore: Boolean;
+  begin
+    Result := '';
+    LastWasUnderscore := False;
+    for I := 1 to Length(Value) do
+    begin
+      C := Value[I];
+      if CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '-', '_']) then
+      begin
+        Result := Result + C;
+        LastWasUnderscore := False;
+      end
+      else if not LastWasUnderscore then
+      begin
+        Result := Result + '_';
+        LastWasUnderscore := True;
+      end;
+    end;
+
+    Result := Trim(Result);
+    while (Result <> '') and (Result[Length(Result)] = '_') do
+      Delete(Result, Length(Result), 1);
+    if Result = '' then
+      Result := Fallback;
+  end;
+begin
+  if ALayer < 0 then
+    ALayer := 0
+  else if ALayer >= TERRAIN_PAINT_LAYER_COUNT then
+    ALayer := TERRAIN_PAINT_LAYER_COUNT - 1;
+
+  MeshPart := 'Terrain';
+  if HeightField <> nil then
+    MeshPart := SafePart(HeightField.Name, MeshPart);
+
+  MaterialPart := 'Material';
+  if AMaterial <> nil then
+    MaterialPart := SafePart(AMaterial.Name, MaterialPart);
+
+  FileName := TPath.Combine('TerrainMasks',
+    Format('%s_%s_Layer%d.png', [MeshPart, MaterialPart, ALayer]));
+  Result := TEnginePaths.ResolveGeneratedTextureFileName(FileName);
+end;
+
+function TSandBoxForm.TryLoadTerrainMaskPixels(const AFileName: string;
+  out Pixels: TBytes; out AWidth, AHeight: Integer): Boolean;
+var
+  Picture: TPicture;
+  Bitmap: TBitmap;
+begin
+  Result := False;
+  SetLength(Pixels, 0);
+  AWidth := 0;
+  AHeight := 0;
+
+  if (AFileName = '') or (not FileExists(AFileName)) then
+    Exit;
+
+  Picture := TPicture.Create;
+  Bitmap := TBitmap.Create;
+  try
+    try
+      Picture.LoadFromFile(AFileName);
+      AWidth := Picture.Width;
+      AHeight := Picture.Height;
+      if (AWidth < 1) or (AHeight < 1) then
+        Exit;
+
+      Bitmap.PixelFormat := pf32bit;
+      Bitmap.SetSize(AWidth, AHeight);
+      Bitmap.Canvas.Draw(0, 0, Picture.Graphic);
+      Result := TryCopyBitmapToRGBAPixels(Bitmap, Pixels);
+    except
+      SetLength(Pixels, 0);
+      AWidth := 0;
+      AHeight := 0;
+      Result := False;
+    end;
+  finally
+    Bitmap.Free;
+    Picture.Free;
+  end;
+end;
+
+function TSandBoxForm.SaveTerrainMaskPixels(const AFileName: string;
+  const Pixels: TBytes; AWidth, AHeight: Integer): Boolean;
+var
+  Png: TPngImage;
+  RGBLine: pRGBLine;
+  AlphaLine: pByteArray;
+  X, Y: Integer;
+  SourceIndex: Integer;
+  ExpectedByteCount: Int64;
+begin
+  Result := False;
+  if (AFileName = '') or (AWidth < 1) or (AHeight < 1) then
+    Exit;
+
+  ExpectedByteCount := Int64(AWidth) * AHeight * 4;
+  if (ExpectedByteCount < 4) or (ExpectedByteCount > Length(Pixels)) then
+    Exit;
+
+  try
+    ForceDirectories(ExtractFilePath(AFileName));
+    Png := TPngImage.CreateBlank(COLOR_RGBALPHA, 8, AWidth, AHeight);
+    try
+      for Y := 0 to AHeight - 1 do
+      begin
+        RGBLine := pRGBLine(Png.Scanline[Y]);
+        AlphaLine := Png.AlphaScanline[Y];
+        for X := 0 to AWidth - 1 do
+        begin
+          SourceIndex := (Y * AWidth + X) * 4;
+          RGBLine^[X].rgbtRed := Pixels[SourceIndex + 0];
+          RGBLine^[X].rgbtGreen := Pixels[SourceIndex + 1];
+          RGBLine^[X].rgbtBlue := Pixels[SourceIndex + 2];
+          if AlphaLine <> nil then
+            AlphaLine^[X] := Pixels[SourceIndex + 3];
+        end;
+      end;
+      Png.SaveToFile(AFileName);
+    finally
+      Png.Free;
+    end;
+    Result := True;
+  except
+    Result := False;
+  end;
+end;
+
+procedure TSandBoxForm.ClearTerrainPaintMaskCache;
+var
+  I: Integer;
+begin
+  for I := 0 to TERRAIN_PAINT_LAYER_COUNT - 1 do
+    fTerrainEditor.MaskLayers[I] := Default(TTerrainMaskLayerState);
+
+  fTerrainEditor.MaskMaterial := nil;
+  fTerrainEditor.MaskMesh := nil;
+end;
+
+procedure TSandBoxForm.FlushTerrainPaintMasks;
+var
+  I: Integer;
+begin
+  for I := 0 to TERRAIN_PAINT_LAYER_COUNT - 1 do
+    if fTerrainEditor.MaskLayers[I].Valid and
+       fTerrainEditor.MaskLayers[I].Dirty then
+    begin
+      if SaveTerrainMaskPixels(fTerrainEditor.MaskLayers[I].FileName,
+        fTerrainEditor.MaskLayers[I].Pixels,
+        fTerrainEditor.MaskLayers[I].Width,
+        fTerrainEditor.MaskLayers[I].Height) then
+        fTerrainEditor.MaskLayers[I].Dirty := False
+      else
+        fTerrainEditor.LastError := 'Could not save terrain mask: ' +
+          fTerrainEditor.MaskLayers[I].FileName;
+    end;
+end;
+
+function TSandBoxForm.UploadTerrainMaskLayer(AMaterial: TMaterial;
+  ALayer: Integer; var AMask: TTerrainMaskLayerState): Boolean;
+var
+  Tex: TMaterialTexture;
+  TextureIndex: Integer;
+  TextureID: GLuint;
+  ExpectedByteCount: Int64;
+  StoredPath: string;
+  OldUnpackAlignment: GLint;
+begin
+  Result := False;
+  if (AMaterial = nil) or (ALayer < 0) or
+     (ALayer >= TERRAIN_PAINT_LAYER_COUNT) then
+    Exit;
+
+  ExpectedByteCount := Int64(AMask.Width) * AMask.Height * 4;
+  if (AMask.Width < 1) or (AMask.Height < 1) or
+     (ExpectedByteCount < 4) or (ExpectedByteCount > Length(AMask.Pixels)) then
+    Exit;
+
+  TextureIndex := FindTerrainMaskTextureIndex(AMaterial, ALayer);
+  if TextureIndex >= 0 then
+    Tex := AMaterial.TextureList[TextureIndex]
+  else
+    Tex := Default(TMaterialTexture);
+
+  TextureID := Tex.Texture.TexID;
+  ActivateMainRenderContext;
+  if TextureID = 0 then
+    glGenTextures(1, @TextureID);
+  if TextureID = 0 then
+    Exit;
+
+  glBindTexture(GL_TEXTURE_2D, TextureID);
+  glGetIntegerv(GL_UNPACK_ALIGNMENT, @OldUnpackAlignment);
+  try
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, AMask.Width, AMask.Height, 0,
+      GL_RGBA, GL_UNSIGNED_BYTE, @AMask.Pixels[0]);
+  finally
+    glPixelStorei(GL_UNPACK_ALIGNMENT, OldUnpackAlignment);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  end;
+
+  StoredPath := TEnginePaths.ToAssetRelativePath(AMask.FileName);
+  Tex.Texture.TexID := TextureID;
+  Tex.Texture.Name := TerrainMaskUniformName(ALayer);
+  Tex.Path := StoredPath;
+
+  if TextureIndex >= 0 then
+  begin
+    AMaterial.TextureList[TextureIndex] := Tex;
+    AMask.TextureIndex := TextureIndex;
+  end
+  else
+    AMask.TextureIndex := AMaterial.AddTexture(Tex);
+
+  AssignShaderToMaterial(AMaterial);
+  Result := True;
+end;
+
+function TSandBoxForm.EnsureTerrainPaintMasks(HeightField: THeightFieldMesh;
+  AMaterial: TMaterial): Boolean;
+var
+  I: Integer;
+
+  function IsDefaultMaskTexturePath(const AFileName: string): Boolean;
+  var
+    FilePart: string;
+  begin
+    FilePart := LowerCase(ExtractFileName(AFileName));
+    Result := SameText(FilePart, 'DefaultColor.tga') or
+      SameText(FilePart, 'DefaultMetallic.tga') or
+      SameText(FilePart, 'DefaultRoughness.tga') or
+      SameText(FilePart, 'DefaultHeight.tga') or
+      SameText(FilePart, 'DefaultNormal.tga') or
+      SameText(FilePart, 'DefaultEdge.tga') or
+      SameText(FilePart, 'DefaultAmbient.tga');
+  end;
+
+  procedure CreateSolidMask(out Pixels: TBytes; AWidth, AHeight: Integer;
+    Value: Byte);
+  var
+    X, Y, Index: Integer;
+  begin
+    SetLength(Pixels, AWidth * AHeight * 4);
+    for Y := 0 to AHeight - 1 do
+      for X := 0 to AWidth - 1 do
+      begin
+        Index := (Y * AWidth + X) * 4;
+        Pixels[Index + 0] := Value;
+        Pixels[Index + 1] := Value;
+        Pixels[Index + 2] := Value;
+        Pixels[Index + 3] := 255;
+      end;
+  end;
+
+  function EnsureLayer(ALayer: Integer): Boolean;
+  var
+    Mask: TTerrainMaskLayerState;
+    Tex: TMaterialTexture;
+    TextureIndex: Integer;
+    MaskPath: string;
+    Width, Height: Integer;
+    InitialValue: Byte;
+    Created: Boolean;
+  begin
+    Result := False;
+    TextureIndex := FindTerrainMaskTextureIndex(AMaterial, ALayer);
+    if TextureIndex >= 0 then
+      Tex := AMaterial.TextureList[TextureIndex]
+    else
+      Tex := Default(TMaterialTexture);
+
+    MaskPath := '';
+    if Trim(Tex.Path) <> '' then
+      MaskPath := TEnginePaths.ResolveAssetPath(Tex.Path);
+
+    if (MaskPath = '') or IsDefaultMaskTexturePath(MaskPath) then
+      MaskPath := TerrainMaskFileName(HeightField, AMaterial, ALayer);
+
+    if fTerrainEditor.MaskLayers[ALayer].Valid and
+       SameText(fTerrainEditor.MaskLayers[ALayer].FileName, MaskPath) then
+      Exit(True);
+
+    Mask := Default(TTerrainMaskLayerState);
+    Mask.FileName := MaskPath;
+    Mask.TextureIndex := TextureIndex;
+    Created := False;
+
+    if FileExists(MaskPath) then
+    begin
+      if not TryLoadTerrainMaskPixels(MaskPath, Mask.Pixels, Width, Height) then
+      begin
+        fTerrainEditor.LastError := 'Could not load terrain mask: ' + MaskPath;
+        Exit;
+      end;
+      Mask.Width := Width;
+      Mask.Height := Height;
+    end
+    else
+    begin
+      Width := System.Math.Max(16,
+        System.Math.Min(8192, fTerrainEditor.MaskResolution));
+      Height := Width;
+      InitialValue := 0;
+      if ALayer = 0 then
+        InitialValue := 255;
+      CreateSolidMask(Mask.Pixels, Width, Height, InitialValue);
+      Mask.Width := Width;
+      Mask.Height := Height;
+      Created := True;
+    end;
+
+    Mask.Valid := True;
+    Mask.Dirty := Created;
+    if not UploadTerrainMaskLayer(AMaterial, ALayer, Mask) then
+    begin
+      fTerrainEditor.LastError := 'Could not upload terrain mask: ' + MaskPath;
+      Exit;
+    end;
+
+    fTerrainEditor.MaskLayers[ALayer] := Mask;
+    if Created then
+    begin
+      if SaveTerrainMaskPixels(Mask.FileName, Mask.Pixels, Mask.Width,
+        Mask.Height) then
+        fTerrainEditor.MaskLayers[ALayer].Dirty := False
+      else
+        fTerrainEditor.LastError := 'Could not save terrain mask: ' +
+          Mask.FileName;
+    end;
+
+    Result := True;
+  end;
+begin
+  Result := False;
+  if (HeightField = nil) or (AMaterial = nil) then
+  begin
+    fTerrainEditor.LastError := 'Assign a terrain material before texture painting.';
+    Exit;
+  end;
+
+  if AMaterial.Materialtype <> mtHeightFieldMaterial then
+  begin
+    fTerrainEditor.LastError := 'Assigned material is not a Terrain material.';
+    Exit;
+  end;
+
+  fTerrainEditor.LastError := '';
+  if (fTerrainEditor.MaskMaterial <> AMaterial) or
+     (fTerrainEditor.MaskMesh <> HeightField) then
+  begin
+    FlushTerrainPaintMasks;
+    ClearTerrainPaintMaskCache;
+    fTerrainEditor.MaskMaterial := AMaterial;
+    fTerrainEditor.MaskMesh := HeightField;
+  end;
+
+  for I := 0 to TERRAIN_PAINT_LAYER_COUNT - 1 do
+    if not EnsureLayer(I) then
+      Exit;
+
+  Result := True;
+end;
+
+function TSandBoxForm.ApplyTerrainTextureBrush(HeightField: THeightFieldMesh;
+  const CenterLocal: TVector3; DeltaTime: Single; Invert: Boolean): Boolean;
+var
+  Material: TMaterial;
+  TerrainWidth, TerrainDepth: Single;
+  Radius, Amount: Single;
+  TargetLayer: Integer;
+  Layer: Integer;
+  Mask: TTerrainMaskLayerState;
+  MinX, MaxX, MinY, MaxY: Integer;
+  X, Y, Index: Integer;
+  LocalX, LocalZ: Single;
+  DX, DZ, D, T, Influence, PaintAmount: Single;
+  OldValue, NewValue: Integer;
+  EditedLayer: Boolean;
+
+  function ClampInt(Value, MinValue, MaxValue: Integer): Integer;
+  begin
+    if Value < MinValue then
+      Result := MinValue
+    else if Value > MaxValue then
+      Result := MaxValue
+    else
+      Result := Value;
+  end;
+
+  function ClampByteValue(Value: Integer): Byte;
+  begin
+    if Value < 0 then
+      Result := 0
+    else if Value > 255 then
+      Result := 255
+    else
+      Result := Byte(Value);
+  end;
+
+  function PixelLocalX(AMask: TTerrainMaskLayerState; AX: Integer): Single;
+  begin
+    Result := (((AX + 0.5) / AMask.Width) - 0.5) * TerrainWidth;
+  end;
+
+  function PixelLocalZ(AMask: TTerrainMaskLayerState; AY: Integer): Single;
+  begin
+    Result := ((1.0 - ((AY + 0.5) / AMask.Height)) - 0.5) *
+      TerrainDepth;
+  end;
+
+  function BrushInfluenceAt(AMask: TTerrainMaskLayerState; AX,
+    AY: Integer): Single;
+  begin
+    LocalX := PixelLocalX(AMask, AX);
+    LocalZ := PixelLocalZ(AMask, AY);
+    DX := LocalX - CenterLocal.X;
+    DZ := LocalZ - CenterLocal.Z;
+
+    case fTerrainEditor.BrushShape of
+      tbsSquare:
+        D := System.Math.Max(Abs(DX), Abs(DZ));
+    else
+      D := Sqrt(DX * DX + DZ * DZ);
+    end;
+
+    if D > Radius then
+      Exit(0.0);
+
+    if Radius <= 0.0001 then
+      T := 1.0
+    else
+      T := 1.0 - (D / Radius);
+
+    T := System.Math.Min(1.0, System.Math.Max(0.0, T));
+    case fTerrainEditor.Falloff of
+      tbfConstant: Result := 1.0;
+      tbfLinear: Result := T;
+    else
+      Result := T * T * (3.0 - 2.0 * T);
+    end;
+  end;
+
+  procedure MaskBounds(AMask: TTerrainMaskLayerState; out AMinX, AMaxX,
+    AMinY, AMaxY: Integer);
+  var
+    U0, U1, V0, V1: Single;
+  begin
+    U0 := ((CenterLocal.X - Radius) / TerrainWidth) + 0.5;
+    U1 := ((CenterLocal.X + Radius) / TerrainWidth) + 0.5;
+    V0 := 1.0 - (((CenterLocal.Z + Radius) / TerrainDepth) + 0.5);
+    V1 := 1.0 - (((CenterLocal.Z - Radius) / TerrainDepth) + 0.5);
+
+    AMinX := ClampInt(Floor(System.Math.Min(U0, U1) * AMask.Width) - 1,
+      0, AMask.Width - 1);
+    AMaxX := ClampInt(Ceil(System.Math.Max(U0, U1) * AMask.Width) + 1,
+      0, AMask.Width - 1);
+    AMinY := ClampInt(Floor(System.Math.Min(V0, V1) * AMask.Height) - 1,
+      0, AMask.Height - 1);
+    AMaxY := ClampInt(Ceil(System.Math.Max(V0, V1) * AMask.Height) + 1,
+      0, AMask.Height - 1);
+  end;
+
+begin
+  Result := False;
+  if HeightField = nil then
+    Exit;
+
+  TargetLayer := fTerrainEditor.PaintLayer;
+  if TargetLayer < 0 then
+    TargetLayer := 0
+  else if TargetLayer >= TERRAIN_PAINT_LAYER_COUNT then
+    TargetLayer := TERRAIN_PAINT_LAYER_COUNT - 1;
+  fTerrainEditor.PaintLayer := TargetLayer;
+
+  Material := SelectedTerrainMaterial(HeightField);
+  if not EnsureTerrainPaintMasks(HeightField, Material) then
+    Exit;
+
+  Radius := System.Math.Max(0.001, fTerrainEditor.Radius);
+  Amount := System.Math.Max(0.0, fTerrainEditor.TextureOpacity) *
+    System.Math.Max(0.0001, DeltaTime);
+  Amount := System.Math.Min(1.0, Amount);
+  if Amount <= 0.0 then
+    Exit;
+
+  TerrainWidth := HeightField.Width;
+  TerrainDepth := HeightField.Depth;
+  if Abs(TerrainWidth) <= 0.000001 then
+    TerrainWidth := 1.0;
+  if Abs(TerrainDepth) <= 0.000001 then
+    TerrainDepth := 1.0;
+
+  for Layer := 0 to TERRAIN_PAINT_LAYER_COUNT - 1 do
+  begin
+    if (Layer <> TargetLayer) and
+       ((not fTerrainEditor.PaintNormalize) or Invert) then
+      Continue;
+
+    Mask := fTerrainEditor.MaskLayers[Layer];
+    if (not Mask.Valid) or (Mask.Width < 1) or (Mask.Height < 1) then
+      Continue;
+
+    MaskBounds(Mask, MinX, MaxX, MinY, MaxY);
+    EditedLayer := False;
+
+    for Y := MinY to MaxY do
+      for X := MinX to MaxX do
+      begin
+        Influence := BrushInfluenceAt(Mask, X, Y);
+        if Influence <= 0.0 then
+          Continue;
+
+        PaintAmount := System.Math.Min(1.0, Influence * Amount);
+        if PaintAmount <= 0.0 then
+          Continue;
+
+        Index := (Y * Mask.Width + X) * 4;
+        OldValue := Round(
+          Mask.Pixels[Index + 0] * 0.2126 +
+          Mask.Pixels[Index + 1] * 0.7152 +
+          Mask.Pixels[Index + 2] * 0.0722
+        );
+
+        if Layer = TargetLayer then
+        begin
+          if Invert then
+            NewValue := Round(OldValue * (1.0 - PaintAmount))
+          else
+            NewValue := Round(OldValue + (255 - OldValue) * PaintAmount);
+        end
+        else
+          NewValue := Round(OldValue * (1.0 - PaintAmount));
+
+        NewValue := ClampInt(NewValue, 0, 255);
+        if NewValue = OldValue then
+          Continue;
+
+        Mask.Pixels[Index + 0] := ClampByteValue(NewValue);
+        Mask.Pixels[Index + 1] := ClampByteValue(NewValue);
+        Mask.Pixels[Index + 2] := ClampByteValue(NewValue);
+        Mask.Pixels[Index + 3] := 255;
+        EditedLayer := True;
+        Result := True;
+      end;
+
+    if EditedLayer then
+    begin
+      Mask.Dirty := True;
+      if UploadTerrainMaskLayer(Material, Layer, Mask) then
+        fTerrainEditor.MaskLayers[Layer] := Mask
+      else
+        fTerrainEditor.LastError := 'Could not update terrain mask layer ' +
+          IntToStr(Layer) + '.';
+    end;
+  end;
+
+  if Result then
+    RequestRender;
 end;
 
 procedure TSandBoxForm.SelectMeshIndex(const MeshIndex: Integer);
@@ -20288,7 +21098,9 @@ begin
     Exit;
 
   Mesh.MaterialLibrary := EnsureDefaultMaterialLibrary;
-  Mesh.LibMaterialname := DEFAULT_PBR_MATERIAL_NAME;
+  Mesh.LibMaterialname := EnsureDefaultHeightFieldMaterialName;
+  if Mesh.LibMaterialname = '' then
+    Mesh.LibMaterialname := DEFAULT_PBR_MATERIAL_NAME;
   Mesh.OnRender := MeshRenderHandler;
 end;
 
@@ -20595,9 +21407,13 @@ procedure TSandBoxForm.DrawImGuiTerrainEditor;
 var
   OpenWindow: Boolean;
   HeightField: THeightFieldMesh;
+  Material: TMaterial;
   Changed: Boolean;
   I: Integer;
+  IntValue: Integer;
+  BoolValue: Boolean;
   Selected: Boolean;
+  TexturePaintTool: Boolean;
 begin
   if not fTerrainEditor.Active then
     Exit;
@@ -20623,6 +21439,12 @@ begin
       ImGui.Text(PAnsiChar(AnsiString('Mesh: ' + HeightField.Name)));
       ImGui.Text(PAnsiChar(AnsiString(Format('Samples: %d x %d',
         [HeightField.HeightMapWidth, HeightField.HeightMapDepth]))));
+      Material := SelectedTerrainMaterial(HeightField);
+      if Material <> nil then
+        ImGui.Text(PAnsiChar(AnsiString('Material: ' + Material.Name + ' (' +
+          MaterialTypeDisplayName(Material.Materialtype) + ')')))
+      else
+        ImGui.TextDisabled('Material: none');
 
       ImGui.Separator;
       if ImGui.BeginCombo('Tool', AnsiString(TerrainEditToolName(
@@ -20641,16 +21463,50 @@ begin
         ImGui.EndCombo;
       end;
 
+      TexturePaintTool := fTerrainEditor.Tool = tetTexturePaint;
       Changed := False;
       ImGui.PushItemWidth(IMGUI_PROP_SCALAR_WIDTH);
       Changed := ImGui.DragFloat('Radius', @fTerrainEditor.Radius, 0.05,
         0.01, 100000, '%.2f') or Changed;
-      Changed := ImGui.DragFloat('Strength', @fTerrainEditor.Strength, 0.05,
-        0.0, 100000, '%.2f') or Changed;
-      Changed := ImGui.DragFloat('Flatten height',
-        @fTerrainEditor.TargetHeight, 0.05, -100000, 100000, '%.2f') or Changed;
-      Changed := ImGui.DragFloat('Sea level', @fTerrainEditor.SeaLevel, 0.05,
-        -100000, 100000, '%.2f') or Changed;
+      if TexturePaintTool then
+      begin
+        Changed := ImGui.DragFloat('Opacity / sec',
+          @fTerrainEditor.TextureOpacity, 0.02, 0.0, 50.0, '%.2f') or Changed;
+
+        IntValue := fTerrainEditor.PaintLayer;
+        if InspectorInputInt('Layer', @IntValue, 1.0, 0,
+          TERRAIN_PAINT_LAYER_COUNT - 1, '%d', ImGuiSliderFlags_None) then
+        begin
+          fTerrainEditor.PaintLayer := System.Math.Max(0,
+            System.Math.Min(TERRAIN_PAINT_LAYER_COUNT - 1, IntValue));
+          Changed := True;
+        end;
+
+        IntValue := fTerrainEditor.MaskResolution;
+        if InspectorInputInt('New mask res', @IntValue, 1.0, 16, 8192, '%d',
+          ImGuiSliderFlags_None) then
+        begin
+          fTerrainEditor.MaskResolution := System.Math.Max(16,
+            System.Math.Min(8192, IntValue));
+          Changed := True;
+        end;
+
+        BoolValue := fTerrainEditor.PaintNormalize;
+        if ImGui.Checkbox('Normalize layers', @BoolValue) then
+        begin
+          fTerrainEditor.PaintNormalize := BoolValue;
+          Changed := True;
+        end;
+      end
+      else
+      begin
+        Changed := ImGui.DragFloat('Strength', @fTerrainEditor.Strength, 0.05,
+          0.0, 100000, '%.2f') or Changed;
+        Changed := ImGui.DragFloat('Flatten height',
+          @fTerrainEditor.TargetHeight, 0.05, -100000, 100000, '%.2f') or Changed;
+        Changed := ImGui.DragFloat('Sea level', @fTerrainEditor.SeaLevel, 0.05,
+          -100000, 100000, '%.2f') or Changed;
+      end;
       ImGui.PopItemWidth;
 
       if Changed then
@@ -20659,10 +21515,12 @@ begin
           fTerrainEditor.Radius);
         fTerrainEditor.Strength := System.Math.Max(0.0,
           fTerrainEditor.Strength);
+        fTerrainEditor.TextureOpacity := System.Math.Max(0.0,
+          fTerrainEditor.TextureOpacity);
         RequestRender;
       end;
 
-      if fTerrainEditor.HoverValid then
+      if (not TexturePaintTool) and fTerrainEditor.HoverValid then
       begin
         if ImGui.Button('Use Cursor Height##TerrainFlatten') then
         begin
@@ -20674,6 +21532,29 @@ begin
         begin
           fTerrainEditor.SeaLevel := fTerrainEditor.HitLocal.Y;
           RequestRender;
+        end;
+      end;
+
+      if TexturePaintTool then
+      begin
+        ImGui.Separator;
+        ImGui.Text('Texture Set');
+        if Material = nil then
+          ImGui.TextWrapped('Assign a Terrain material to paint texture masks.')
+        else if Material.Materialtype <> mtHeightFieldMaterial then
+          ImGui.TextWrapped('Assigned material is not a Terrain material.')
+        else
+        begin
+          ImGui.TextWrapped(PAnsiChar(AnsiString(Format('Layer %d: %s',
+            [fTerrainEditor.PaintLayer,
+             TerrainLayerTextureSummary(Material, fTerrainEditor.PaintLayer)]))));
+          if EnsureTerrainPaintMasks(HeightField, Material) and
+             fTerrainEditor.MaskLayers[fTerrainEditor.PaintLayer].Valid then
+            ImGui.TextWrapped(PAnsiChar(AnsiString('Mask: ' +
+              TEnginePaths.ToAssetRelativePath(
+                fTerrainEditor.MaskLayers[fTerrainEditor.PaintLayer].FileName))))
+          else if ImGui.Button('Prepare Masks##TerrainTextureMasks') then
+            EnsureTerrainPaintMasks(HeightField, Material);
         end;
       end;
 
@@ -20833,13 +21714,19 @@ begin
     begin
       if fTerrainEditor.Painting then
       begin
-        Color := ImGui.ColorConvertFloat4ToU32(ImVec4.New(0.25, 0.95, 0.42, 1.0));
+        if fTerrainEditor.Tool = tetTexturePaint then
+          Color := ImGui.ColorConvertFloat4ToU32(ImVec4.New(1.0, 0.62, 0.18, 1.0))
+        else
+          Color := ImGui.ColorConvertFloat4ToU32(ImVec4.New(0.25, 0.95, 0.42, 1.0));
         CenterColor := ImGui.ColorConvertFloat4ToU32(ImVec4.New(1.0, 1.0, 1.0, 0.95));
         Thickness := 3.0;
       end
       else
       begin
-        Color := ImGui.ColorConvertFloat4ToU32(ImVec4.New(0.20, 0.72, 1.0, 0.82));
+        if fTerrainEditor.Tool = tetTexturePaint then
+          Color := ImGui.ColorConvertFloat4ToU32(ImVec4.New(1.0, 0.58, 0.16, 0.86))
+        else
+          Color := ImGui.ColorConvertFloat4ToU32(ImVec4.New(0.20, 0.72, 1.0, 0.82));
         CenterColor := ImGui.ColorConvertFloat4ToU32(ImVec4.New(1.0, 1.0, 1.0, 0.72));
         Thickness := 2.0;
       end;
@@ -23423,8 +24310,12 @@ begin
       if UpdateTerrainBrushHit(X, Y) then
       begin
         fTerrainEditor.Painting := True;
-        ApplyTerrainBrush(SelectedTerrainMesh, fTerrainEditor.HitLocal,
-          1.0 / 60.0, ssShift in Shift);
+        if fTerrainEditor.Tool = tetTexturePaint then
+          ApplyTerrainTextureBrush(SelectedTerrainMesh,
+            fTerrainEditor.HitLocal, 1.0 / 60.0, ssShift in Shift)
+        else
+          ApplyTerrainBrush(SelectedTerrainMesh, fTerrainEditor.HitLocal,
+            1.0 / 60.0, ssShift in Shift);
         SetCapture(Handle);
         RequestRender;
         Exit;
@@ -23992,6 +24883,7 @@ begin
   begin
     fTerrainEditor.Painting := False;
     UpdateTerrainBrushHit(X, Y);
+    FlushTerrainPaintMasks;
     ReleaseCapture;
     RequestRender;
     Exit;
