@@ -1381,7 +1381,7 @@ end;
 
 const
   SCENE_FILE_EXTENSION_LOCAL = '.omescn';
-  SCENE_FILE_VERSION_LOCAL = 12;
+  SCENE_FILE_VERSION_LOCAL = 13;
   SCENE_FILE_MAGIC_LOCAL: array[0..7] of AnsiChar =
     ('O', 'M', 'E', 'S', 'C', 'N', '0', '1');
   SCENE_RENDER_SETTINGS_VERSION_LOCAL = 3;
@@ -7717,6 +7717,7 @@ begin
       raise Exception.CreateFmt('Unsupported prefab scene object version: %d.',
         [ObjectSceneVersion]);
     Result := TSceneObject.LoadFromStream(Stream, ParentObj, ObjectSceneVersion);
+    Result.RegenerateIDs(True);
     if Trim(Result.Name) = '' then
       Result.Name := StoredName;
     OriginalName := Result.Name;

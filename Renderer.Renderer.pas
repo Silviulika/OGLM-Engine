@@ -12,7 +12,7 @@ uses
   Engine.Types,
   Managers.Material, Renderer.Camera, Engine.Generators, Managers.Scene,
   Renderer.Mesh.List, GraphicEx, Neslib.FastMath, Engine.Gui,
-  System.Generics.Collections, Vcl.Buttons, Vcl.ComCtrls;
+  System.Generics.Collections, System.Generics.Defaults, Vcl.Buttons, Vcl.ComCtrls;
 
 const
   MAX_RENDERER_SHADER_LIGHTS = 8;
@@ -44,6 +44,7 @@ type
     Billboard: TBillboard;
     AnimatedSprite: TAnimatedSprite;
     DistanceSq: Single;
+    SortOrder: Integer;
   end;
 
   TBillboardRenderList = TArray<TBillboardRenderItem>;
@@ -248,7 +249,7 @@ type
     procedure RenderPackedInstancedBatch(const ABatch: TInstancedRenderBatch;
       AShadowPass: Boolean);
     procedure CollectSceneObjectBillboards(aObject: TSceneObject;
-      var Items: TBillboardRenderList);
+      var Items: TBillboardRenderList; var ItemCount: Integer);
     procedure SortBillboardRenderItems(var Items: TBillboardRenderList);
     procedure RenderSceneBillboards;
     procedure RenderSceneObjectParticles(aObject: TSceneObject);
@@ -4130,15 +4131,33 @@ begin
 end;
 
 procedure TRenderer.CollectSceneObjectBillboards(aObject: TSceneObject;
-  var Items: TBillboardRenderList);
+  var Items: TBillboardRenderList; var ItemCount: Integer);
 var
   I: Integer;
   B: Integer;
   S: Integer;
-  Index: Integer;
+  NewCapacity: Integer;
+  Item: TBillboardRenderItem;
   Billboard: TBillboard;
   AnimatedSprite: TAnimatedSprite;
   SpritePosition, Delta: TVector3;
+
+  procedure AppendItem(const AItem: TBillboardRenderItem);
+  begin
+    if ItemCount >= Length(Items) then
+    begin
+      NewCapacity := Length(Items);
+      if NewCapacity < 64 then
+        NewCapacity := 64
+      else
+        NewCapacity := NewCapacity * 2;
+      SetLength(Items, NewCapacity);
+    end;
+
+    Items[ItemCount] := AItem;
+    Inc(ItemCount);
+  end;
+
 begin
   if (aObject = nil) or (fActiveCamera = nil) or
      (fActiveCamera.Camera = nil) then
@@ -4152,15 +4171,15 @@ begin
     if Assigned(Billboard) and Billboard.Enabled and
        (Billboard.Color.W > 0.001) then
     begin
-      Index := Length(Items);
-      SetLength(Items, Index + 1);
-      Items[Index].SceneObject := aObject;
-      Items[Index].Billboard := Billboard;
-      Items[Index].AnimatedSprite := nil;
+      Item.SceneObject := aObject;
+      Item.Billboard := Billboard;
+      Item.AnimatedSprite := nil;
       SpritePosition := Vector3(aObject.WorldMatrix *
         Vector4(Billboard.Offset, 1.0));
       Delta := SpritePosition - fActiveCamera.Camera.Position;
-      Items[Index].DistanceSq := Delta.LengthSquared;
+      Item.DistanceSq := Delta.LengthSquared;
+      Item.SortOrder := ItemCount;
+      AppendItem(Item);
     end;
   end;
 
@@ -4170,40 +4189,44 @@ begin
     if Assigned(AnimatedSprite) and AnimatedSprite.Enabled and
        (AnimatedSprite.Color.W > 0.001) then
     begin
-      Index := Length(Items);
-      SetLength(Items, Index + 1);
-      Items[Index].SceneObject := aObject;
-      Items[Index].Billboard := nil;
-      Items[Index].AnimatedSprite := AnimatedSprite;
+      Item.SceneObject := aObject;
+      Item.Billboard := nil;
+      Item.AnimatedSprite := AnimatedSprite;
       SpritePosition := Vector3(aObject.WorldMatrix *
         Vector4(AnimatedSprite.Offset, 1.0));
       Delta := SpritePosition - fActiveCamera.Camera.Position;
-      Items[Index].DistanceSq := Delta.LengthSquared;
+      Item.DistanceSq := Delta.LengthSquared;
+      Item.SortOrder := ItemCount;
+      AppendItem(Item);
     end;
   end;
 
   for I := 0 to aObject.Count - 1 do
-    CollectSceneObjectBillboards(aObject.ObjectList[I], Items);
+    CollectSceneObjectBillboards(aObject.ObjectList[I], Items, ItemCount);
 end;
 
 procedure TRenderer.SortBillboardRenderItems(var Items: TBillboardRenderList);
-var
-  I, J: Integer;
-  Temp: TBillboardRenderItem;
 begin
-  for I := 0 to High(Items) - 1 do
-    for J := I + 1 to High(Items) do
-      if Items[J].DistanceSq > Items[I].DistanceSq then
+  if Length(Items) <= 1 then
+    Exit;
+
+  TArray.Sort<TBillboardRenderItem>(Items,
+    TComparer<TBillboardRenderItem>.Construct(
+      function(const Left, Right: TBillboardRenderItem): Integer
       begin
-        Temp := Items[I];
-        Items[I] := Items[J];
-        Items[J] := Temp;
-      end;
+        if Left.DistanceSq > Right.DistanceSq then
+          Result := -1
+        else if Left.DistanceSq < Right.DistanceSq then
+          Result := 1
+        else
+          Result := Left.SortOrder - Right.SortOrder;
+      end));
 end;
 
 procedure TRenderer.RenderSceneBillboards;
 var
   I: Integer;
+  ItemCount: Integer;
   Items: TBillboardRenderList;
   ViewProjection: TMatrix4;
   ForwardVec, UpVec, RightVec: TVector3;
@@ -4255,12 +4278,15 @@ begin
     Exit;
 
   SetLength(Items, 0);
+  ItemCount := 0;
   for I := 0 to fSceneManager.Count - 1 do
-    CollectSceneObjectBillboards(fSceneManager.Root.ObjectList[I], Items);
+    CollectSceneObjectBillboards(fSceneManager.Root.ObjectList[I], Items,
+      ItemCount);
 
-  if Length(Items) = 0 then
+  if ItemCount = 0 then
     Exit;
 
+  SetLength(Items, ItemCount);
   SortBillboardRenderItems(Items);
 
   ViewProjection := fProjectionMatrix * fActiveCamera.Camera.ViewMatrix;

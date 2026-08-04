@@ -152,6 +152,7 @@ type
   private
     fObjectList: TObjectList;
     fParent: TSceneObject;
+    fID: string;
     fMeshList: TMeshList;
     fLightList: TLightList;
 
@@ -353,6 +354,7 @@ type
     procedure RemoveAudioEmitter; overload;
 
     function Clone: TSceneObject;
+    procedure RegenerateIDs(Recursive: Boolean = True);
     procedure SaveToStream(Stream: TStream);
     class function LoadFromStream(Stream: TStream; AOwner: TSceneObject;
       SceneVersion: Integer = 1): TSceneObject;
@@ -392,6 +394,7 @@ type
     property IsWorldMatrixValid: Boolean read fWorldMatrixValid; // read only, use NotifyChange
 
     property Name: String read GetName write SetName;
+    property ID: string read fID;
 
     property OnDestroy: TNotifyEvent read fOnDestroy write fOnDestroy;
     property IsInstance: Boolean read fIsInstance write SetIsInstance;
@@ -446,6 +449,8 @@ type
     function GetRoot: TSceneObject;
     procedure SetRoot(aObject: TSceneObject);
     function GetCount: Integer;
+    procedure EnsureUniqueObjectIDs(aObject: TSceneObject;
+      ASeen: TDictionary<string, Boolean>);
 
     procedure SetWireFrame(ModeOn: Boolean);
   public
@@ -465,6 +470,7 @@ type
 
     function FindSceneObject(aName: string): TSceneObject;    overload;
     function FindSceneObject(aIndex: Integer): TSceneObject;  overload;
+    function FindSceneObjectByID(const AID: string): TSceneObject;
     function GetLights: TArray<TLight>;
 
     function IndexOf(aName: string): Integer;                 overload;
@@ -482,7 +488,7 @@ type
 implementation
 
 const
-  SCENE_FILE_VERSION = 12;
+  SCENE_FILE_VERSION = 13;
   MAX_SERIALIZED_STRING_CHARS = 1048576;
   MAX_SCENE_DEPTH = 256;
   MAX_SCENE_LIGHTS = 65536;
@@ -495,6 +501,16 @@ const
 
 threadvar
   SceneLoadDepth: Integer;
+
+function NewSceneObjectID: string;
+var
+  Guid: TGUID;
+begin
+  if CreateGUID(Guid) = 0 then
+    Result := GUIDToString(Guid)
+  else
+    raise Exception.Create('Could not create a scene object ID.');
+end;
 
 procedure WriteStringToStream(Stream: TStream; const Value: string);
 var
@@ -2237,6 +2253,7 @@ begin
   inherited Create;
 
   fIsGizmo := False;
+  fID := NewSceneObjectID;
   SetLength(fObjectList, 0);
   SetLength(fLightList, 0);
   fPosition.Init(0, 0, 0);
@@ -2806,6 +2823,18 @@ begin
   Result.fCamera := nil;
 end;
 
+procedure TSceneObject.RegenerateIDs(Recursive: Boolean);
+var
+  I: Integer;
+begin
+  fID := NewSceneObjectID;
+
+  if Recursive then
+    for I := 0 to Count - 1 do
+      if Assigned(ObjectList[I]) then
+        ObjectList[I].RegenerateIDs(True);
+end;
+
 procedure TSceneObject.SaveToStream(Stream: TStream);
 var
   I: Integer;
@@ -2823,6 +2852,7 @@ begin
   SavedIsInstance := fIsInstance and HasInstanceSourceValue;
 
   WriteStringToStream(Stream, fName);
+  WriteStringToStream(Stream, fID);
   Stream.WriteBuffer(fPosition, SizeOf(fPosition));
   Stream.WriteBuffer(fScale, SizeOf(fScale));
   Stream.WriteBuffer(fOrientation, SizeOf(fOrientation));
@@ -2903,6 +2933,12 @@ begin
     try
       Result := TSceneObject.Create(AOwner);
       Result.fName := ReadStringFromStream(Stream);
+      if SceneVersion >= 13 then
+      begin
+        Result.fID := ReadStringFromStream(Stream);
+        if Trim(Result.fID) = '' then
+          Result.fID := NewSceneObjectID;
+      end;
     Stream.ReadBuffer(Result.fPosition, SizeOf(Result.fPosition));
     Stream.ReadBuffer(Result.fScale, SizeOf(Result.fScale));
     Stream.ReadBuffer(Result.fOrientation, SizeOf(Result.fOrientation));
@@ -3487,6 +3523,7 @@ var
   LoadedName: string;
   NewRoot: TSceneObject;
   OldRoot: TSceneObject;
+  SeenIDs: TDictionary<string, Boolean>;
 begin
   Stream.ReadBuffer(Magic[0], SizeOf(Magic));
   if not SceneMagicMatches(Magic) then
@@ -3500,6 +3537,13 @@ begin
   NewRoot := TSceneObject.LoadFromStream(Stream, nil, Version);
   try
     NewRoot.ResolveInstanceLinks(NewRoot);
+    SeenIDs := TDictionary<string, Boolean>.Create;
+    try
+      EnsureUniqueObjectIDs(NewRoot, SeenIDs);
+    finally
+      SeenIDs.Free;
+    end;
+
     OldRoot := fRoot;
     fRoot := NewRoot;
     fName := LoadedName;
@@ -3579,7 +3623,42 @@ end;
 
 function TSceneManager.FindSceneObject(aIndex: Integer): TSceneObject;
 begin
+  Result := nil;
+  if (fRoot = nil) or (aIndex < 0) or (aIndex >= fRoot.Count) then
+    Exit;
+
   Result := fRoot.ObjectList[aIndex];
+end;
+
+function TSceneManager.FindSceneObjectByID(const AID: string): TSceneObject;
+var
+  SearchID: string;
+
+  function FindInTree(aObject: TSceneObject): TSceneObject;
+  var
+    I: Integer;
+  begin
+    Result := nil;
+    if aObject = nil then
+      Exit;
+
+    if SameText(aObject.ID, SearchID) then
+      Exit(aObject);
+
+    for I := 0 to aObject.Count - 1 do
+    begin
+      Result := FindInTree(aObject.ObjectList[I]);
+      if Result <> nil then
+        Exit;
+    end;
+  end;
+
+begin
+  SearchID := Trim(AID);
+  if SearchID = '' then
+    Exit(nil);
+
+  Result := FindInTree(fRoot);
 end;
 
 function TSceneManager.GetLights: TArray<TLight>;
@@ -3633,7 +3712,32 @@ end;
 
 function TSceneManager.IndexOf(aObject: TSceneObject): Integer;
 begin
-  Result := IndexOf(aObject.Name);
+  Result := -1;
+  if (fRoot = nil) or (aObject = nil) then
+    Exit;
+
+  Result := fRoot.IndexOfObject(aObject);
+end;
+
+procedure TSceneManager.EnsureUniqueObjectIDs(aObject: TSceneObject;
+  ASeen: TDictionary<string, Boolean>);
+var
+  I: Integer;
+  Key: string;
+begin
+  if (aObject = nil) or (ASeen = nil) then
+    Exit;
+
+  Key := LowerCase(Trim(aObject.fID));
+  while (Key = '') or ASeen.ContainsKey(Key) do
+  begin
+    aObject.fID := NewSceneObjectID;
+    Key := LowerCase(Trim(aObject.fID));
+  end;
+  ASeen.Add(Key, True);
+
+  for I := 0 to aObject.Count - 1 do
+    EnsureUniqueObjectIDs(aObject.ObjectList[I], ASeen);
 end;
 
 end.
