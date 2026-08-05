@@ -1156,6 +1156,7 @@ type
       const Pixels: TBytes; AWidth, AHeight: Integer): Boolean;
     procedure ClearTerrainPaintMaskCache;
     procedure FlushTerrainPaintMasks;
+    procedure FlushTerrainPaintMasksOrRaise;
     function UploadTerrainMaskLayer(AMaterial: TMaterial; ALayer: Integer;
       var AMask: TTerrainMaskLayerState): Boolean;
     function EnsureTerrainPaintMasks(HeightField: THeightFieldMesh;
@@ -5571,13 +5572,25 @@ begin
     Exit;
   end;
 
-  TargetDir := ExtractFilePath(AFileName);
-  if TargetDir <> '' then
-    ForceDirectories(TargetDir);
+  try
+    // Terrain masks are external PNG assets referenced by the material.
+    // Save every dirty mask before serializing those paths.
+    FlushTerrainPaintMasksOrRaise;
 
-  AssignShaderToMaterial(Mat);
-  Mat.SaveToFile(AFileName);
-  LogLine('Material saved: ' + AFileName);
+    TargetDir := ExtractFilePath(AFileName);
+    if TargetDir <> '' then
+      ForceDirectories(TargetDir);
+
+    AssignShaderToMaterial(Mat);
+    Mat.SaveToFile(AFileName);
+    LogLine('Material saved: ' + AFileName);
+  except
+    on E: Exception do
+    begin
+      fMaterialFileBrowser.LastError := E.Message;
+      LogLine('Material save failed: ' + E.Message);
+    end;
+  end;
 end;
 
 procedure TSandBoxForm.SaveSelectedMaterialLibraryToFile(const AFileName: string);
@@ -5585,6 +5598,7 @@ var
   Lib: TMaterialLibrary;
   Stream: TFileStream;
   Version: Integer;
+  TargetDir: string;
 begin
   fMaterialFileBrowser.LastError := '';
   Lib := SelectedMaterialEditorLibrary;
@@ -5594,18 +5608,31 @@ begin
     Exit;
   end;
 
-  ForceDirectories(ExtractFilePath(AFileName));
-  Stream := TFileStream.Create(AFileName, fmCreate);
   try
-    Stream.WriteBuffer(MATERIAL_LIBRARY_MAGIC_LOCAL[0], SizeOf(MATERIAL_LIBRARY_MAGIC_LOCAL));
-    Version := MATERIAL_FILE_VERSION_LOCAL;
-    Stream.WriteBuffer(Version, SizeOf(Version));
-    Lib.SaveToStream(Stream, GIZMO_MATERIAL_NAME);
-  finally
-    Stream.Free;
-  end;
+    FlushTerrainPaintMasksOrRaise;
 
-  LogLine('Material library saved: ' + AFileName);
+    TargetDir := ExtractFilePath(AFileName);
+    if TargetDir <> '' then
+      ForceDirectories(TargetDir);
+
+    Stream := TFileStream.Create(AFileName, fmCreate);
+    try
+      Stream.WriteBuffer(MATERIAL_LIBRARY_MAGIC_LOCAL[0], SizeOf(MATERIAL_LIBRARY_MAGIC_LOCAL));
+      Version := MATERIAL_FILE_VERSION_LOCAL;
+      Stream.WriteBuffer(Version, SizeOf(Version));
+      Lib.SaveToStream(Stream, GIZMO_MATERIAL_NAME);
+    finally
+      Stream.Free;
+    end;
+
+    LogLine('Material library saved: ' + AFileName);
+  except
+    on E: Exception do
+    begin
+      fMaterialFileBrowser.LastError := E.Message;
+      LogLine('Material library save failed: ' + E.Message);
+    end;
+  end;
 end;
 
 procedure TSandBoxForm.LoadMaterialIntoSelectedLibrary(const AFileName: string);
@@ -7260,6 +7287,7 @@ begin
     if fEngine = nil then
       raise Exception.Create('The game engine is not available.');
 
+    FlushTerrainPaintMasksOrRaise;
     fEngine.SaveSceneToFile(AFileName, GIZMO_MATERIAL_NAME);
     LogLine('Scene saved: ' + AFileName);
   except
@@ -7360,6 +7388,7 @@ begin
   else
     FileName := ExpandFileName(AFileName);
 
+  FlushTerrainPaintMasksOrRaise;
   fEngine.SaveSceneToFile(FileName, GIZMO_MATERIAL_NAME);
   LogLine('Default scene saved: ' + FileName);
 end;
@@ -19212,7 +19241,6 @@ end;
 function TSandBoxForm.TerrainMaskFileName(HeightField: THeightFieldMesh;
   AMaterial: TMaterial; ALayer: Integer): string;
 var
-  MeshPart: string;
   MaterialPart: string;
   FileName: string;
 
@@ -19251,17 +19279,17 @@ begin
   else if ALayer >= TERRAIN_PAINT_LAYER_COUNT then
     ALayer := TERRAIN_PAINT_LAYER_COUNT - 1;
 
-  MeshPart := 'Terrain';
-  if HeightField <> nil then
-    MeshPart := SafePart(HeightField.Name, MeshPart);
-
+  // Masks belong to the material. A terrain that needs an independent paint
+  // set should use a duplicated/uniquely named material.
   MaterialPart := 'Material';
   if AMaterial <> nil then
     MaterialPart := SafePart(AMaterial.Name, MaterialPart);
 
-  FileName := TPath.Combine('TerrainMasks',
-    Format('%s_%s_Layer%d.png', [MeshPart, MaterialPart, ALayer]));
-  Result := TEnginePaths.ResolveGeneratedTextureFileName(FileName);
+  // Material Editor scans texture assets under Data\Tex. Store the masks
+  // there and serialize them as Tex\<MaterialName>_AlphaN.png.
+  FileName := TPath.Combine('Tex',
+    Format('%s_Alpha%d.png', [MaterialPart, ALayer + 1]));
+  Result := TEnginePaths.ResolveAssetPath(FileName);
 end;
 
 function TSandBoxForm.TryLoadTerrainMaskPixels(const AFileName: string;
@@ -19269,6 +19297,8 @@ function TSandBoxForm.TryLoadTerrainMaskPixels(const AFileName: string;
 var
   Picture: TPicture;
   Bitmap: TBitmap;
+  FlippedPixels: TBytes;
+  RowSize, Y: Integer;
 begin
   Result := False;
   SetLength(Pixels, 0);
@@ -19292,6 +19322,18 @@ begin
       Bitmap.SetSize(AWidth, AHeight);
       Bitmap.Canvas.Draw(0, 0, Picture.Graphic);
       Result := TryCopyBitmapToRGBAPixels(Bitmap, Pixels);
+      if Result then
+      begin
+        // The engine PNG loader reverses bitmap scanlines before uploading
+        // them to OpenGL. Undo that disk orientation here so the editable
+        // CPU buffer has the same row order as the live GL upload.
+        RowSize := AWidth * 4;
+        SetLength(FlippedPixels, Length(Pixels));
+        for Y := 0 to AHeight - 1 do
+          Move(Pixels[(AHeight - 1 - Y) * RowSize],
+            FlippedPixels[Y * RowSize], RowSize);
+        Pixels := FlippedPixels;
+      end;
     except
       SetLength(Pixels, 0);
       AWidth := 0;
@@ -19311,7 +19353,7 @@ var
   RGBLine: pRGBLine;
   AlphaLine: pByteArray;
   X, Y: Integer;
-  SourceIndex: Integer;
+  SourceIndex, SourceY: Integer;
   ExpectedByteCount: Int64;
 begin
   Result := False;
@@ -19330,9 +19372,14 @@ begin
       begin
         RGBLine := pRGBLine(Png.Scanline[Y]);
         AlphaLine := Png.AlphaScanline[Y];
+
+        // TTexture.LoadTexPNG reverses PNG scanlines before glTexImage2D.
+        // Store the file in the opposite row order so reloading produces
+        // exactly the same GL orientation as UploadTerrainMaskLayer.
+        SourceY := AHeight - 1 - Y;
         for X := 0 to AWidth - 1 do
         begin
-          SourceIndex := (Y * AWidth + X) * 4;
+          SourceIndex := (SourceY * AWidth + X) * 4;
           RGBLine^[X].rgbtRed := Pixels[SourceIndex + 0];
           RGBLine^[X].rgbtGreen := Pixels[SourceIndex + 1];
           RGBLine^[X].rgbtBlue := Pixels[SourceIndex + 2];
@@ -19378,6 +19425,21 @@ begin
         fTerrainEditor.LastError := 'Could not save terrain mask: ' +
           fTerrainEditor.MaskLayers[I].FileName;
     end;
+end;
+
+procedure TSandBoxForm.FlushTerrainPaintMasksOrRaise;
+var
+  I: Integer;
+begin
+  FlushTerrainPaintMasks;
+
+  // Mouse-up and editor shutdown keep using the non-raising flush. Explicit
+  // material/scene saves must fail rather than write broken texture paths.
+  for I := 0 to TERRAIN_PAINT_LAYER_COUNT - 1 do
+    if fTerrainEditor.MaskLayers[I].Valid and
+       fTerrainEditor.MaskLayers[I].Dirty then
+      raise Exception.CreateFmt('Could not save terrain mask: %s',
+        [fTerrainEditor.MaskLayers[I].FileName]);
 end;
 
 function TSandBoxForm.UploadTerrainMaskLayer(AMaterial: TMaterial;
@@ -19461,7 +19523,11 @@ var
       SameText(FilePart, 'DefaultHeight.tga') or
       SameText(FilePart, 'DefaultNormal.tga') or
       SameText(FilePart, 'DefaultEdge.tga') or
-      SameText(FilePart, 'DefaultAmbient.tga');
+      SameText(FilePart, 'DefaultAmbient.tga') or
+      SameText(FilePart, 'Blank_alpha.png') or
+      SameText(FilePart, 'Blank_alpha.tga') or
+      SameText(FilePart, 'DefaultAlpha.png') or
+      SameText(FilePart, 'DefaultAlpha.tga');
   end;
 
   procedure CreateSolidMask(out Pixels: TBytes; AWidth, AHeight: Integer;
@@ -19486,10 +19552,38 @@ var
     Mask: TTerrainMaskLayerState;
     Tex: TMaterialTexture;
     TextureIndex: Integer;
+    SourcePath: string;
     MaskPath: string;
     Width, Height: Integer;
     InitialValue: Byte;
     Created: Boolean;
+    ImportedSource: Boolean;
+
+    function SourceMaskIsShared(const ASourcePath: string): Boolean;
+    var
+      OtherLayer: Integer;
+      OtherTextureIndex: Integer;
+      OtherPath: string;
+    begin
+      Result := False;
+      if ASourcePath = '' then
+        Exit;
+
+      for OtherLayer := 0 to TERRAIN_PAINT_LAYER_COUNT - 1 do
+      begin
+        if OtherLayer = ALayer then
+          Continue;
+
+        OtherTextureIndex := FindTerrainMaskTextureIndex(AMaterial, OtherLayer);
+        if OtherTextureIndex < 0 then
+          Continue;
+
+        OtherPath := TEnginePaths.ResolveAssetPath(
+          AMaterial.TextureList[OtherTextureIndex].Path);
+        if (OtherPath <> '') and SameText(OtherPath, ASourcePath) then
+          Exit(True);
+      end;
+    end;
   begin
     Result := False;
     TextureIndex := FindTerrainMaskTextureIndex(AMaterial, ALayer);
@@ -19498,12 +19592,13 @@ var
     else
       Tex := Default(TMaterialTexture);
 
-    MaskPath := '';
+    SourcePath := '';
     if Trim(Tex.Path) <> '' then
-      MaskPath := TEnginePaths.ResolveAssetPath(Tex.Path);
+      SourcePath := TEnginePaths.ResolveAssetPath(Tex.Path);
 
-    if (MaskPath = '') or IsDefaultMaskTexturePath(MaskPath) then
-      MaskPath := TerrainMaskFileName(HeightField, AMaterial, ALayer);
+    // Always paint into a material-owned texture file. This prevents all five
+    // layers from sharing and overwriting a placeholder such as Blank_alpha.png.
+    MaskPath := TerrainMaskFileName(HeightField, AMaterial, ALayer);
 
     if fTerrainEditor.MaskLayers[ALayer].Valid and
        SameText(fTerrainEditor.MaskLayers[ALayer].FileName, MaskPath) then
@@ -19526,15 +19621,40 @@ var
     end
     else
     begin
-      Width := System.Math.Max(16,
-        System.Math.Min(8192, fTerrainEditor.MaskResolution));
-      Height := Width;
-      InitialValue := 0;
-      if ALayer = 0 then
-        InitialValue := 255;
-      CreateSolidMask(Mask.Pixels, Width, Height, InitialValue);
-      Mask.Width := Width;
-      Mask.Height := Height;
+      ImportedSource := False;
+
+      // Preserve a real custom/legacy mask by copying its pixels into the new
+      // material-owned name. Default and blank placeholders are not imported:
+      // layer 1 starts white and layers 2..5 start black.
+      if (SourcePath <> '') and (not SameText(SourcePath, MaskPath)) and
+         FileExists(SourcePath) and
+         (not IsDefaultMaskTexturePath(SourcePath)) and
+         (not SourceMaskIsShared(SourcePath)) then
+      begin
+        if not TryLoadTerrainMaskPixels(SourcePath, Mask.Pixels, Width, Height) then
+        begin
+          fTerrainEditor.LastError := 'Could not import terrain mask: ' +
+            SourcePath;
+          Exit;
+        end;
+        Mask.Width := Width;
+        Mask.Height := Height;
+        ImportedSource := True;
+      end;
+
+      if not ImportedSource then
+      begin
+        Width := System.Math.Max(16,
+          System.Math.Min(8192, fTerrainEditor.MaskResolution));
+        Height := Width;
+        InitialValue := 0;
+        if ALayer = 0 then
+          InitialValue := 255;
+        CreateSolidMask(Mask.Pixels, Width, Height, InitialValue);
+        Mask.Width := Width;
+        Mask.Height := Height;
+      end;
+
       Created := True;
     end;
 
@@ -19553,8 +19673,11 @@ var
         Mask.Height) then
         fTerrainEditor.MaskLayers[ALayer].Dirty := False
       else
+      begin
         fTerrainEditor.LastError := 'Could not save terrain mask: ' +
           Mask.FileName;
+        Exit(False);
+      end;
     end;
 
     Result := True;
