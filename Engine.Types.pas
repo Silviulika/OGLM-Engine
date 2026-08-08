@@ -51,6 +51,7 @@ type
   TMaterialTexture = record
     Texture: TTexture;
     Path: string;
+    CacheKey: string;
 
     function LoadTexTGA(const AFileName: string; MipMap: Boolean; const AUniformName: string; internalFormat, param: GLint; InvertNormals: Boolean): Boolean;
     function LoadTexPNG(const AFileName: string; MipMap: Boolean; const AUniformName: string; internalFormat, param: GLint; InvertNormals: Boolean): Boolean;
@@ -476,6 +477,202 @@ const
   GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM = $8E8D;
   MAX_TEXTURE_ANISOTROPY_CAP = 8.0;
 
+function TryLoadTargaTextureBGRA(const AFileName: string; out Pixels: TBytes;
+  out Width, Height: Integer; InvertNormals: Boolean): Boolean;
+var
+  Stream: TFileStream;
+  Header: array[0..17] of Byte;
+  IDLength, ColorMapType, ImageType, BitsPerPixel, Descriptor: Byte;
+  BytesPerPixel: Integer;
+  PixelCount, PixelIndex: Integer;
+  PixelByteCount: Integer;
+  TopOrigin, RightOrigin: Boolean;
+  PacketHeader: Byte;
+  RunLength, I: Integer;
+  B, G, R, A: Byte;
+  RowSize, SourceY, DestY: Integer;
+
+  function WordAt(Offset: Integer): Word;
+  begin
+    Result := Word(Header[Offset]) or (Word(Header[Offset + 1]) shl 8);
+  end;
+
+  function ReadPixel(out B, G, R, A: Byte): Boolean;
+  var
+    FilePixel: array[0..3] of Byte;
+  begin
+    Result := Stream.Read(FilePixel[0], BytesPerPixel) = BytesPerPixel;
+    if not Result then
+      Exit;
+
+    B := FilePixel[0];
+    G := FilePixel[1];
+    R := FilePixel[2];
+    if BytesPerPixel = 4 then
+      A := FilePixel[3]
+    else
+      A := 255;
+  end;
+
+  procedure InvertNormalGreen;
+  var
+    Offset: Integer;
+  begin
+    Offset := 1;
+    while Offset < Length(Pixels) do
+    begin
+      Pixels[Offset] := 255 - Pixels[Offset];
+      Inc(Offset, 4);
+    end;
+  end;
+
+  procedure StorePixel(SourceIndex: Integer; B, G, R, A: Byte);
+  var
+    SourceX, SourceY, DestX, DestY, DestIndex: Integer;
+  begin
+    SourceX := SourceIndex mod Width;
+    SourceY := SourceIndex div Width;
+
+    if RightOrigin then
+      DestX := Width - 1 - SourceX
+    else
+      DestX := SourceX;
+
+    if TopOrigin then
+      DestY := SourceY
+    else
+      DestY := Height - 1 - SourceY;
+
+    DestIndex := (DestY * Width + DestX) * 4;
+    Pixels[DestIndex + 0] := B;
+    Pixels[DestIndex + 1] := G;
+    Pixels[DestIndex + 2] := R;
+    Pixels[DestIndex + 3] := A;
+  end;
+
+begin
+  Result := False;
+  SetLength(Pixels, 0);
+  Width := 0;
+  Height := 0;
+
+  Stream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
+  try
+    if Stream.Read(Header[0], SizeOf(Header)) <> SizeOf(Header) then
+      Exit;
+
+    IDLength := Header[0];
+    ColorMapType := Header[1];
+    ImageType := Header[2];
+    Width := WordAt(12);
+    Height := WordAt(14);
+    BitsPerPixel := Header[16];
+    Descriptor := Header[17];
+
+    if (ColorMapType <> 0) or not (ImageType in [2, 10]) or
+       not (BitsPerPixel in [24, 32]) or (Width <= 0) or (Height <= 0) or
+       (Width > MaxInt div Height) then
+      Exit;
+
+    PixelCount := Width * Height;
+    if PixelCount > MaxInt div 4 then
+      Exit;
+
+    BytesPerPixel := BitsPerPixel div 8;
+    PixelByteCount := PixelCount * 4;
+    TopOrigin := (Descriptor and $20) <> 0;
+    RightOrigin := (Descriptor and $10) <> 0;
+    SetLength(Pixels, PixelByteCount);
+
+    if Stream.Size < SizeOf(Header) + IDLength then
+      Exit;
+    Stream.Position := SizeOf(Header) + IDLength;
+
+    if (ImageType = 2) and (BytesPerPixel = 4) and (not RightOrigin) then
+    begin
+      RowSize := Width * 4;
+      if TopOrigin then
+      begin
+        if Stream.Read(Pixels[0], PixelByteCount) <> PixelByteCount then
+          Exit;
+      end
+      else
+      begin
+        for SourceY := 0 to Height - 1 do
+        begin
+          DestY := Height - 1 - SourceY;
+          if Stream.Read(Pixels[DestY * RowSize], RowSize) <> RowSize then
+            Exit;
+        end;
+      end;
+
+      if InvertNormals then
+        InvertNormalGreen;
+
+      Exit(True);
+    end;
+
+    PixelIndex := 0;
+    if ImageType = 2 then
+    begin
+      while PixelIndex < PixelCount do
+      begin
+        if not ReadPixel(B, G, R, A) then
+          Exit;
+        StorePixel(PixelIndex, B, G, R, A);
+        Inc(PixelIndex);
+      end;
+    end
+    else
+    begin
+      while PixelIndex < PixelCount do
+      begin
+        if Stream.Read(PacketHeader, SizeOf(PacketHeader)) <> SizeOf(PacketHeader) then
+          Exit;
+
+        RunLength := (PacketHeader and $7F) + 1;
+        if (PacketHeader and $80) <> 0 then
+        begin
+          if not ReadPixel(B, G, R, A) then
+            Exit;
+
+          for I := 0 to RunLength - 1 do
+          begin
+            if PixelIndex >= PixelCount then
+              Exit;
+            StorePixel(PixelIndex, B, G, R, A);
+            Inc(PixelIndex);
+          end;
+        end
+        else
+        begin
+          for I := 0 to RunLength - 1 do
+          begin
+            if PixelIndex >= PixelCount then
+              Exit;
+            if not ReadPixel(B, G, R, A) then
+              Exit;
+            StorePixel(PixelIndex, B, G, R, A);
+            Inc(PixelIndex);
+          end;
+        end;
+      end;
+    end;
+
+    Result := PixelIndex = PixelCount;
+    if Result and InvertNormals then
+      InvertNormalGreen;
+  finally
+    if not Result then
+    begin
+      SetLength(Pixels, 0);
+      Width := 0;
+      Height := 0;
+    end;
+    Stream.Free;
+  end;
+end;
+
 function DDSChannelToByte(const Pixel, Mask: Cardinal; const DefaultValue: Byte): Byte;
 var
   Shift: Integer;
@@ -889,11 +1086,37 @@ var
   Bitmap: TBitmap;
   Data: TBytes;
   RowSize: Integer;
+  Width, Height: Integer;
   y: Integer;
   i: Integer;
 begin
   Result := False;
   Name := AUniformName;
+
+  if TryLoadTargaTextureBGRA(AFileName, Data, Width, Height, InvertNormals) then
+  begin
+    glGenTextures(1, @TexID);
+    glBindTexture(GL_TEXTURE_2D, TexID);
+    glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, Width, Height, 0,
+                 GL_BGRA, GL_UNSIGNED_BYTE, @Data[0]);
+
+    if MipMap then
+    begin
+      glGenerateMipmap(GL_TEXTURE_2D);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    end
+    else
+    begin
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    end;
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, param);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, param);
+    ApplyTextureAnisotropy(GL_TEXTURE_2D, MipMap);
+    Exit(True);
+  end;
 
   Graphic := TGraphicClass(TTargaGraphic).Create;
   try
@@ -1091,6 +1314,7 @@ begin
   if Texture.LoadTexTGA(AFileName, MipMap, AUniformName, internalFormat, param, InvertNormals) then
   begin
     Path := AFileName;
+    CacheKey := '';
     Exit(True);
   end
   else
@@ -1102,6 +1326,7 @@ begin
   if Texture.LoadTexPNG(AFileName, MipMap, AUniformName, internalFormat, param, InvertNormals) then
     begin
       Path := AFileName;
+      CacheKey := '';
       Exit(True);
     end
   else
@@ -1113,6 +1338,7 @@ begin
   if Texture.LoadTexJPG(AFileName, MipMap, AUniformName, internalFormat, param, InvertNormals) then
     begin
       Path := AFileName;
+      CacheKey := '';
       Exit(True);
     end
   else
@@ -1127,6 +1353,7 @@ begin
     param, InvertNormals) then
   begin
     Path := AFileName;
+    CacheKey := '';
     Exit(True);
   end;
 

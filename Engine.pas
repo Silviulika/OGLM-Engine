@@ -799,7 +799,7 @@ var
       Mesh.LibMaterialname := MaterialName;
     end;
 
-    Obj.UpdateBoundingRadiusFromMesh;
+    Obj.UpdateBoundingRadiusFromMesh(False);
     if ALoadAudio then
       for I := 0 to Obj.AudioEmitterCount - 1 do
         LoadSceneAudioEmitter(Obj, Obj.AudioEmitterItem[I]);
@@ -2161,10 +2161,6 @@ begin
         raise Exception.CreateFmt(
           'Unexpected or incomplete scene data at byte %d of %d.',
           [Stream.Position, ContentEnd]);
-
-      // Resolve object/material references and create required defaults while
-      // every object still belongs exclusively to the staging state.
-      RestoreSceneAfterLoad(False, False);
 
       ASceneManager := FSceneManager;
       APhysicsWorld := FPhysicsWorld;

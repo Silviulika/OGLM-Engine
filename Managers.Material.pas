@@ -147,6 +147,54 @@ const
   MATERIAL_FILE_MAGIC: array[0..7] of AnsiChar = ('O', 'M', 'E', 'M', 'A', 'T', '0', '1');
   MATERIAL_LIBRARY_CHUNK_MAGIC: array[0..7] of AnsiChar = ('O', 'M', 'E', 'M', 'L', 'B', '0', '1');
 
+type
+  TMaterialTextureCacheEntry = class
+  public
+    TextureID: GLuint;
+    RefCount: Integer;
+    destructor Destroy; override;
+  end;
+
+var
+  GMaterialTextureCache: TObjectDictionary<string, TMaterialTextureCacheEntry> = nil;
+
+function MaterialTextureCache: TObjectDictionary<string, TMaterialTextureCacheEntry>;
+begin
+  if GMaterialTextureCache = nil then
+    GMaterialTextureCache := TObjectDictionary<string, TMaterialTextureCacheEntry>.Create([doOwnsValues]);
+  Result := GMaterialTextureCache;
+end;
+
+destructor TMaterialTextureCacheEntry.Destroy;
+begin
+  if TextureID <> 0 then
+  begin
+    glDeleteTextures(1, @TextureID);
+    TextureID := 0;
+  end;
+
+  inherited Destroy;
+end;
+
+function BuildMaterialTextureCacheKey(const AFileName: string; MipMap: Boolean;
+  InternalFormat, Param: GLint; InvertNormals: Boolean): string;
+var
+  SearchRec: TSearchRec;
+begin
+  Result := LowerCase(ExpandFileName(AFileName));
+  if FindFirst(AFileName, faAnyFile, SearchRec) = 0 then
+  try
+    Result := Result + '|' + IntToStr(SearchRec.Size) + '|' +
+      FloatToStr(SearchRec.TimeStamp);
+  finally
+    FindClose(SearchRec);
+  end;
+
+  Result := Result + '|' + IntToStr(InternalFormat) + '|' +
+    IntToStr(Param) + '|' + BoolToStr(MipMap, True) + '|' +
+    BoolToStr(InvertNormals, True);
+end;
+
 procedure WriteStringToStream(Stream: TStream; const Value: string);
 var
   Len: Integer;
@@ -257,15 +305,46 @@ begin
   Result.Texture.TexID := 0;
   Result.Texture.Name := '';
   Result.Path := '';
+  Result.CacheKey := '';
 end;
 
 procedure ReleaseMaterialTexture(var MatTex: TMaterialTexture);
+var
+  Entry: TMaterialTextureCacheEntry;
+  TextureID: GLuint;
+  ReleasedFromCache: Boolean;
 begin
   if MatTex.Texture.TexID <> 0 then
   begin
-    glDeleteTextures(1, @MatTex.Texture.TexID);
-    MatTex.Texture.TexID := 0;
+    ReleasedFromCache := False;
+    if (MatTex.CacheKey <> '') and Assigned(GMaterialTextureCache) and
+       GMaterialTextureCache.TryGetValue(MatTex.CacheKey, Entry) then
+    begin
+      Dec(Entry.RefCount);
+      if Entry.RefCount <= 0 then
+      begin
+        TextureID := Entry.TextureID;
+        if TextureID <> 0 then
+        begin
+          glDeleteTextures(1, @TextureID);
+          Entry.TextureID := 0;
+        end;
+        GMaterialTextureCache.Remove(MatTex.CacheKey);
+        if GMaterialTextureCache.Count = 0 then
+          FreeAndNil(GMaterialTextureCache);
+      end;
+      ReleasedFromCache := True;
+    end;
+
+    if not ReleasedFromCache then
+    begin
+      TextureID := MatTex.Texture.TexID;
+      glDeleteTextures(1, @TextureID);
+    end;
   end;
+
+  MatTex.Texture.TexID := 0;
+  MatTex.CacheKey := '';
 end;
 
 procedure ReleaseMaterialTextures(var Textures: TArray<TMaterialTexture>);
@@ -348,6 +427,9 @@ var
   UniformName: string;
   LoadedTex: TMaterialTexture;
   Loaded: Boolean;
+  CacheKey: string;
+  Cache: TObjectDictionary<string, TMaterialTextureCacheEntry>;
+  Entry: TMaterialTextureCacheEntry;
 begin
   MatTex.Path := TEnginePaths.ResolveAssetPath(MatTex.Path);
 
@@ -359,9 +441,24 @@ begin
     Param, InvertNormals);
 
   Ext := LowerCase(ExtractFileExt(MatTex.Path));
+  CacheKey := BuildMaterialTextureCacheKey(MatTex.Path, MipMap, InternalFormat,
+    Param, InvertNormals);
+  Cache := MaterialTextureCache;
+  if Cache.TryGetValue(CacheKey, Entry) then
+  begin
+    LoadedTex := MatTex;
+    LoadedTex.Texture.TexID := Entry.TextureID;
+    LoadedTex.Texture.Name := UniformName;
+    LoadedTex.CacheKey := CacheKey;
+    Inc(Entry.RefCount);
+    ReleaseMaterialTexture(MatTex);
+    MatTex := LoadedTex;
+    Exit;
+  end;
 
   LoadedTex := MatTex;
   LoadedTex.Texture.TexID := 0;
+  LoadedTex.CacheKey := '';
   try
     if Ext = '.tga' then
       Loaded := LoadedTex.LoadTexTGA(MatTex.Path, MipMap, UniformName,
@@ -384,6 +481,11 @@ begin
 
   if Loaded then
   begin
+    Entry := TMaterialTextureCacheEntry.Create;
+    Entry.TextureID := LoadedTex.Texture.TexID;
+    Entry.RefCount := 1;
+    Cache.Add(CacheKey, Entry);
+    LoadedTex.CacheKey := CacheKey;
     ReleaseMaterialTexture(MatTex);
     MatTex := LoadedTex;
   end

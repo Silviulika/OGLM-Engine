@@ -110,7 +110,7 @@ type
     // Creates GPU buffers and uploads current data
     procedure CreateBuffers;
     procedure SetGeometry(const Vertices: TArray<TVertex>; const Indices: TArray<GLuint>;
-      BuildTangentsAndBitangents: Boolean = False);
+      BuildTangentsAndBitangents: Boolean = False; AUploadBuffers: Boolean = True);
     procedure CopyRenderStateTo(ADest: TMesh); virtual;
     procedure SaveShapeData(Stream: TStream); virtual;
   public
@@ -147,7 +147,7 @@ type
     property VertexCount: Integer read GetVertexCount;
     property IndexCount: Integer read GetIndexCount;
 
-    procedure BuildTangentsAndBitangents;
+    procedure BuildTangentsAndBitangents(ARefreshBuffers: Boolean = True);
     // Call this after modifying fVertices or fIndices to update GPU data
     procedure RefreshVertexBuffer;
     procedure RefreshBuffers;
@@ -291,6 +291,9 @@ type
     fHeightTextureWidth: Integer;
     fHeightTextureDepth: Integer;
     function GetHeights: TArray<Single>;
+    procedure InitializeHeightField(const Heights: TArray<Single>;
+      HeightMapWidth, HeightMapDepth: Integer; Width, Depth, HeightScale,
+      UVScale: Single);
     procedure AssignHeights(const Values: TArray<Single>; HeightMapWidth,
       HeightMapDepth: Integer; Rebuild: Boolean);
     procedure ClearTiles;
@@ -311,6 +314,9 @@ type
     procedure SetHeightScale(const Value: Single);
     procedure SetUVScale(const Value: Single);
     procedure SetSourceFile(const Value: string);
+    constructor CreateForLoad(const Heights: TArray<Single>; HeightMapWidth,
+      HeightMapDepth: Integer; Width, Depth, HeightScale, UVScale: Single;
+      const aName: string; IsStatic, ABuildGeometry: Boolean);
   protected
     procedure SaveShapeData(Stream: TStream); override;
   public
@@ -322,7 +328,7 @@ type
       HeightScale: Single; UVScale: Single = 1.0; const aName: string = '';
       IsStatic: Boolean = True): THeightFieldMesh; static;
     function Clone: TMesh; override;
-    procedure RebuildGeometry;
+    procedure RebuildGeometry(AUploadBaseBuffers: Boolean = True);
     procedure SetHeights(const Values: TArray<Single>; HeightMapWidth,
       HeightMapDepth: Integer);
     procedure UpdateHeightSamples(const Values: TArray<Single>;
@@ -644,6 +650,9 @@ const
   MAX_SERIALIZED_HEIGHT_SAMPLES = 16777216;
   MAX_SERIALIZED_VERTICES = 16777216;
   MAX_SERIALIZED_INDICES = 50331648;
+
+threadvar
+  MeshLoadShapeMetadataOnly: Boolean;
 
 function AABBVisibleInFrustum(const Bounds: TAABB; const ModelMatrix: TMatrix4;
   const FrustumPlanes: TFrustumPlanes; UseFrustum: Boolean): Boolean;
@@ -981,21 +990,34 @@ begin
 end;
 
 procedure TMesh.SetGeometry(const Vertices: TArray<TVertex>; const Indices: TArray<GLuint>;
-  BuildTangentsAndBitangents: Boolean);
+  BuildTangentsAndBitangents: Boolean; AUploadBuffers: Boolean);
 begin
+  if MeshLoadShapeMetadataOnly then
+  begin
+    SetLength(fVertices, 0);
+    SetLength(fIndices, 0);
+    fUseElements := False;
+    fBoundingBoxMin := Vector3(0, 0, 0);
+    fBoundingBoxMax := Vector3(0, 0, 0);
+    Exit;
+  end;
+
   fVertices := Copy(Vertices, 0, Length(Vertices));
   fIndices := Copy(Indices, 0, Length(Indices));
   fUseElements := Length(fIndices) > 0;
   SetLength(fVertexAttributes, 5);
   ComputeBoundingBox;
 
-  if fVAO = 0 then
-    CreateBuffers
-  else
-    RefreshBuffers;
-
   if BuildTangentsAndBitangents then
-    Self.BuildTangentsAndBitangents;
+    Self.BuildTangentsAndBitangents(False);
+
+  if AUploadBuffers then
+  begin
+    if fVAO = 0 then
+      CreateBuffers
+    else
+      RefreshBuffers;
+  end;
 end;
 
 
@@ -1045,7 +1067,7 @@ begin
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 end;
 
-procedure TMesh.BuildTangentsAndBitangents;
+procedure TMesh.BuildTangentsAndBitangents(ARefreshBuffers: Boolean);
 var
   i, idx0, idx1, idx2: Integer;
   v0, v1, v2: TVertex;
@@ -1142,7 +1164,8 @@ begin
     fVertices[i].Bitangent := AccumBitangents[i];
   end;
 
-  RefreshBuffers;
+  if ARefreshBuffers then
+    RefreshBuffers;
 end;
 
 procedure TMesh.RefreshVertexBuffer;
@@ -1509,11 +1532,10 @@ begin
 end;
 
 { THeightFieldMesh }
-constructor THeightFieldMesh.Create(const Heights: TArray<Single>; HeightMapWidth,
-  HeightMapDepth: Integer; Width, Depth, HeightScale, UVScale: Single;
-  const aName: string; IsStatic: Boolean);
+procedure THeightFieldMesh.InitializeHeightField(const Heights: TArray<Single>;
+  HeightMapWidth, HeightMapDepth: Integer; Width, Depth, HeightScale,
+  UVScale: Single);
 begin
-  inherited Create(nil, nil, aName, mtHeightField, IsStatic);
   fTileSize := 64; //32
   fWidth := Width;
   fDepth := Depth;
@@ -1533,6 +1555,26 @@ begin
   fHeightTextureWidth := 0;
   fHeightTextureDepth := 0;
   AssignHeights(Heights, HeightMapWidth, HeightMapDepth, False);
+end;
+
+constructor THeightFieldMesh.CreateForLoad(const Heights: TArray<Single>;
+  HeightMapWidth, HeightMapDepth: Integer; Width, Depth, HeightScale,
+  UVScale: Single; const aName: string; IsStatic, ABuildGeometry: Boolean);
+begin
+  inherited Create(nil, nil, aName, mtHeightField, IsStatic);
+  InitializeHeightField(Heights, HeightMapWidth, HeightMapDepth, Width, Depth,
+    HeightScale, UVScale);
+  if ABuildGeometry then
+    RebuildGeometry;
+end;
+
+constructor THeightFieldMesh.Create(const Heights: TArray<Single>; HeightMapWidth,
+  HeightMapDepth: Integer; Width, Depth, HeightScale, UVScale: Single;
+  const aName: string; IsStatic: Boolean);
+begin
+  inherited Create(nil, nil, aName, mtHeightField, IsStatic);
+  InitializeHeightField(Heights, HeightMapWidth, HeightMapDepth, Width, Depth,
+    HeightScale, UVScale);
   RebuildGeometry;
 end;
 
@@ -2007,7 +2049,11 @@ var
   PackedVertices: TArray<TVertex>;
   PackedIndices: TArray<GLuint>;
   PackedMorphPositions: TArray<TVector3>;
+  PackedVertexCount: Integer;
+  PackedIndexCount: Integer;
+  PackedMorphPositionCount: Integer;
   Usage: GLenum;
+  BuildMorphPositionBuffer: Boolean;
 
   procedure InitBounds(var Bounds: TAABB);
   begin
@@ -2017,48 +2063,90 @@ var
 
   function AppendVertices(const Source: TArray<TVertex>): Integer;
   var
-    OldLength: Integer;
     Count: Integer;
+
+    procedure EnsureCapacity(Required: Integer);
+    var
+      NewCapacity: Integer;
+    begin
+      if Length(PackedVertices) >= Required then
+        Exit;
+
+      NewCapacity := Length(PackedVertices);
+      if NewCapacity < 1024 then
+        NewCapacity := 1024;
+      while NewCapacity < Required do
+        NewCapacity := NewCapacity + (NewCapacity div 2);
+      SetLength(PackedVertices, NewCapacity);
+    end;
   begin
-    Result := Length(PackedVertices);
     Count := Length(Source);
+    Result := PackedVertexCount;
     if Count <= 0 then
       Exit;
 
-    OldLength := Result;
-    SetLength(PackedVertices, OldLength + Count);
-    Move(Source[0], PackedVertices[OldLength], Count * SizeOf(TVertex));
+    EnsureCapacity(PackedVertexCount + Count);
+    Move(Source[0], PackedVertices[PackedVertexCount], Count * SizeOf(TVertex));
+    Inc(PackedVertexCount, Count);
   end;
 
   function AppendIndices(const Source: TArray<GLuint>): Integer;
   var
-    OldLength: Integer;
     Count: Integer;
+
+    procedure EnsureCapacity(Required: Integer);
+    var
+      NewCapacity: Integer;
+    begin
+      if Length(PackedIndices) >= Required then
+        Exit;
+
+      NewCapacity := Length(PackedIndices);
+      if NewCapacity < 4096 then
+        NewCapacity := 4096;
+      while NewCapacity < Required do
+        NewCapacity := NewCapacity + (NewCapacity div 2);
+      SetLength(PackedIndices, NewCapacity);
+    end;
   begin
-    Result := Length(PackedIndices);
     Count := Length(Source);
+    Result := PackedIndexCount;
     if Count <= 0 then
       Exit;
 
-    OldLength := Result;
-    SetLength(PackedIndices, OldLength + Count);
-    Move(Source[0], PackedIndices[OldLength], Count * SizeOf(GLuint));
+    EnsureCapacity(PackedIndexCount + Count);
+    Move(Source[0], PackedIndices[PackedIndexCount], Count * SizeOf(GLuint));
+    Inc(PackedIndexCount, Count);
   end;
 
   function AppendMorphPositions(const Source: TArray<TVector3>): Integer;
   var
-    OldLength: Integer;
     Count: Integer;
+
+    procedure EnsureCapacity(Required: Integer);
+    var
+      NewCapacity: Integer;
+    begin
+      if Length(PackedMorphPositions) >= Required then
+        Exit;
+
+      NewCapacity := Length(PackedMorphPositions);
+      if NewCapacity < 1024 then
+        NewCapacity := 1024;
+      while NewCapacity < Required do
+        NewCapacity := NewCapacity + (NewCapacity div 2);
+      SetLength(PackedMorphPositions, NewCapacity);
+    end;
   begin
-    Result := Length(PackedMorphPositions);
     Count := Length(Source);
+    Result := PackedMorphPositionCount;
     if Count <= 0 then
       Exit;
 
-    OldLength := Result;
-    SetLength(PackedMorphPositions, OldLength + Count);
-    Move(Source[0], PackedMorphPositions[OldLength],
+    EnsureCapacity(PackedMorphPositionCount + Count);
+    Move(Source[0], PackedMorphPositions[PackedMorphPositionCount],
       Count * SizeOf(TVector3));
+    Inc(PackedMorphPositionCount, Count);
   end;
 
   procedure UploadPackedTileBuffers;
@@ -2322,6 +2410,10 @@ var
 
 begin
   ClearTiles;
+  PackedVertexCount := 0;
+  PackedIndexCount := 0;
+  PackedMorphPositionCount := 0;
+  BuildMorphPositionBuffer := False;
 
   if (fTileSize <= 0) or (fHeightMapWidth < 2) or (fHeightMapDepth < 2) or
      (Length(fVertices) < fHeightMapWidth * fHeightMapDepth) then
@@ -2410,9 +2502,14 @@ begin
         fTiles[TileIndex].LODs[LODIndex].IndexOffset :=
           AppendIndices(Indices);
 
-        MorphPositions := BuildMorphPositions(LODStep);
-        fTiles[TileIndex].LODs[LODIndex].MorphOffset :=
-          AppendMorphPositions(MorphPositions);
+        if BuildMorphPositionBuffer then
+        begin
+          MorphPositions := BuildMorphPositions(LODStep);
+          fTiles[TileIndex].LODs[LODIndex].MorphOffset :=
+            AppendMorphPositions(MorphPositions);
+        end
+        else
+          fTiles[TileIndex].LODs[LODIndex].MorphOffset := 0;
 
         for EdgeIndex := 0 to 3 do
         begin
@@ -2431,6 +2528,9 @@ begin
     end;
   end;
 
+  SetLength(PackedVertices, PackedVertexCount);
+  SetLength(PackedIndices, PackedIndexCount);
+  SetLength(PackedMorphPositions, PackedMorphPositionCount);
   UploadPackedTileBuffers;
 end;
 
@@ -2538,14 +2638,14 @@ begin
   Result := Current;
 end;
 
-procedure THeightFieldMesh.RebuildGeometry;
+procedure THeightFieldMesh.RebuildGeometry(AUploadBaseBuffers: Boolean);
 var
   Vertices: TArray<TVertex>;
   Indices: TArray<GLuint>;
 begin
   CreateHeightFieldVertices(Vertices, Indices, fHeights, fHeightMapWidth,
     fHeightMapDepth, fWidth, fDepth, fHeightScale, fUVScale);
-  SetGeometry(Vertices, Indices, True);
+  SetGeometry(Vertices, Indices, False, AUploadBaseBuffers);
   BuildTiles;
   RefreshHeightBounds;
   UploadHeightTexture;
@@ -2782,9 +2882,15 @@ var
 
   procedure BindLODMorphAttributes(const Tile: THeightFieldTile;
     CurrentLOD: Integer; Morph: Single);
+  var
+    CanMorphFromHeightTexture: Boolean;
   begin
+    CanMorphFromHeightTexture := (fHeightTexture <> 0) and
+      (fHeightTextureWidth = fHeightMapWidth) and
+      (fHeightTextureDepth = fHeightMapDepth);
     UseMorph := (CurrentLOD >= 0) and (CurrentLOD < Tile.LODCount - 1) and
-      (fTilesMorphVBO <> 0) and (Morph > 0.0001);
+      (Morph > 0.0001) and
+      ((fTilesMorphVBO <> 0) or CanMorphFromHeightTexture);
 
     Technique.Shader.SetUniform('heightFieldUseMorph', GLint(Ord(UseMorph)));
     Technique.Shader.SetUniform('heightFieldMorphFactor', GLfloat(Morph));
@@ -2794,7 +2900,7 @@ var
     else
       Technique.Shader.SetUniform('heightFieldMorphStep', GLint(1));
 
-    if UseMorph then
+    if UseMorph and (fTilesMorphVBO <> 0) then
     begin
       glBindBuffer(GL_ARRAY_BUFFER, fTilesMorphVBO);
       glEnableVertexAttribArray(5);
@@ -2803,7 +2909,11 @@ var
           SizeOf(TVector3)));
     end
     else
+    begin
       glDisableVertexAttribArray(5);
+      if UseMorph then
+        glVertexAttrib3f(5, 0.0, 0.0, 0.0);
+    end;
   end;
 begin
   if not fVisible then Exit;
@@ -4168,6 +4278,15 @@ begin
   Stream.WriteBuffer(ShapeDataVersion, SizeOf(ShapeDataVersion));
   SaveShapeData(Stream);
 
+  if fMeshType = mtHeightField then
+  begin
+    VertexCountValue := 0;
+    Stream.WriteBuffer(VertexCountValue, SizeOf(VertexCountValue));
+    IndexCountValue := 0;
+    Stream.WriteBuffer(IndexCountValue, SizeOf(IndexCountValue));
+    Exit;
+  end;
+
   VertexCountValue := Length(fVertices);
   Stream.WriteBuffer(VertexCountValue, SizeOf(VertexCountValue));
   if VertexCountValue > 0 then
@@ -4202,6 +4321,7 @@ var
   LoadedVertices: TArray<TVertex>;
   LoadedIndices: TArray<GLuint>;
   ShapeDataVersion: Integer;
+  PreviousMetadataOnly: Boolean;
 
   procedure ValidateArrayCount(const ACount, AElementSize, AMaximum: Integer;
     const ADescription: string);
@@ -4213,6 +4333,15 @@ var
     ByteCount := Int64(ACount) * AElementSize;
     if ByteCount > Stream.Size - Stream.Position then
       raise Exception.CreateFmt('Truncated %s in scene stream.', [ADescription]);
+  end;
+
+  procedure SkipArrayData(const ACount, AElementSize: Integer);
+  var
+    ByteCount: Int64;
+  begin
+    ByteCount := Int64(ACount) * AElementSize;
+    if ByteCount > 0 then
+      Stream.Position := Stream.Position + ByteCount;
   end;
 
   function ReadCap: TCapType;
@@ -4331,8 +4460,9 @@ var
             Stream.ReadBuffer(HeightValues[0], HeightCount * SizeOf(Single));
           SourceFile := ReadStringFromStream(Stream);
 
-          Result := THeightFieldMesh.Create(HeightValues, A, B, Width, Depth,
-            MapHeightScale, MapUVScale, SavedName, SavedStaticGeometry);
+          Result := THeightFieldMesh.CreateForLoad(HeightValues, A, B, Width,
+            Depth, MapHeightScale, MapUVScale, SavedName, SavedStaticGeometry,
+            False);
           THeightFieldMesh(Result).fSourceFile := SourceFile;
         end;
 
@@ -4498,31 +4628,54 @@ begin
   end;
 
   if MeshListVersion >= 2 then
-    Result := CreateMeshFromShapeData;
+  begin
+    PreviousMetadataOnly := MeshLoadShapeMetadataOnly;
+    MeshLoadShapeMetadataOnly := True;
+    try
+      Result := CreateMeshFromShapeData;
+    finally
+      MeshLoadShapeMetadataOnly := PreviousMetadataOnly;
+    end;
+  end;
 
   Stream.ReadBuffer(VertexCountValue, SizeOf(VertexCountValue));
   ValidateArrayCount(VertexCountValue, SizeOf(TVertex), MAX_SERIALIZED_VERTICES,
     'vertex count');
-  SetLength(LoadedVertices, VertexCountValue);
-  if VertexCountValue > 0 then
-    Stream.ReadBuffer(LoadedVertices[0], VertexCountValue * SizeOf(TVertex));
 
-  Stream.ReadBuffer(IndexCountValue, SizeOf(IndexCountValue));
-  ValidateArrayCount(IndexCountValue, SizeOf(GLuint), MAX_SERIALIZED_INDICES,
-    'index count');
-  SetLength(LoadedIndices, IndexCountValue);
-  if IndexCountValue > 0 then
-    Stream.ReadBuffer(LoadedIndices[0], IndexCountValue * SizeOf(GLuint));
-
-  if Result = nil then
+  if (SavedMeshType = mtHeightField) and (Result is THeightFieldMesh) then
   begin
-    if SavedMeshType = mtFile then
-      Result := TFileMesh.Create(LoadedVertices, LoadedIndices, SavedName, '', SavedStaticGeometry)
-    else
-      Result := TMesh.Create(LoadedVertices, LoadedIndices, SavedName, SavedMeshType, SavedStaticGeometry);
+    SkipArrayData(VertexCountValue, SizeOf(TVertex));
+
+    Stream.ReadBuffer(IndexCountValue, SizeOf(IndexCountValue));
+    ValidateArrayCount(IndexCountValue, SizeOf(GLuint), MAX_SERIALIZED_INDICES,
+      'index count');
+    SkipArrayData(IndexCountValue, SizeOf(GLuint));
+
+    THeightFieldMesh(Result).RebuildGeometry(False);
   end
   else
-    Result.SetGeometry(LoadedVertices, LoadedIndices, False);
+  begin
+    SetLength(LoadedVertices, VertexCountValue);
+    if VertexCountValue > 0 then
+      Stream.ReadBuffer(LoadedVertices[0], VertexCountValue * SizeOf(TVertex));
+
+    Stream.ReadBuffer(IndexCountValue, SizeOf(IndexCountValue));
+    ValidateArrayCount(IndexCountValue, SizeOf(GLuint), MAX_SERIALIZED_INDICES,
+      'index count');
+    SetLength(LoadedIndices, IndexCountValue);
+    if IndexCountValue > 0 then
+      Stream.ReadBuffer(LoadedIndices[0], IndexCountValue * SizeOf(GLuint));
+
+    if Result = nil then
+    begin
+      if SavedMeshType = mtFile then
+        Result := TFileMesh.Create(LoadedVertices, LoadedIndices, SavedName, '', SavedStaticGeometry)
+      else
+        Result := TMesh.Create(LoadedVertices, LoadedIndices, SavedName, SavedMeshType, SavedStaticGeometry);
+    end
+    else
+      Result.SetGeometry(LoadedVertices, LoadedIndices, False);
+  end;
 
   Result.fVisible := SavedVisible;
   Result.fAlwaysOnTop := SavedAlwaysOnTop;

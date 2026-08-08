@@ -659,20 +659,38 @@ end;
 
 function TMeshList.GetBoundingRadius: Single;
 var
-  i, j: Integer;
+  i, CornerIndex: Integer;
+  Mesh: TMesh;
+  Corner, V: TVector3;
   MaxSq, DistSq: Single;
-  V: TVector3;
   LocalMatrix: TMatrix4;
 begin
   MaxSq := 0;
   for i := 0 to Count - 1 do
   begin
-    if Items[i] = nil then
+    Mesh := Items[i];
+    if (Mesh = nil) or (Mesh.VertexCount = 0) then
       Continue;
-    LocalMatrix := Items[i].LocalMatrix;
-    for j := 0 to High(Items[i].Vertices) do
+
+    LocalMatrix := Mesh.LocalMatrix;
+    for CornerIndex := 0 to 7 do
     begin
-      V := Vector3(LocalMatrix * Vector4(Items[i].Vertices[j].Position, 1.0));
+      if (CornerIndex and 1) = 0 then
+        Corner.X := Mesh.BoundingBoxMin.X
+      else
+        Corner.X := Mesh.BoundingBoxMax.X;
+
+      if (CornerIndex and 2) = 0 then
+        Corner.Y := Mesh.BoundingBoxMin.Y
+      else
+        Corner.Y := Mesh.BoundingBoxMax.Y;
+
+      if (CornerIndex and 4) = 0 then
+        Corner.Z := Mesh.BoundingBoxMin.Z
+      else
+        Corner.Z := Mesh.BoundingBoxMax.Z;
+
+      V := Vector3(LocalMatrix * Vector4(Corner, 1.0));
       DistSq := V.X*V.X + V.Y*V.Y + V.Z*V.Z;
       if DistSq > MaxSq then MaxSq := DistSq;
     end;

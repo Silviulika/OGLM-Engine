@@ -18158,7 +18158,10 @@ begin
   else
     Tex := Default(TMaterialTexture);
 
-  TextureID := Tex.Texture.TexID;
+  if Tex.CacheKey <> '' then
+    TextureID := 0
+  else
+    TextureID := Tex.Texture.TexID;
   ActivateMainRenderContext;
   if TextureID = 0 then
     glGenTextures(1, @TextureID);
@@ -18184,6 +18187,7 @@ begin
   Tex.Texture.TexID := TextureID;
   Tex.Texture.Name := TerrainMaskUniformName(ALayer);
   Tex.Path := StoredPath;
+  Tex.CacheKey := '';
 
   if TextureIndex >= 0 then
   begin

@@ -267,8 +267,10 @@ type
     procedure ClearVegetationLODMeshes;
     function CreateVegetationLODMesh(AMesh: TMesh; ALODLevel: Integer): TMesh;
     procedure EnsureVegetationLODGenerated;
+    class function LoadFromStreamInternal(Stream: TStream; AOwner: TSceneObject;
+      SceneVersion: Integer): TSceneObject; static;
   public
-    constructor Create(aOwner: TSceneObject);
+    constructor Create(aOwner: TSceneObject; AGenerateID: Boolean = True);
     destructor Destroy; override;
 
     function AddObject(aObject: TSceneObject): Integer;
@@ -361,7 +363,8 @@ type
 
     function IsDescendantOf(aPotentialAncestor: TSceneObject): Boolean;
 
-    procedure UpdateBoundingRadiusFromMesh;
+    procedure UpdateBoundingRadiusFromMesh(
+      AInvalidateDependents: Boolean = True);
 
     function HasGeometry: Boolean;
     function HasParticles: Boolean;
@@ -2249,12 +2252,15 @@ begin
       ObjectList[I].MakeInstancesUniqueFromSource(ASource);
 end;
 
-constructor TSceneObject.Create(aOwner: TSceneObject);
+constructor TSceneObject.Create(aOwner: TSceneObject; AGenerateID: Boolean);
 begin
   inherited Create;
 
   fIsGizmo := False;
-  fID := NewSceneObjectID;
+  if AGenerateID then
+    fID := NewSceneObjectID
+  else
+    fID := '';
   SetLength(fObjectList, 0);
   SetLength(fLightList, 0);
   fPosition.Init(0, 0, 0);
@@ -2915,6 +2921,23 @@ end;
 
 class function TSceneObject.LoadFromStream(Stream: TStream; AOwner: TSceneObject;
   SceneVersion: Integer): TSceneObject;
+begin
+  Result := LoadFromStreamInternal(Stream, nil, SceneVersion);
+  try
+    if AOwner <> nil then
+    begin
+      Result.fIsRoot := False;
+      AOwner.AttachObject(AOwner.Count, Result);
+    end;
+    Result.NotifyChange;
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+class function TSceneObject.LoadFromStreamInternal(Stream: TStream;
+  AOwner: TSceneObject; SceneVersion: Integer): TSceneObject;
 var
   I: Integer;
   LightCount: Integer;
@@ -2932,7 +2955,15 @@ begin
   Result := nil;
   try
     try
-      Result := TSceneObject.Create(AOwner);
+      Result := TSceneObject.Create(nil, SceneVersion < 13);
+      if AOwner <> nil then
+      begin
+        Result.fIsRoot := False;
+        Result.fParent := AOwner;
+        Result.fWorldMatrix := TMatrix4.Identity;
+        Result.fWorldMatrixValid := False;
+      end;
+
       Result.fName := ReadStringFromStream(Stream);
       if SceneVersion >= 13 then
       begin
@@ -3051,16 +3082,19 @@ begin
       Result.fVegetationLODSettings := TVegetationLODSettings.Default
     else
       Result.fVegetationLODSettings := TVegetationLODSettings.Disabled;
-    Result.MarkVegetationLODDirty;
+    Result.fVegetationLODDirty := True;
+    Result.InvalidateVertexWindFrameCache;
 
     Stream.ReadBuffer(ChildCount, SizeOf(ChildCount));
     if (ChildCount < 0) or (ChildCount > MAX_SCENE_CHILDREN) then
       raise Exception.Create('Invalid child count in scene stream.');
+    SetLength(Result.fObjectList, ChildCount);
     for I := 0 to ChildCount - 1 do
-      TSceneObject.LoadFromStream(Stream, Result, SceneVersion);
+      Result.fObjectList[I] := TSceneObject.LoadFromStreamInternal(Stream,
+        Result, SceneVersion);
 
-    Result.UpdateBoundingRadiusFromMesh;
-    Result.NotifyChange;
+    Result.UpdateBoundingRadiusFromMesh(False);
+    Result.fWorldMatrixValid := False;
     except
       Result.Free;
       raise;
@@ -3342,7 +3376,8 @@ begin
   end;
 end;
 
-procedure TSceneObject.UpdateBoundingRadiusFromMesh;
+procedure TSceneObject.UpdateBoundingRadiusFromMesh(
+  AInvalidateDependents: Boolean);
 var
   Meshes: TMeshList;
   SceneRoot: TSceneObject;
@@ -3352,6 +3387,8 @@ begin
     fInternalBoundingRadius := Meshes.GetBoundingRadius
   else
     fInternalBoundingRadius := 0;
+  if not AInvalidateDependents then
+    Exit;
   InvalidateVertexWindFrameCache;
   SceneRoot := RootObject;
   if Assigned(SceneRoot) then
@@ -3535,9 +3572,10 @@ begin
     raise Exception.CreateFmt('Unsupported scene version: %d.', [Version]);
 
   LoadedName := ReadStringFromStream(Stream);
-  NewRoot := TSceneObject.LoadFromStream(Stream, nil, Version);
+  NewRoot := TSceneObject.LoadFromStreamInternal(Stream, nil, Version);
   try
     NewRoot.ResolveInstanceLinks(NewRoot);
+    NewRoot.NotifyChange;
     SeenIDs := TDictionary<string, Boolean>.Create;
     try
       EnsureUniqueObjectIDs(NewRoot, SeenIDs);
