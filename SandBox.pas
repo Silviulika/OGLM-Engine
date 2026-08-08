@@ -17596,7 +17596,7 @@ begin
     Exit;
 
   ActivateMainRenderContext;
-  HeightField.SetHeights(NewHeights, WidthSamples, DepthSamples);
+  HeightField.UpdateHeightSamples(NewHeights, MinX, MinZ, MaxX, MaxZ);
   NotifyInspectorMeshEdited(HeightField, True);
 end;
 

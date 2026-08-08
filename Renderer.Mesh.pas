@@ -16,6 +16,7 @@ const
   HEIGHTFIELD_EDGE_BOTTOM = 1;
   HEIGHTFIELD_EDGE_LEFT = 2;
   HEIGHTFIELD_EDGE_RIGHT = 3;
+  HEIGHTFIELD_HEIGHT_TEXTURE_UNIT = 31;
 
 type
   TMesh = class;
@@ -286,10 +287,18 @@ type
     fTilesVBO: GLuint;
     fTilesEBO: GLuint;
     fTilesMorphVBO: GLuint;
+    fHeightTexture: GLuint;
+    fHeightTextureWidth: Integer;
+    fHeightTextureDepth: Integer;
     function GetHeights: TArray<Single>;
     procedure AssignHeights(const Values: TArray<Single>; HeightMapWidth,
       HeightMapDepth: Integer; Rebuild: Boolean);
     procedure ClearTiles;
+    procedure ReleaseHeightTexture;
+    procedure UploadHeightTexture;
+    procedure UploadHeightTextureRect(MinX, MinZ, MaxX, MaxZ: Integer);
+    procedure RefreshHeightVertices(MinX, MinZ, MaxX, MaxZ: Integer);
+    procedure RefreshHeightBounds;
     procedure BuildTiles;
     procedure BindTileVertexAttributes(const Tile: THeightFieldTile);
     function SelectTileLOD(var Tile: THeightFieldTile): Integer;
@@ -316,9 +325,12 @@ type
     procedure RebuildGeometry;
     procedure SetHeights(const Values: TArray<Single>; HeightMapWidth,
       HeightMapDepth: Integer);
+    procedure UpdateHeightSamples(const Values: TArray<Single>;
+      MinX, MinZ, MaxX, MaxZ: Integer);
     function HeightAtSample(X, Z: Integer): Single;
     function InterpolatedHeight(LocalX, LocalZ: Single): Single;
     function NormalAtSample(X, Z: Integer): TVector3;
+    procedure PrepareShader(AShader: TShader); override;
     procedure Draw; override;
     procedure DrawCulled(const AFrustumPlanes: TFrustumPlanes;
       AUseFrustum: Boolean); override;
@@ -1517,12 +1529,16 @@ begin
   fTilesVBO := 0;
   fTilesEBO := 0;
   fTilesMorphVBO := 0;
+  fHeightTexture := 0;
+  fHeightTextureWidth := 0;
+  fHeightTextureDepth := 0;
   AssignHeights(Heights, HeightMapWidth, HeightMapDepth, False);
   RebuildGeometry;
 end;
 
 destructor THeightFieldMesh.Destroy;
 begin
+  ReleaseHeightTexture;
   ClearTiles;
   inherited;
 end;
@@ -1646,6 +1662,7 @@ begin
 
   fTileSize := NewValue;
   BuildTiles;
+  RefreshHeightBounds;
 end;
 
 procedure THeightFieldMesh.SetLODEnabled(const Value: Boolean);
@@ -1663,6 +1680,7 @@ begin
 
   fLODCount := NewValue;
   BuildTiles;
+  RefreshHeightBounds;
 end;
 
 procedure THeightFieldMesh.SetLODDistance(const Value: Single);
@@ -1687,6 +1705,234 @@ procedure THeightFieldMesh.SetHeights(const Values: TArray<Single>;
   HeightMapWidth, HeightMapDepth: Integer);
 begin
   AssignHeights(Values, HeightMapWidth, HeightMapDepth, True);
+end;
+
+procedure THeightFieldMesh.ReleaseHeightTexture;
+begin
+  if fHeightTexture <> 0 then
+  begin
+    glDeleteTextures(1, @fHeightTexture);
+    fHeightTexture := 0;
+  end;
+
+  fHeightTextureWidth := 0;
+  fHeightTextureDepth := 0;
+end;
+
+procedure THeightFieldMesh.UploadHeightTexture;
+var
+  OldUnpackAlignment: GLint;
+begin
+  if (fHeightMapWidth < 1) or (fHeightMapDepth < 1) or
+     (Length(fHeights) < fHeightMapWidth * fHeightMapDepth) then
+  begin
+    ReleaseHeightTexture;
+    Exit;
+  end;
+
+  if fHeightTexture = 0 then
+  begin
+    glGenTextures(1, @fHeightTexture);
+    glBindTexture(GL_TEXTURE_2D, fHeightTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  end
+  else
+    glBindTexture(GL_TEXTURE_2D, fHeightTexture);
+
+  glGetIntegerv(GL_UNPACK_ALIGNMENT, @OldUnpackAlignment);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  try
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, fHeightMapWidth,
+      fHeightMapDepth, 0, GL_RED, GL_FLOAT, @fHeights[0]);
+  finally
+    glPixelStorei(GL_UNPACK_ALIGNMENT, OldUnpackAlignment);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  end;
+
+  fHeightTextureWidth := fHeightMapWidth;
+  fHeightTextureDepth := fHeightMapDepth;
+end;
+
+procedure THeightFieldMesh.UploadHeightTextureRect(MinX, MinZ, MaxX,
+  MaxZ: Integer);
+var
+  RectWidth, RectDepth: Integer;
+  Row: Integer;
+  RectHeights: TArray<Single>;
+  OldUnpackAlignment: GLint;
+begin
+  if (fHeightMapWidth < 1) or (fHeightMapDepth < 1) or
+     (Length(fHeights) < fHeightMapWidth * fHeightMapDepth) then
+    Exit;
+
+  if (fHeightTexture = 0) or (fHeightTextureWidth <> fHeightMapWidth) or
+     (fHeightTextureDepth <> fHeightMapDepth) then
+  begin
+    UploadHeightTexture;
+    Exit;
+  end;
+
+  MinX := System.Math.Max(0, System.Math.Min(MinX, fHeightMapWidth - 1));
+  MaxX := System.Math.Max(0, System.Math.Min(MaxX, fHeightMapWidth - 1));
+  MinZ := System.Math.Max(0, System.Math.Min(MinZ, fHeightMapDepth - 1));
+  MaxZ := System.Math.Max(0, System.Math.Min(MaxZ, fHeightMapDepth - 1));
+
+  if (MaxX < MinX) or (MaxZ < MinZ) then
+    Exit;
+
+  RectWidth := MaxX - MinX + 1;
+  RectDepth := MaxZ - MinZ + 1;
+  SetLength(RectHeights, RectWidth * RectDepth);
+
+  for Row := 0 to RectDepth - 1 do
+    Move(fHeights[(MinZ + Row) * fHeightMapWidth + MinX],
+      RectHeights[Row * RectWidth], RectWidth * SizeOf(Single));
+
+  glBindTexture(GL_TEXTURE_2D, fHeightTexture);
+  glGetIntegerv(GL_UNPACK_ALIGNMENT, @OldUnpackAlignment);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  try
+    glTexSubImage2D(GL_TEXTURE_2D, 0, MinX, MinZ, RectWidth, RectDepth,
+      GL_RED, GL_FLOAT, @RectHeights[0]);
+  finally
+    glPixelStorei(GL_UNPACK_ALIGNMENT, OldUnpackAlignment);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  end;
+end;
+
+procedure THeightFieldMesh.RefreshHeightVertices(MinX, MinZ, MaxX,
+  MaxZ: Integer);
+var
+  X, Z, Index: Integer;
+begin
+  if (fHeightMapWidth < 2) or (fHeightMapDepth < 2) or
+     (Length(fVertices) < fHeightMapWidth * fHeightMapDepth) then
+    Exit;
+
+  MinX := System.Math.Max(0, System.Math.Min(MinX, fHeightMapWidth - 1));
+  MaxX := System.Math.Max(0, System.Math.Min(MaxX, fHeightMapWidth - 1));
+  MinZ := System.Math.Max(0, System.Math.Min(MinZ, fHeightMapDepth - 1));
+  MaxZ := System.Math.Max(0, System.Math.Min(MaxZ, fHeightMapDepth - 1));
+
+  if (MaxX < MinX) or (MaxZ < MinZ) then
+    Exit;
+
+  for Z := MinZ to MaxZ do
+    for X := MinX to MaxX do
+    begin
+      Index := Z * fHeightMapWidth + X;
+      fVertices[Index].Position.Y := HeightAtSample(X, Z);
+      fVertices[Index].Normal := NormalAtSample(X, Z);
+      fVertices[Index].Tangent := Vector3(1.0, 0.0, 0.0);
+      fVertices[Index].Bitangent := Vector3(0.0, 0.0, 1.0);
+    end;
+end;
+
+procedure THeightFieldMesh.RefreshHeightBounds;
+var
+  HalfWidth, HalfDepth: Single;
+  StepX, StepZ: Single;
+  X, Z: Integer;
+  TileX, TileZ: Integer;
+  StartX, StartZ, EndX, EndZ: Integer;
+  TileIndex: Integer;
+  HeightValue: Single;
+  P: TVector3;
+  SkirtDepth: Single;
+
+  procedure InitBounds(var Bounds: TAABB);
+  begin
+    Bounds.Min := Vector3(MaxSingle, MaxSingle, MaxSingle);
+    Bounds.Max := Vector3(-MaxSingle, -MaxSingle, -MaxSingle);
+  end;
+
+  function LocalX(AX: Integer): Single;
+  begin
+    Result := -HalfWidth + AX * StepX;
+  end;
+
+  function LocalZ(AZ: Integer): Single;
+  begin
+    Result := -HalfDepth + AZ * StepZ;
+  end;
+begin
+  if (fHeightMapWidth < 2) or (fHeightMapDepth < 2) or
+     (Length(fHeights) < fHeightMapWidth * fHeightMapDepth) then
+  begin
+    ComputeBoundingBox;
+    Exit;
+  end;
+
+  HalfWidth := fWidth * 0.5;
+  HalfDepth := fDepth * 0.5;
+  StepX := fWidth / (fHeightMapWidth - 1);
+  StepZ := fDepth / (fHeightMapDepth - 1);
+  SkirtDepth := System.Math.Max(0.01, Abs(fHeightScale));
+  SkirtDepth := System.Math.Max(SkirtDepth,
+    System.Math.Max(Abs(fWidth), Abs(fDepth)) * 0.001);
+
+  fBoundingBoxMin := Vector3(MaxSingle, MaxSingle, MaxSingle);
+  fBoundingBoxMax := Vector3(-MaxSingle, -MaxSingle, -MaxSingle);
+  for Z := 0 to fHeightMapDepth - 1 do
+    for X := 0 to fHeightMapWidth - 1 do
+    begin
+      HeightValue := HeightAtSample(X, Z);
+      P := Vector3(LocalX(X), HeightValue, LocalZ(Z));
+
+      if P.X < fBoundingBoxMin.X then fBoundingBoxMin.X := P.X;
+      if P.Y - SkirtDepth < fBoundingBoxMin.Y then
+        fBoundingBoxMin.Y := P.Y - SkirtDepth;
+      if P.Z < fBoundingBoxMin.Z then fBoundingBoxMin.Z := P.Z;
+      if P.X > fBoundingBoxMax.X then fBoundingBoxMax.X := P.X;
+      if P.Y > fBoundingBoxMax.Y then fBoundingBoxMax.Y := P.Y;
+      if P.Z > fBoundingBoxMax.Z then fBoundingBoxMax.Z := P.Z;
+    end;
+
+  for TileZ := 0 to fTileRows - 1 do
+    for TileX := 0 to fTileColumns - 1 do
+    begin
+      TileIndex := TileZ * fTileColumns + TileX;
+      if (TileIndex < 0) or (TileIndex > High(fTiles)) then
+        Continue;
+
+      StartX := TileX * fTileSize;
+      StartZ := TileZ * fTileSize;
+      EndX := System.Math.Min(StartX + fTileSize, fHeightMapWidth - 1);
+      EndZ := System.Math.Min(StartZ + fTileSize, fHeightMapDepth - 1);
+
+      InitBounds(fTiles[TileIndex].Bounds);
+      for Z := StartZ to EndZ do
+        for X := StartX to EndX do
+        begin
+          HeightValue := HeightAtSample(X, Z);
+          fTiles[TileIndex].Bounds.Include(
+            Vector3(LocalX(X), HeightValue, LocalZ(Z)));
+          fTiles[TileIndex].Bounds.Include(
+            Vector3(LocalX(X), HeightValue - SkirtDepth, LocalZ(Z)));
+        end;
+    end;
+end;
+
+procedure THeightFieldMesh.UpdateHeightSamples(const Values: TArray<Single>;
+  MinX, MinZ, MaxX, MaxZ: Integer);
+var
+  HeightCount: Integer;
+begin
+  HeightCount := fHeightMapWidth * fHeightMapDepth;
+  if (HeightCount <= 0) or (Length(Values) < HeightCount) then
+    Exit;
+
+  if Length(fHeights) < HeightCount then
+    SetLength(fHeights, HeightCount);
+
+  Move(Values[0], fHeights[0], HeightCount * SizeOf(Single));
+
+  RefreshHeightVertices(MinX - 1, MinZ - 1, MaxX + 1, MaxZ + 1);
+  RefreshHeightBounds;
+  UploadHeightTextureRect(MinX, MinZ, MaxX, MaxZ);
 end;
 
 procedure THeightFieldMesh.ClearTiles;
@@ -2124,6 +2370,10 @@ begin
           SourceIndex := (StartZ + LocalZ) * fHeightMapWidth + (StartX + LocalX);
           Vertices[LocalIndex] := fVertices[SourceIndex];
           fTiles[TileIndex].Bounds.Include(Vertices[LocalIndex].Position);
+          Vertices[LocalIndex].Position.Y := 0.0;
+          Vertices[LocalIndex].Normal := Vector3(0.0, 1.0, 0.0);
+          Vertices[LocalIndex].Tangent := Vector3(1.0, 0.0, 0.0);
+          Vertices[LocalIndex].Bitangent := Vector3(0.0, 0.0, 1.0);
           Inc(LocalIndex);
         end;
 
@@ -2297,6 +2547,8 @@ begin
     fHeightMapDepth, fWidth, fDepth, fHeightScale, fUVScale);
   SetGeometry(Vertices, Indices, True);
   BuildTiles;
+  RefreshHeightBounds;
+  UploadHeightTexture;
 end;
 
 function THeightFieldMesh.Clone: TMesh;
@@ -2310,6 +2562,7 @@ begin
   THeightFieldMesh(Result).fLODDistance := fLODDistance;
   THeightFieldMesh(Result).fLODCameraPosition := fLODCameraPosition;
   THeightFieldMesh(Result).BuildTiles;
+  THeightFieldMesh(Result).RefreshHeightBounds;
   CopyRenderStateTo(Result);
 end;
 
@@ -2405,6 +2658,34 @@ begin
     Result := Vector3(N.X / Len, N.Y / Len, N.Z / Len)
   else
     Result := Vector3(0.0, 1.0, 0.0);
+end;
+
+procedure THeightFieldMesh.PrepareShader(AShader: TShader);
+begin
+  inherited PrepareShader(AShader);
+
+  if AShader = nil then
+    Exit;
+
+  if (fHeightTexture = 0) or (fHeightTextureWidth <> fHeightMapWidth) or
+     (fHeightTextureDepth <> fHeightMapDepth) then
+    UploadHeightTexture;
+
+  if (fHeightTexture <> 0) and (fTilesVAO <> 0) and (fTilesEBO <> 0) then
+  begin
+    AShader.SetTexture('heightFieldHeights', HEIGHTFIELD_HEIGHT_TEXTURE_UNIT,
+      GL_TEXTURE_2D, fHeightTexture);
+    AShader.SetUniform('heightFieldUseTexture', GLint(1));
+  end
+  else
+    AShader.SetUniform('heightFieldUseTexture', GLint(0));
+
+  AShader.SetUniform('heightFieldWorldSize', GLfloat(fWidth),
+    GLfloat(fDepth));
+  AShader.SetUniform('heightFieldScale', GLfloat(fHeightScale));
+  AShader.SetUniform('heightFieldUseMorph', GLint(0));
+  AShader.SetUniform('heightFieldMorphFactor', GLfloat(0.0));
+  AShader.SetUniform('heightFieldMorphStep', GLint(1));
 end;
 
 procedure THeightFieldMesh.Draw;
@@ -2507,6 +2788,11 @@ var
 
     Technique.Shader.SetUniform('heightFieldUseMorph', GLint(Ord(UseMorph)));
     Technique.Shader.SetUniform('heightFieldMorphFactor', GLfloat(Morph));
+    if (CurrentLOD >= 0) and (CurrentLOD < Tile.LODCount) then
+      Technique.Shader.SetUniform('heightFieldMorphStep',
+        GLint(System.Math.Max(1, Tile.LODs[CurrentLOD].Step * 2)))
+    else
+      Technique.Shader.SetUniform('heightFieldMorphStep', GLint(1));
 
     if UseMorph then
     begin
@@ -2561,9 +2847,11 @@ begin
     NormalMatrix := Matrix3(fModelMatrix);
     NormalMatrix := NormalMatrix.Inverse.Transpose;
     Technique.ApplyObject(fModelMatrix, NormalMatrix);
+    PrepareShader(Technique.Shader);
     Technique.Shader.SetUniform('terrainUVScale', GLfloat(fUVScale));
     Technique.Shader.SetUniform('heightFieldUseMorph', GLint(0));
     Technique.Shader.SetUniform('heightFieldMorphFactor', GLfloat(0.0));
+    Technique.Shader.SetUniform('heightFieldMorphStep', GLint(1));
     if Assigned(fOnRender) then fOnRender(Self, Technique.Shader);
 
     if fWireFrame then glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
@@ -4383,6 +4671,10 @@ begin
     AShader.SetUniform('useSkinning', GLint(0));
     AShader.SetUniform('useInstanceBuffer', GLint(0));
     AShader.SetUniform('instanceBaseOffset', GLint(0));
+    AShader.SetUniform('heightFieldUseTexture', GLint(0));
+    AShader.SetUniform('heightFieldUseMorph', GLint(0));
+    AShader.SetUniform('heightFieldMorphFactor', GLfloat(0.0));
+    AShader.SetUniform('heightFieldMorphStep', GLint(1));
   end;
 end;
 

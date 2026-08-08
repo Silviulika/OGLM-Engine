@@ -111,7 +111,8 @@ const
   TERRAIN_ROUGHNESS_TEXTURE_GROUP = 5;
   TERRAIN_TEXTURE_GROUP_COUNT = 6;
   SHADOW_TEXTURE_UNIT = 8;
-  TERRAIN_EXTRA_TEXTURE_UNIT = TERRAIN_TEXTURE_GROUP_COUNT * TERRAIN_LAYER_COUNT + 1;
+  // Unit 31 is reserved by THeightFieldMesh for the editable height texture.
+  TERRAIN_EXTRA_TEXTURE_UNIT = TERRAIN_TEXTURE_GROUP_COUNT * TERRAIN_LAYER_COUNT + 2;
 
 function TerrainTextureUnit(AGroupIndex, ALayerIndex: Integer): GLint;
 begin
