@@ -13,6 +13,7 @@ uses
   dglOpenGL,
   Neslib.FastMath,
   Engine.Paths,
+  Engine.Scene.Persistence,
   Engine.Types,
   Engine.Audio,
   Engine.Physics,
@@ -88,7 +89,8 @@ type
     procedure LoadDefaultSceneIfPresent;
     function ResolveSceneFileName(const AFileName: string;
       const AForSave: Boolean): string;
-    function TryLoadSceneRenderSettingsFromStream(Stream: TStream): Boolean;
+    function TryLoadSceneRenderSettingsFromStream(Stream: TStream;
+      const AApplySettings: Boolean = True): Boolean;
     function TryLoadScenePhysicsFromStream(Stream: TStream): Boolean;
     function TryLoadScenePhysicsCacheFromStream(Stream: TStream): Boolean;
     function TryLoadSceneMaterialsFromStream(Stream: TStream): Boolean;
@@ -104,6 +106,11 @@ type
     function ScriptExecutionActive: Boolean;
     procedure ProcessPendingScriptRequests;
     procedure NotifySceneLoaded;
+    procedure ParseSceneFileToStage(const AFileName: string;
+      out ASceneManager: TSceneManager; out APhysicsWorld: TPhysicsWorld;
+      out AMaterialLibraries: TMaterialLibraries;
+      out AScriptManager: TEngineScriptManager; out AGuiManager: TGuiManager;
+      out AHasRenderSettings: Boolean; out ARenderSettingsData: TBytes);
   public
     constructor Create(AHost: TWinControl); overload;
     constructor Create(AHost: TWinControl; const ASettings: TEngineSettings); overload;
@@ -116,7 +123,8 @@ type
     function TryLoadSceneFromFile(const AFileName: string;
       out AErrorMessage: string): Boolean;
     procedure SaveSceneToFile(const AFileName: string;
-      const AExcludedMaterialName: string = '');
+      const AExcludedMaterialName: string = '';
+      AValidateAfterWrite: Boolean = False);
     procedure Update(const DeltaTime, NewTime: Double);
     procedure StartPhysics;
     procedure PausePhysics;
@@ -159,7 +167,8 @@ type
     procedure ConfigureLightDefaults(Light: TLight; ALightType: TLightType);
     procedure CreateDefaultScene;
     procedure ClearSceneObjects;
-    procedure RestoreSceneAfterLoad;
+    procedure RestoreSceneAfterLoad(const ALoadAudio: Boolean = True;
+      const AApplyRenderer: Boolean = True);
     procedure BindScriptEngine;
     procedure ExecuteScriptLifecycleEvent(const AEventName: string);
     procedure ApplyFrameUniformsToShader(Shader: TShader);
@@ -225,86 +234,6 @@ const
     ('O', 'M', 'E', 'G', 'U', 'I', '0', '1');
   MATERIAL_LIBRARY_MAGIC: array[0..7] of AnsiChar =
     ('O', 'M', 'E', 'M', 'L', 'B', '0', '1');
-
-function EngineMagicMatches(const A, B: array of AnsiChar): Boolean;
-var
-  I: Integer;
-begin
-  Result := Length(A) = Length(B);
-  if not Result then
-    Exit;
-
-  for I := Low(A) to High(A) do
-    if A[I] <> B[I - Low(A) + Low(B)] then
-      Exit(False);
-end;
-
-function StreamStartsWithMagic(Stream: TStream; const ExpectedMagic: array of AnsiChar): Boolean;
-var
-  StartPos: Int64;
-  Magic: array[0..7] of AnsiChar;
-begin
-  Result := False;
-  if (Stream = nil) or ((Stream.Size - Stream.Position) < SizeOf(Magic)) then
-    Exit;
-
-  StartPos := Stream.Position;
-  try
-    Stream.ReadBuffer(Magic[0], SizeOf(Magic));
-    Result := EngineMagicMatches(Magic, ExpectedMagic);
-  finally
-    Stream.Position := StartPos;
-  end;
-end;
-
-function TryBeginSceneChunk(Stream: TStream; const ExpectedMagic: array of AnsiChar;
-  ExpectedVersion: Integer; const ChunkName: string; out PayloadEnd: Int64): Boolean;
-var
-  StartPos: Int64;
-  PayloadSize: Int64;
-  Magic: array[0..7] of AnsiChar;
-  Version: Integer;
-begin
-  Result := False;
-  PayloadEnd := 0;
-  if Stream = nil then
-    Exit;
-
-  StartPos := Stream.Position;
-  if (Stream.Size - Stream.Position) < SizeOf(Magic) then
-    Exit;
-
-  Stream.ReadBuffer(Magic[0], SizeOf(Magic));
-  if not EngineMagicMatches(Magic, ExpectedMagic) then
-  begin
-    Stream.Position := StartPos;
-    Exit;
-  end;
-
-  Result := True;
-  if (Stream.Size - Stream.Position) < (SizeOf(Version) + SizeOf(PayloadSize)) then
-    raise Exception.CreateFmt('Invalid %s header.', [ChunkName]);
-
-  Stream.ReadBuffer(Version, SizeOf(Version));
-  Stream.ReadBuffer(PayloadSize, SizeOf(PayloadSize));
-  if (Version < 1) or (Version > ExpectedVersion) then
-    raise Exception.CreateFmt('Unsupported %s version: %d.', [ChunkName, Version]);
-  if (PayloadSize < 0) or (PayloadSize > (Stream.Size - Stream.Position)) then
-    raise Exception.CreateFmt('Invalid %s payload size.', [ChunkName]);
-
-  PayloadEnd := Stream.Position + PayloadSize;
-end;
-
-function TrySkipSceneChunk(Stream: TStream; const ExpectedMagic: array of AnsiChar;
-  ExpectedVersion: Integer; const ChunkName: string): Boolean;
-var
-  PayloadEnd: Int64;
-begin
-  Result := TryBeginSceneChunk(Stream, ExpectedMagic, ExpectedVersion,
-    ChunkName, PayloadEnd);
-  if Result then
-    Stream.Position := PayloadEnd;
-end;
 
 { TEngineSettings }
 
@@ -781,7 +710,8 @@ begin
   end;
 end;
 
-procedure TGameEngine.RestoreSceneAfterLoad;
+procedure TGameEngine.RestoreSceneAfterLoad(const ALoadAudio,
+  AApplyRenderer: Boolean);
 var
   DefaultLib: TMaterialLibrary;
 
@@ -870,8 +800,9 @@ var
     end;
 
     Obj.UpdateBoundingRadiusFromMesh;
-    for I := 0 to Obj.AudioEmitterCount - 1 do
-      LoadSceneAudioEmitter(Obj, Obj.AudioEmitterItem[I]);
+    if ALoadAudio then
+      for I := 0 to Obj.AudioEmitterCount - 1 do
+        LoadSceneAudioEmitter(Obj, Obj.AudioEmitterItem[I]);
     for I := 0 to Obj.Count - 1 do
       RestoreObject(Obj.ObjectList[I]);
   end;
@@ -916,7 +847,7 @@ begin
   RestoreObject(FRoot);
   FSceneManager.Update;
 
-  if Assigned(FRenderer) then
+  if AApplyRenderer and Assigned(FRenderer) then
   begin
     FRenderer.ActiveCamera := FCamera;
     FRenderer.ShadowLight := FMainLight;
@@ -924,14 +855,34 @@ begin
   end;
 end;
 
-function TGameEngine.TryLoadSceneRenderSettingsFromStream(Stream: TStream): Boolean;
+function TGameEngine.TryLoadSceneRenderSettingsFromStream(Stream: TStream;
+  const AApplySettings: Boolean): Boolean;
 var
   PayloadEnd: Int64;
   BoolValue: Boolean;
   IntValue: Integer;
   FloatValue: Single;
   ColorValue: TVector4;
+  HDRValue: Boolean;
+  ToneMappingValue: TToneMappingMode;
+  ToneExposureValue: Single;
+  ToneGammaValue: Single;
+  GodRaysValue: Boolean;
+  GodRaySamplesValue: Integer;
+  GodRayDensityValue: Single;
+  GodRayExposureValue: Single;
+  GodRayDecayValue: Single;
+  GodRayWeightValue: Single;
+  GodRayIntensityValue: Single;
   HasSkyDome: Boolean;
+  HasSkyDomeSetting: Boolean;
+  SkyDomeValue: TSkyDome;
+  HasFogSetting: Boolean;
+  FogEnabledValue: Boolean;
+  FogColorValue: TVector4;
+  FogDensityValue: Single;
+  FogStartValue: Single;
+  FogEndValue: Single;
 
   procedure RequirePayloadBytes(ByteCount: Int64);
   begin
@@ -945,92 +896,121 @@ begin
   if not Result then
     Exit;
 
+  SkyDomeValue := nil;
+  HasSkyDomeSetting := False;
+  HasFogSetting := False;
   try
-    if FRenderer = nil then
-      Exit;
-
     RequirePayloadBytes(SizeOf(BoolValue));
-    Stream.ReadBuffer(BoolValue, SizeOf(BoolValue));
-    FRenderer.HDREnabled := BoolValue;
+    Stream.ReadBuffer(HDRValue, SizeOf(HDRValue));
 
     RequirePayloadBytes(SizeOf(IntValue));
     Stream.ReadBuffer(IntValue, SizeOf(IntValue));
     IntValue := System.Math.EnsureRange(IntValue,
       Ord(Low(TToneMappingMode)), Ord(High(TToneMappingMode)));
-    FRenderer.ToneMappingMode := TToneMappingMode(IntValue);
+    ToneMappingValue := TToneMappingMode(IntValue);
 
     RequirePayloadBytes(SizeOf(FloatValue));
     Stream.ReadBuffer(FloatValue, SizeOf(FloatValue));
-    FRenderer.ToneExposure := System.Math.EnsureRange(FloatValue, 0.0, 16.0);
+    ToneExposureValue := System.Math.EnsureRange(FloatValue, 0.0, 16.0);
 
     RequirePayloadBytes(SizeOf(FloatValue));
     Stream.ReadBuffer(FloatValue, SizeOf(FloatValue));
-    FRenderer.ToneGamma := System.Math.EnsureRange(FloatValue, 0.1, 5.0);
+    ToneGammaValue := System.Math.EnsureRange(FloatValue, 0.1, 5.0);
 
     RequirePayloadBytes(SizeOf(BoolValue));
-    Stream.ReadBuffer(BoolValue, SizeOf(BoolValue));
-    FRenderer.GodRaysEnabled := BoolValue;
+    Stream.ReadBuffer(GodRaysValue, SizeOf(GodRaysValue));
 
     RequirePayloadBytes(SizeOf(IntValue));
     Stream.ReadBuffer(IntValue, SizeOf(IntValue));
-    FRenderer.GodRaySamples := System.Math.EnsureRange(IntValue, 1, 128);
+    GodRaySamplesValue := System.Math.EnsureRange(IntValue, 1, 128);
 
     RequirePayloadBytes(SizeOf(FloatValue));
     Stream.ReadBuffer(FloatValue, SizeOf(FloatValue));
-    FRenderer.GodRayDensity := System.Math.EnsureRange(FloatValue, 0.0, 3.0);
+    GodRayDensityValue := System.Math.EnsureRange(FloatValue, 0.0, 3.0);
 
     RequirePayloadBytes(SizeOf(FloatValue));
     Stream.ReadBuffer(FloatValue, SizeOf(FloatValue));
-    FRenderer.GodRayExposure := System.Math.EnsureRange(FloatValue, 0.0, 4.0);
+    GodRayExposureValue := System.Math.EnsureRange(FloatValue, 0.0, 4.0);
 
     RequirePayloadBytes(SizeOf(FloatValue));
     Stream.ReadBuffer(FloatValue, SizeOf(FloatValue));
-    FRenderer.GodRayDecay := System.Math.EnsureRange(FloatValue, 0.0, 1.0);
+    GodRayDecayValue := System.Math.EnsureRange(FloatValue, 0.0, 1.0);
 
     RequirePayloadBytes(SizeOf(FloatValue));
     Stream.ReadBuffer(FloatValue, SizeOf(FloatValue));
-    FRenderer.GodRayWeight := System.Math.EnsureRange(FloatValue, 0.0, 2.0);
+    GodRayWeightValue := System.Math.EnsureRange(FloatValue, 0.0, 2.0);
 
     RequirePayloadBytes(SizeOf(FloatValue));
     Stream.ReadBuffer(FloatValue, SizeOf(FloatValue));
-    FRenderer.GodRayIntensity := System.Math.EnsureRange(FloatValue, 0.0, 8.0);
+    GodRayIntensityValue := System.Math.EnsureRange(FloatValue, 0.0, 8.0);
 
     { Version 2 added SkyDome and version 3 added fog. Checking the remaining
       payload keeps the reader compatible with all historical scene files. }
     if (PayloadEnd - Stream.Position) >= SizeOf(HasSkyDome) then
     begin
+      HasSkyDomeSetting := True;
       Stream.ReadBuffer(HasSkyDome, SizeOf(HasSkyDome));
       if HasSkyDome then
       begin
-        if FRenderer.SkyDome = nil then
-          FRenderer.SkyDome := TSkyDome.Create;
-        FRenderer.SkyDome.LoadFromStream(Stream);
-      end
-      else
-        FRenderer.SkyDome := nil;
+        SkyDomeValue := TSkyDome.Create;
+        SkyDomeValue.LoadFromStream(Stream);
+        if Stream.Position > PayloadEnd then
+          raise Exception.Create('Invalid SkyDome data in render settings block.');
+      end;
     end;
 
     if (PayloadEnd - Stream.Position) >=
        (SizeOf(BoolValue) + SizeOf(ColorValue) + (3 * SizeOf(FloatValue))) then
     begin
-      Stream.ReadBuffer(BoolValue, SizeOf(BoolValue));
-      FRenderer.FogEnabled := BoolValue;
+      HasFogSetting := True;
+      Stream.ReadBuffer(FogEnabledValue, SizeOf(FogEnabledValue));
 
       Stream.ReadBuffer(ColorValue, SizeOf(ColorValue));
-      FRenderer.FogColor := Vector4(
+      FogColorValue := Vector4(
         System.Math.EnsureRange(ColorValue.X, 0.0, 1.0),
         System.Math.EnsureRange(ColorValue.Y, 0.0, 1.0),
         System.Math.EnsureRange(ColorValue.Z, 0.0, 1.0),
         System.Math.EnsureRange(ColorValue.W, 0.0, 1.0));
 
       Stream.ReadBuffer(FloatValue, SizeOf(FloatValue));
-      FRenderer.FogDensity := System.Math.EnsureRange(FloatValue, 0.0, 1.0);
+      FogDensityValue := System.Math.EnsureRange(FloatValue, 0.0, 1.0);
       Stream.ReadBuffer(FloatValue, SizeOf(FloatValue));
-      FRenderer.FogStart := System.Math.Max(0.0, FloatValue);
+      FogStartValue := System.Math.Max(0.0, FloatValue);
       Stream.ReadBuffer(FloatValue, SizeOf(FloatValue));
-      FRenderer.FogEnd := System.Math.Max(FRenderer.FogStart, FloatValue);
+      FogEndValue := System.Math.Max(FogStartValue, FloatValue);
+    end;
+
+    if AApplySettings and (FRenderer <> nil) then
+    begin
+      FRenderer.HDREnabled := HDRValue;
+      FRenderer.ToneMappingMode := ToneMappingValue;
+      FRenderer.ToneExposure := ToneExposureValue;
+      FRenderer.ToneGamma := ToneGammaValue;
+      FRenderer.GodRaysEnabled := GodRaysValue;
+      FRenderer.GodRaySamples := GodRaySamplesValue;
+      FRenderer.GodRayDensity := GodRayDensityValue;
+      FRenderer.GodRayExposure := GodRayExposureValue;
+      FRenderer.GodRayDecay := GodRayDecayValue;
+      FRenderer.GodRayWeight := GodRayWeightValue;
+      FRenderer.GodRayIntensity := GodRayIntensityValue;
+
+      if HasSkyDomeSetting then
+      begin
+        FRenderer.SkyDome := SkyDomeValue;
+        SkyDomeValue := nil;
+      end;
+
+      if HasFogSetting then
+      begin
+        FRenderer.FogEnabled := FogEnabledValue;
+        FRenderer.FogColor := FogColorValue;
+        FRenderer.FogDensity := FogDensityValue;
+        FRenderer.FogStart := FogStartValue;
+        FRenderer.FogEnd := FogEndValue;
+      end;
     end;
   finally
+    SkyDomeValue.Free;
     Stream.Position := PayloadEnd;
   end;
 end;
@@ -2087,89 +2067,324 @@ begin
   end;
 end;
 
+procedure TGameEngine.ParseSceneFileToStage(const AFileName: string;
+  out ASceneManager: TSceneManager; out APhysicsWorld: TPhysicsWorld;
+  out AMaterialLibraries: TMaterialLibraries;
+  out AScriptManager: TEngineScriptManager; out AGuiManager: TGuiManager;
+  out AHasRenderSettings: Boolean; out ARenderSettingsData: TBytes);
+var
+  Stream: TFileStream;
+  ContentEnd: Int64;
+  RenderChunkStart, RenderChunkEnd: Int64;
+  Success: Boolean;
+  OldSceneManager: TSceneManager;
+  OldRoot, OldSceneWorld, OldMainLight, OldCamera: TSceneObject;
+  OldPhysicsWorld: TPhysicsWorld;
+  OldMaterialLibraries: TMaterialLibraries;
+  OldScriptManager: TEngineScriptManager;
+  OldGuiManager: TGuiManager;
+begin
+  ASceneManager := nil;
+  APhysicsWorld := nil;
+  AMaterialLibraries := nil;
+  AScriptManager := nil;
+  AGuiManager := nil;
+  AHasRenderSettings := False;
+  SetLength(ARenderSettingsData, 0);
+  Success := False;
+
+  OldSceneManager := FSceneManager;
+  OldRoot := FRoot;
+  OldSceneWorld := FSceneWorld;
+  OldMainLight := FMainLight;
+  OldCamera := FCamera;
+  OldPhysicsWorld := FPhysicsWorld;
+  OldMaterialLibraries := FMaterialLibraries;
+  OldScriptManager := FScriptManager;
+  OldGuiManager := FGuiManager;
+
+  try
+    if FRenderer <> nil then
+      FRenderer.ActivateContext;
+
+    ASceneManager := TSceneManager.Create;
+    AMaterialLibraries := TMaterialLibraries.Create;
+    if FSettings.EnableScripts then
+      AScriptManager := TEngineScriptManager.Create;
+    if FSettings.EnableGUI then
+    begin
+      AGuiManager := TGuiManager.Create(nil, FRenderer);
+      AGuiManager.Resize(Max(1, FHost.ClientWidth), Max(1, FHost.ClientHeight));
+    end;
+
+    FSceneManager := ASceneManager;
+    FRoot := ASceneManager.Root;
+    FSceneWorld := nil;
+    FMainLight := nil;
+    FCamera := nil;
+    FPhysicsWorld := nil;
+    FMaterialLibraries := AMaterialLibraries;
+    FScriptManager := AScriptManager;
+    FGuiManager := AGuiManager;
+
+    Stream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyWrite);
+    try
+      ValidateSceneChecksum(Stream, ContentEnd);
+      FSceneManager.LoadFromStream(Stream);
+      FRoot := FSceneManager.Root;
+
+      FPhysicsWorld := TPhysicsWorld.Create(FRoot);
+      APhysicsWorld := FPhysicsWorld;
+
+      RenderChunkStart := Stream.Position;
+      AHasRenderSettings := TryLoadSceneRenderSettingsFromStream(Stream, False);
+      RenderChunkEnd := Stream.Position;
+      if AHasRenderSettings then
+      begin
+        if (RenderChunkEnd - RenderChunkStart) > MaxInt then
+          raise Exception.Create('Scene render settings block is too large.');
+        SetLength(ARenderSettingsData,
+          Integer(RenderChunkEnd - RenderChunkStart));
+        Stream.Position := RenderChunkStart;
+        if Length(ARenderSettingsData) > 0 then
+          Stream.ReadBuffer(ARenderSettingsData[0], Length(ARenderSettingsData));
+        Stream.Position := RenderChunkEnd;
+      end;
+
+      TryLoadScenePhysicsFromStream(Stream);
+      TryLoadScenePhysicsCacheFromStream(Stream);
+      TryLoadSceneMaterialsFromStream(Stream);
+      TryLoadSceneScriptsFromStream(Stream);
+      TryLoadSceneGuiFromStream(Stream);
+
+      if Stream.Position <> ContentEnd then
+        raise Exception.CreateFmt(
+          'Unexpected or incomplete scene data at byte %d of %d.',
+          [Stream.Position, ContentEnd]);
+
+      // Resolve object/material references and create required defaults while
+      // every object still belongs exclusively to the staging state.
+      RestoreSceneAfterLoad(False, False);
+
+      ASceneManager := FSceneManager;
+      APhysicsWorld := FPhysicsWorld;
+      AMaterialLibraries := FMaterialLibraries;
+      AScriptManager := FScriptManager;
+      AGuiManager := FGuiManager;
+      Success := True;
+    finally
+      Stream.Free;
+    end;
+  finally
+    FSceneManager := OldSceneManager;
+    FRoot := OldRoot;
+    FSceneWorld := OldSceneWorld;
+    FMainLight := OldMainLight;
+    FCamera := OldCamera;
+    FPhysicsWorld := OldPhysicsWorld;
+    FMaterialLibraries := OldMaterialLibraries;
+    FScriptManager := OldScriptManager;
+    FGuiManager := OldGuiManager;
+
+    if not Success then
+    begin
+      SetLength(ARenderSettingsData, 0);
+      FreeAndNil(AGuiManager);
+      FreeAndNil(AScriptManager);
+      FreeAndNil(APhysicsWorld);
+      FreeAndNil(AMaterialLibraries);
+      FreeAndNil(ASceneManager);
+    end;
+  end;
+end;
+
 procedure TGameEngine.SaveSceneToFile(const AFileName: string;
-  const AExcludedMaterialName: string);
+  const AExcludedMaterialName: string; AValidateAfterWrite: Boolean);
 var
   Stream: TFileStream;
   ResolvedFileName: string;
+  TemporaryFileName: string;
+  BackupFileName: string;
+  ValidationSceneManager: TSceneManager;
+  ValidationPhysicsWorld: TPhysicsWorld;
+  ValidationMaterialLibraries: TMaterialLibraries;
+  ValidationScriptManager: TEngineScriptManager;
+  ValidationGuiManager: TGuiManager;
+  HasRenderSettings: Boolean;
+  RenderSettingsData: TBytes;
 begin
   if FSceneManager = nil then
     raise Exception.Create('No scene manager is available.');
 
   ResolvedFileName := ResolveSceneFileName(AFileName, True);
+  TemporaryFileName := ResolvedFileName + '.tmp';
+  BackupFileName := ResolvedFileName + '.bak';
 
   ForceDirectories(ExtractFilePath(ResolvedFileName));
   FSceneManager.Name := ChangeFileExt(ExtractFileName(ResolvedFileName), '');
-  Stream := TFileStream.Create(ResolvedFileName, fmCreate);
+  if FileExists(TemporaryFileName) and
+     (not System.SysUtils.DeleteFile(TemporaryFileName)) then
+    RaiseLastOSError;
+
   try
-    FSceneManager.SaveToStream(Stream);
-    SaveSceneRenderSettingsToStream(Stream);
-    SaveScenePhysicsToStream(Stream);
-    SaveScenePhysicsCacheToStream(Stream);
-    if FMaterialLibraries <> nil then
-      FMaterialLibraries.SaveToStream(Stream, AExcludedMaterialName);
-    SaveSceneScriptsToStream(Stream);
-    SaveSceneGuiToStream(Stream);
-  finally
-    Stream.Free;
+    Stream := TFileStream.Create(TemporaryFileName, fmCreate);
+    try
+      FSceneManager.SaveToStream(Stream);
+      SaveSceneRenderSettingsToStream(Stream);
+      SaveScenePhysicsToStream(Stream);
+      SaveScenePhysicsCacheToStream(Stream);
+      if FMaterialLibraries <> nil then
+        FMaterialLibraries.SaveToStream(Stream, AExcludedMaterialName);
+      SaveSceneScriptsToStream(Stream);
+      SaveSceneGuiToStream(Stream);
+      AppendSceneChecksum(Stream);
+      FlushSceneFile(Stream);
+    finally
+      Stream.Free;
+    end;
+
+    if AValidateAfterWrite then
+    begin
+      // Useful for diagnostics, but expensive enough to keep out of routine saves.
+      ParseSceneFileToStage(TemporaryFileName, ValidationSceneManager,
+        ValidationPhysicsWorld, ValidationMaterialLibraries,
+        ValidationScriptManager, ValidationGuiManager, HasRenderSettings,
+        RenderSettingsData);
+      try
+        if not HasRenderSettings then
+          raise Exception.Create('Saved scene is missing its render settings block.');
+      finally
+        ValidationGuiManager.Free;
+        ValidationScriptManager.Free;
+        ValidationPhysicsWorld.Free;
+        ValidationSceneManager.Free;
+        ValidationMaterialLibraries.Free;
+      end;
+    end;
+
+    AtomicReplaceSceneFile(TemporaryFileName, ResolvedFileName,
+      BackupFileName);
+  except
+    if FileExists(TemporaryFileName) then
+      System.SysUtils.DeleteFile(TemporaryFileName);
+    raise;
   end;
 end;
 
 procedure TGameEngine.LoadSceneFromFile(const AFileName: string);
 var
-  Stream: TFileStream;
   ResolvedFileName: string;
+  StagedSceneManager: TSceneManager;
+  StagedPhysicsWorld: TPhysicsWorld;
+  StagedMaterialLibraries: TMaterialLibraries;
+  StagedScriptManager: TEngineScriptManager;
+  StagedGuiManager: TGuiManager;
+  HasRenderSettings: Boolean;
+  RenderSettingsData: TBytes;
+  RenderSettingsStream: TMemoryStream;
+  OldSceneManager: TSceneManager;
+  OldPhysicsWorld: TPhysicsWorld;
+  OldMaterialLibraries: TMaterialLibraries;
+  OldScriptManager: TEngineScriptManager;
+  OldGuiManager: TGuiManager;
 begin
   if FSceneManager = nil then
     raise Exception.Create('No scene manager is available.');
 
   ResolvedFileName := ResolveSceneFileName(AFileName, False);
-
   if not FileExists(ResolvedFileName) then
     raise Exception.Create('Scene file not found: ' + ResolvedFileName);
 
   if Assigned(FRenderer) then
     FRenderer.ActivateContext;
 
-  FPhysicsRunning := False;
-
-  Stream := TFileStream.Create(ResolvedFileName, fmOpenRead or fmShareDenyWrite);
+  StagedSceneManager := nil;
+  StagedPhysicsWorld := nil;
+  StagedMaterialLibraries := nil;
+  StagedScriptManager := nil;
+  StagedGuiManager := nil;
+  ParseSceneFileToStage(ResolvedFileName, StagedSceneManager,
+    StagedPhysicsWorld, StagedMaterialLibraries, StagedScriptManager,
+    StagedGuiManager, HasRenderSettings, RenderSettingsData);
   try
-    // Release runtime objects that still point at the current scene before
-    // TSceneManager replaces and frees the old root.
-    if Assigned(FPhysicsWorld) then
-      FPhysicsWorld.Clear;
+    if HasRenderSettings then
+    begin
+      RenderSettingsStream := TMemoryStream.Create;
+      try
+        if Length(RenderSettingsData) > 0 then
+          RenderSettingsStream.WriteBuffer(RenderSettingsData[0],
+            Length(RenderSettingsData));
+        RenderSettingsStream.Position := 0;
+        if not TryLoadSceneRenderSettingsFromStream(RenderSettingsStream,
+          True) then
+          raise Exception.Create('Validated render settings block is missing.');
+        if RenderSettingsStream.Position <> RenderSettingsStream.Size then
+          raise Exception.Create('Validated render settings block is incomplete.');
+      finally
+        RenderSettingsStream.Free;
+      end;
+    end;
+
+    OldSceneManager := FSceneManager;
+    OldPhysicsWorld := FPhysicsWorld;
+    OldMaterialLibraries := FMaterialLibraries;
+    OldScriptManager := FScriptManager;
+    OldGuiManager := FGuiManager;
+
+    FPhysicsRunning := False;
     if Assigned(FAudioEngine) then
       FAudioEngine.ClearSounds;
-    if Assigned(FScriptManager) then
-      FScriptManager.Clear;
-    if Assigned(FGuiManager) then
-      FGuiManager.Clear;
+    if Assigned(FRenderer) then
+    begin
+      FRenderer.ActiveCamera := nil;
+      FRenderer.ShadowLight := nil;
+    end;
 
-    FSceneManager.LoadFromStream(Stream);
+    // The renderer owns OldSceneManager, so keep that instance and atomically
+    // exchange only its fully validated state with the staging manager.
+    OldSceneManager.SwapState(StagedSceneManager);
+    FSceneManager := OldSceneManager;
     FRoot := FSceneManager.Root;
 
-    if FPhysicsWorld = nil then
-      FPhysicsWorld := TPhysicsWorld.Create(FRoot)
-    else
-      FPhysicsWorld.SceneRoot := FRoot;
+    FPhysicsWorld := StagedPhysicsWorld;
+    StagedPhysicsWorld := nil;
+    FPhysicsWorld.SceneRoot := FRoot;
 
-    if not TryLoadSceneRenderSettingsFromStream(Stream) and Assigned(FRenderer) then
+    FMaterialLibraries := StagedMaterialLibraries;
+    StagedMaterialLibraries := nil;
+    FScriptManager := StagedScriptManager;
+    StagedScriptManager := nil;
+    FGuiManager := StagedGuiManager;
+    StagedGuiManager := nil;
+
+    // Old managers still refer to the old root now held by the staging scene.
+    // Destroy them before releasing that root.
+    OldPhysicsWorld.Free;
+    OldScriptManager.Free;
+    OldGuiManager.Free;
+    StagedSceneManager.Free;
+    StagedSceneManager := nil;
+    OldMaterialLibraries.Free;
+
+    if (not HasRenderSettings) and Assigned(FRenderer) then
       FRenderer.ResetPostEffectsToDefaults;
 
-    TryLoadScenePhysicsFromStream(Stream);
-    TryLoadScenePhysicsCacheFromStream(Stream);
-    ResetMaterialLibraries;
-    TryLoadSceneMaterialsFromStream(Stream);
-    TryLoadSceneScriptsFromStream(Stream);
-    TryLoadSceneGuiFromStream(Stream);
-  finally
-    Stream.Free;
-  end;
+    if FGuiManager <> nil then
+    begin
+      FGuiManager.OnScriptEvent := GuiScriptEvent;
+      FGuiManager.Resize(Max(1, FHost.ClientWidth), Max(1, FHost.ClientHeight));
+    end;
 
-  RestoreSceneAfterLoad;
-  BindScriptEngine;
-  NotifySceneLoaded;
+    RestoreSceneAfterLoad;
+    BindScriptEngine;
+    NotifySceneLoaded;
+  finally
+    StagedGuiManager.Free;
+    StagedScriptManager.Free;
+    StagedPhysicsWorld.Free;
+    StagedMaterialLibraries.Free;
+    StagedSceneManager.Free;
+  end;
 end;
 
 function TGameEngine.TryLoadSceneFromFile(const AFileName: string;

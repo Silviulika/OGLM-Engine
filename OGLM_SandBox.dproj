@@ -1,4 +1,4 @@
-﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{80B4DC5C-541D-40A2-9F44-324684719031}</ProjectGuid>
         <ProjectVersion>20.3</ProjectVersion>
@@ -180,6 +180,19 @@
         <DCCReference Include="Engine.Audio.pas"/>
         <DCCReference Include="Engine.GUI.Editor.pas"/>
         <DCCReference Include="Editor.GuiDesigner.pas"/>
+        <DCCReference Include="Editor.Commands.pas"/>
+        <DCCReference Include="Editor.Gizmos.pas"/>
+        <DCCReference Include="Editor.Viewport.pas"/>
+        <DCCReference Include="Editor.AssetBrowser.Models.pas"/>
+        <DCCReference Include="Editor.AssetBrowser.Textures.pas"/>
+        <DCCReference Include="Editor.AssetBrowser.Materials.pas"/>
+        <DCCReference Include="Editor.AssetBrowser.Particles.pas"/>
+        <DCCReference Include="Editor.Panels.SceneTree.pas"/>
+        <DCCReference Include="Editor.Panels.Audio.pas"/>
+        <DCCReference Include="Editor.Panels.Scripting.pas"/>
+        <DCCReference Include="Editor.Terrain.Tools.pas"/>
+        <DCCReference Include="Scripting.Serialization.pas"/>
+        <DCCReference Include="Scripting.Context.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

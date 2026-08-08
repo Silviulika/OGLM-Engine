@@ -41,7 +41,20 @@ uses
   Engine.Physics in 'Engine.Physics.pas',
   Engine.Audio in 'Engine.Audio.pas',
   Engine.GUI.Editor in 'Engine.GUI.Editor.pas',
-  Editor.GuiDesigner in 'Editor.GuiDesigner.pas';
+  Editor.GuiDesigner in 'Editor.GuiDesigner.pas',
+  Editor.Commands in 'Editor.Commands.pas',
+  Editor.Gizmos in 'Editor.Gizmos.pas',
+  Editor.Viewport in 'Editor.Viewport.pas',
+  Editor.AssetBrowser.Models in 'Editor.AssetBrowser.Models.pas',
+  Editor.AssetBrowser.Textures in 'Editor.AssetBrowser.Textures.pas',
+  Editor.AssetBrowser.Materials in 'Editor.AssetBrowser.Materials.pas',
+  Editor.AssetBrowser.Particles in 'Editor.AssetBrowser.Particles.pas',
+  Editor.Panels.SceneTree in 'Editor.Panels.SceneTree.pas',
+  Editor.Panels.Audio in 'Editor.Panels.Audio.pas',
+  Editor.Panels.Scripting in 'Editor.Panels.Scripting.pas',
+  Editor.Terrain.Tools in 'Editor.Terrain.Tools.pas',
+  Scripting.Serialization in 'Scripting.Serialization.pas',
+  Scripting.Context in 'Scripting.Context.pas';
 
 {$R *.res}
 

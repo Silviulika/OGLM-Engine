@@ -461,6 +461,7 @@ type
     procedure UpdateParticles(DeltaTime: Single; NewTime: Double);
     procedure SaveToStream(Stream: TStream);
     procedure LoadFromStream(Stream: TStream);
+    procedure SwapState(AOther: TSceneManager);
 
     function AddSceneObject(aSceneObject: TSceneObject): Integer;
     procedure DeleteObject(aObject: TSceneObject);
@@ -3554,6 +3555,42 @@ begin
     raise;
   end;
 end;
+
+procedure TSceneManager.SwapState(AOther: TSceneManager);
+var
+  RootValue: TSceneObject;
+  NameValue: string;
+  WireFrameValue: Boolean;
+begin
+  if AOther = nil then
+    raise EArgumentNilException.Create('AOther');
+  if AOther = Self then
+    Exit;
+
+  RootValue := fRoot;
+  fRoot := AOther.fRoot;
+  AOther.fRoot := RootValue;
+
+  NameValue := fName;
+  fName := AOther.fName;
+  AOther.fName := NameValue;
+
+  WireFrameValue := fWireFrame;
+  fWireFrame := AOther.fWireFrame;
+  AOther.fWireFrame := WireFrameValue;
+
+  if fRoot <> nil then
+  begin
+    fRoot.fParent := nil;
+    fRoot.WireFrame := fWireFrame;
+  end;
+  if AOther.fRoot <> nil then
+  begin
+    AOther.fRoot.fParent := nil;
+    AOther.fRoot.WireFrame := AOther.fWireFrame;
+  end;
+end;
+
 function TSceneManager.AddSceneObject(aSceneObject: TSceneObject): Integer;
 begin
   Result := fRoot.AddObject(aSceneObject);
