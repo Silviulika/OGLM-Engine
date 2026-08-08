@@ -94,6 +94,8 @@ type
     MaskResolution: Integer;
     MaskMaterial: TMaterial;
     MaskMesh: THeightFieldMesh;
+    ExportMesh: THeightFieldMesh;
+    ExportName: array[0..127] of AnsiChar;
     MaskLayers: array[0..TERRAIN_PAINT_LAYER_COUNT - 1] of TTerrainMaskLayerState;
     LastMouseX: Integer;
     LastMouseY: Integer;

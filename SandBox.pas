@@ -637,6 +637,14 @@ type
     function TerrainMaskUniformName(ALayer: Integer): string;
     function TerrainLayerTextureSummary(AMaterial: TMaterial; ALayer: Integer): string;
     function FindTerrainMaskTextureIndex(AMaterial: TMaterial; ALayer: Integer): Integer;
+    function TerrainHeightMapDefaultExportName(
+      HeightField: THeightFieldMesh): string;
+    function TerrainHeightMapExportFileName(HeightField: THeightFieldMesh;
+      const ABaseName, AExtension: string): string;
+    function SaveTerrainHeightMapImage(HeightField: THeightFieldMesh;
+      const AFileName: string): Boolean;
+    procedure ExportTerrainHeightMap(HeightField: THeightFieldMesh;
+      const AExtension: string);
     function TerrainMaskFileName(HeightField: THeightFieldMesh;
       AMaterial: TMaterial; ALayer: Integer): string;
     function TryLoadTerrainMaskPixels(const AFileName: string;
@@ -1461,6 +1469,8 @@ begin
   fTerrainEditor.MaskResolution := TERRAIN_MASK_DEFAULT_RESOLUTION;
   fTerrainEditor.MaskMaterial := nil;
   fTerrainEditor.MaskMesh := nil;
+  fTerrainEditor.ExportMesh := nil;
+  SetAnsiBuffer(fTerrainEditor.ExportName, '');
   fTerrainEditor.LastMouseX := -1;
   fTerrainEditor.LastMouseY := -1;
   fTerrainEditor.HitWorld := Vector3(0, 0, 0);
@@ -17200,6 +17210,7 @@ begin
   begin
     FlushTerrainPaintMasks;
     ClearTerrainPaintMaskCache;
+    fTerrainEditor.ExportMesh := nil;
     fTerrainEditor.LastError := '';
   end;
 
@@ -17701,6 +17712,220 @@ begin
         Exit(I);
     end;
   end;
+end;
+
+function CleanTerrainHeightMapName(const AName: string): string;
+var
+  BaseName: string;
+  I: Integer;
+  C: Char;
+  LastWasUnderscore: Boolean;
+begin
+  BaseName := Trim(ChangeFileExt(ExtractFileName(Trim(AName)), ''));
+
+  Result := '';
+  LastWasUnderscore := False;
+  for I := 1 to Length(BaseName) do
+  begin
+    C := BaseName[I];
+    if CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '-', '_']) then
+    begin
+      Result := Result + C;
+      LastWasUnderscore := False;
+    end
+    else if not LastWasUnderscore then
+    begin
+      Result := Result + '_';
+      LastWasUnderscore := True;
+    end;
+  end;
+
+  while (Result <> '') and (Result[Length(Result)] = '_') do
+    Delete(Result, Length(Result), 1);
+  if Result = '' then
+    Result := 'HeightField';
+end;
+
+function TSandBoxForm.TerrainHeightMapDefaultExportName(
+  HeightField: THeightFieldMesh): string;
+begin
+  Result := '';
+  if HeightField = nil then
+    Exit;
+
+  Result := Trim(HeightField.SourceFile);
+  if Result <> '' then
+    Result := ChangeFileExt(ExtractFileName(Result), '');
+  if Result = '' then
+    Result := Trim(HeightField.Name);
+
+  Result := CleanTerrainHeightMapName(Result);
+end;
+
+function TSandBoxForm.TerrainHeightMapExportFileName(
+  HeightField: THeightFieldMesh; const ABaseName, AExtension: string): string;
+var
+  BaseName: string;
+  Ext: string;
+begin
+  Result := '';
+  if HeightField = nil then
+    Exit;
+
+  if Trim(ABaseName) <> '' then
+    BaseName := ABaseName
+  else
+    BaseName := TerrainHeightMapDefaultExportName(HeightField);
+  BaseName := CleanTerrainHeightMapName(BaseName);
+
+  Ext := LowerCase(Trim(AExtension));
+  if (Ext <> '.bmp') and (Ext <> '.png') then
+    Ext := '.png';
+
+  Result := TEnginePaths.Terrain(BaseName + Ext);
+end;
+
+function TSandBoxForm.SaveTerrainHeightMapImage(
+  HeightField: THeightFieldMesh; const AFileName: string): Boolean;
+var
+  Heights: TArray<Single>;
+  WidthSamples, DepthSamples: Integer;
+  ExpectedCount: Int64;
+  Ext: string;
+  Png: TPngImage;
+  Bitmap: TBitmap;
+  RGBLine: pRGBLine;
+  AlphaLine: pByteArray;
+  Y: Integer;
+
+  function HeightByte(AIndex: Integer): Byte;
+  var
+    Value: Single;
+  begin
+    Value := Heights[AIndex];
+    if Value < 0.0 then
+      Value := 0.0
+    else if Value > 1.0 then
+      Value := 1.0;
+
+    Result := Byte(Round(Value * 255.0));
+  end;
+
+  procedure FillRGBLine(AWidth: Integer; ARow: pRGBLine;
+    AAlphaRow: pByteArray; ASourceY: Integer);
+  var
+    Value: Byte;
+    X, Index: Integer;
+  begin
+    for X := 0 to AWidth - 1 do
+    begin
+      Index := ASourceY * WidthSamples + X;
+      Value := HeightByte(Index);
+      ARow^[X].rgbtRed := Value;
+      ARow^[X].rgbtGreen := Value;
+      ARow^[X].rgbtBlue := Value;
+      if AAlphaRow <> nil then
+        AAlphaRow^[X] := 255;
+    end;
+  end;
+begin
+  Result := False;
+  if (HeightField = nil) or (AFileName = '') then
+    Exit;
+
+  WidthSamples := HeightField.HeightMapWidth;
+  DepthSamples := HeightField.HeightMapDepth;
+  if (WidthSamples < 1) or (DepthSamples < 1) then
+    Exit;
+
+  Heights := HeightField.Heights;
+  ExpectedCount := Int64(WidthSamples) * DepthSamples;
+  if (ExpectedCount < 1) or (ExpectedCount > Length(Heights)) then
+    Exit;
+
+  Ext := LowerCase(ExtractFileExt(AFileName));
+  if (Ext <> '.bmp') and (Ext <> '.png') then
+    Exit;
+
+  try
+    ForceDirectories(TEnginePaths.TerrainDir);
+    ForceDirectories(ExtractFilePath(AFileName));
+
+    if Ext = '.png' then
+    begin
+      Png := TPngImage.CreateBlank(COLOR_RGBALPHA, 8, WidthSamples,
+        DepthSamples);
+      try
+        for Y := 0 to DepthSamples - 1 do
+        begin
+          RGBLine := pRGBLine(Png.Scanline[Y]);
+          AlphaLine := Png.AlphaScanline[Y];
+          FillRGBLine(WidthSamples, RGBLine, AlphaLine, Y);
+        end;
+        Png.SaveToFile(AFileName);
+      finally
+        Png.Free;
+      end;
+    end
+    else
+    begin
+      Bitmap := TBitmap.Create;
+      try
+        Bitmap.PixelFormat := pf24bit;
+        Bitmap.SetSize(WidthSamples, DepthSamples);
+        for Y := 0 to DepthSamples - 1 do
+        begin
+          RGBLine := pRGBLine(Bitmap.ScanLine[Y]);
+          FillRGBLine(WidthSamples, RGBLine, nil, Y);
+        end;
+        Bitmap.SaveToFile(AFileName);
+      finally
+        Bitmap.Free;
+      end;
+    end;
+
+    Result := True;
+  except
+    Result := False;
+  end;
+end;
+
+procedure TSandBoxForm.ExportTerrainHeightMap(HeightField: THeightFieldMesh;
+  const AExtension: string);
+var
+  ExportName: string;
+  FileName: string;
+  StoredPath: string;
+begin
+  if HeightField = nil then
+  begin
+    fTerrainEditor.LastError := 'Select a height field mesh first.';
+    Exit;
+  end;
+
+  ExportName := AnsiBufferText(fTerrainEditor.ExportName);
+  FileName := TerrainHeightMapExportFileName(HeightField, ExportName,
+    AExtension);
+  if FileName = '' then
+  begin
+    fTerrainEditor.LastError := 'Could not build terrain export file name.';
+    Exit;
+  end;
+
+  if not SaveTerrainHeightMapImage(HeightField, FileName) then
+  begin
+    fTerrainEditor.LastError := 'Could not save terrain height map: ' +
+      FileName;
+    Exit;
+  end;
+
+  StoredPath := TEnginePaths.ToAssetRelativePath(FileName);
+  HeightField.SourceFile := StoredPath;
+  SetAnsiBuffer(fTerrainEditor.ExportName,
+    ChangeFileExt(ExtractFileName(FileName), ''));
+  fHeightFieldPicker.NeedsRefresh := True;
+  NotifyInspectorMeshEdited(HeightField, False);
+  fTerrainEditor.LastError := 'Saved terrain height map: ' + StoredPath;
 end;
 
 function TSandBoxForm.TerrainMaskFileName(HeightField: THeightFieldMesh;
@@ -20033,6 +20258,29 @@ begin
           MaterialTypeDisplayName(Material.Materialtype) + ')')))
       else
         ImGui.TextDisabled('Material: none');
+
+      ImGui.Separator;
+      ImGui.Text('Height Map');
+      ImGui.TextWrapped(PAnsiChar(AnsiString('Folder: ' +
+        TEnginePaths.TerrainDir)));
+      if fTerrainEditor.ExportMesh <> HeightField then
+      begin
+        fTerrainEditor.ExportMesh := HeightField;
+        SetAnsiBuffer(fTerrainEditor.ExportName,
+          TerrainHeightMapDefaultExportName(HeightField));
+      end;
+      ImGui.PushItemWidth(IMGUI_PROP_SCALAR_WIDTH);
+      ImGui.InputText('Name##TerrainHeightMapName',
+        @fTerrainEditor.ExportName[0], SizeOf(fTerrainEditor.ExportName));
+      ImGui.PopItemWidth;
+      if ImGui.Button('Save PNG##TerrainHeightMap') then
+        ExportTerrainHeightMap(HeightField, '.png');
+      ImGui.SameLine;
+      if ImGui.Button('Save BMP##TerrainHeightMap') then
+        ExportTerrainHeightMap(HeightField, '.bmp');
+      if Trim(HeightField.SourceFile) <> '' then
+        ImGui.TextWrapped(PAnsiChar(AnsiString('Source: ' +
+          HeightField.SourceFile)));
 
       ImGui.Separator;
       if ImGui.BeginCombo('Tool', AnsiString(TerrainEditToolName(
